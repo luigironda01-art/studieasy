@@ -90,9 +90,6 @@ async def process_pdf(request: ProcessRequest):
             "processed_text": processed_text,
             "processing_status": "completed"
         }
-        # Add page count if available
-        if page_count > 0:
-            update_data["page_count"] = page_count
         update_result = supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
         print(f"Update result: {update_result}")
 
