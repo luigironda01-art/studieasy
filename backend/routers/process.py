@@ -79,10 +79,6 @@ async def process_pdf(request: ProcessRequest):
         openrouter = get_openrouter_service()
         processed_text = await openrouter.enhance_processed_text(extracted_text)
 
-        # Determine topic emoji based on content
-        topic_emoji = await openrouter.determine_topic_emoji(processed_text)
-        print(f"Determined topic emoji: {topic_emoji}")
-
         # Save to database
         print(f"Updating chapter {request.chapter_id} with processed text...")
         update_data = {
@@ -92,14 +88,6 @@ async def process_pdf(request: ProcessRequest):
         }
         update_result = supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
         print(f"Update result: {update_result}")
-
-        # Update source with topic emoji (only if not already set)
-        source_result = supabase.table("sources").select("topic_emoji").eq("id", request.source_id).single().execute()
-        if source_result.data and not source_result.data.get("topic_emoji"):
-            supabase.table("sources").update({
-                "topic_emoji": topic_emoji
-            }).eq("id", request.source_id).execute()
-            print(f"Updated source {request.source_id} with emoji {topic_emoji}")
 
         return ProcessResponse(
             success=True,
