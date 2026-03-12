@@ -255,7 +255,8 @@ export default function SourceDetailPage() {
 
     try {
       // Call Python backend for PDF processing
-      const response = await fetch("http://localhost:8000/api/process/", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${apiUrl}/api/process/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

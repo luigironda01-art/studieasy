@@ -34,8 +34,6 @@ export default function LoginPage() {
         setError(error.message);
         setLoading(false);
       } else {
-        // Login successful - wait a moment for auth state to propagate
-        // then do a hard redirect to ensure clean state
         setTimeout(() => {
           window.location.href = "/dashboard";
         }, 500);
@@ -46,30 +44,33 @@ export default function LoginPage() {
     }
   };
 
-  // Show loading if checking auth
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-[#020617] relative overflow-hidden flex items-center justify-center px-4">
+      {/* Aurora Background */}
+      <div className="absolute -top-40 -left-40 w-[600px] h-[600px] bg-purple-900/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
+      <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] bg-blue-900/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s', animationDelay: '4s' }} />
+
+      <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg">S</span>
+          <Link href="/" className="inline-flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/25">
+              <span className="text-white text-xl">📚</span>
             </div>
-            <span className="text-white font-semibold text-2xl">Backup Buddy</span>
+            <span className="text-white font-bold text-2xl">Backup Buddy</span>
           </Link>
         </div>
 
         {/* Card */}
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-8 shadow-xl">
+        <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-8 shadow-xl">
           <h1 className="text-2xl font-bold text-white text-center mb-2">
             Bentornato
           </h1>
@@ -79,7 +80,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl text-sm">
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">
                 {error}
               </div>
             )}
@@ -94,7 +95,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all duration-300"
                 placeholder="tu@esempio.com"
               />
             </div>
@@ -104,7 +105,7 @@ export default function LoginPage() {
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300">
                   Password
                 </label>
-                <Link href="/reset-password" className="text-sm text-blue-400 hover:text-blue-300">
+                <Link href="/reset-password" className="text-sm text-purple-400 hover:text-purple-300 transition-colors">
                   Password dimenticata?
                 </Link>
               </div>
@@ -114,7 +115,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all duration-300"
                 placeholder="••••••••"
               />
             </div>
@@ -122,16 +123,23 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:shadow-lg hover:shadow-purple-500/25 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Accesso in corso..." : "Accedi"}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  Accesso in corso...
+                </span>
+              ) : (
+                "Accedi"
+              )}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-slate-400">
               Non hai un account?{" "}
-              <Link href="/signup" className="text-blue-400 hover:text-blue-300 font-medium">
+              <Link href="/signup" className="text-purple-400 hover:text-purple-300 font-medium transition-colors">
                 Registrati
               </Link>
             </p>
@@ -139,7 +147,7 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-6 text-center">
-          <Link href="/" className="text-slate-500 hover:text-slate-400 text-sm">
+          <Link href="/" className="text-slate-500 hover:text-slate-400 text-sm transition-colors">
             ← Torna alla home
           </Link>
         </div>

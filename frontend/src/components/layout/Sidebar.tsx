@@ -193,9 +193,9 @@ export function Sidebar() {
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Logo + Collapse Button */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-slate-700">
+      <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/25">
             <span className="text-white text-xl">📚</span>
           </div>
           <span className="text-white font-bold text-xl">Backup Buddy</span>
@@ -204,7 +204,7 @@ export function Sidebar() {
         {!isMobile && (
           <button
             onClick={() => setSidebarOpen(false)}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-300"
             title="Chiudi sidebar (⌘/Ctrl + B)"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -219,10 +219,10 @@ export function Sidebar() {
         <Link
           href="/dashboard"
           onClick={() => isMobile && setSidebarOpen(false)}
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 ${
             pathname === "/dashboard"
-              ? "bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border-l-2 border-blue-500"
-              : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+              ? "bg-gradient-to-r from-blue-600/20 to-purple-600/20 text-white border border-purple-500/30"
+              : "text-slate-400 hover:bg-white/5 hover:text-white hover:border-white/10 border border-transparent"
           }`}
         >
           <span className="text-lg">🏠</span>
@@ -232,16 +232,16 @@ export function Sidebar() {
         <Link
           href="/dashboard/study"
           onClick={() => isMobile && setSidebarOpen(false)}
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 mt-1 ${
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 mt-1 ${
             pathname.startsWith("/dashboard/study")
-              ? "bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white border-l-2 border-blue-500"
-              : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+              ? "bg-gradient-to-r from-blue-600/20 to-purple-600/20 text-white border border-purple-500/30"
+              : "text-slate-400 hover:bg-white/5 hover:text-white hover:border-white/10 border border-transparent"
           }`}
         >
           <span className="text-lg">🎯</span>
           <span className="font-medium">Studia Ora</span>
           {totalDueCards > 0 && (
-            <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[24px] text-center animate-pulse">
+            <span className="ml-auto bg-gradient-to-r from-cyan-500 to-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[24px] text-center animate-pulse">
               {totalDueCards > 99 ? "99+" : totalDueCards}
             </span>
           )}
@@ -254,7 +254,7 @@ export function Sidebar() {
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Libreria</span>
           <button
             onClick={() => router.push("/dashboard")}
-            className="text-slate-500 hover:text-white transition-colors p-1 rounded hover:bg-slate-700"
+            className="text-slate-500 hover:text-purple-400 transition-all duration-300 p-1 rounded-lg hover:bg-white/5"
             title="Aggiungi libro"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -266,9 +266,9 @@ export function Sidebar() {
         {isLoading ? (
           <div className="px-3 py-4">
             <div className="animate-pulse space-y-3">
-              <div className="h-8 bg-slate-700 rounded"></div>
-              <div className="h-8 bg-slate-700 rounded"></div>
-              <div className="h-8 bg-slate-700 rounded"></div>
+              <div className="h-8 bg-white/5 rounded-xl"></div>
+              <div className="h-8 bg-white/5 rounded-xl"></div>
+              <div className="h-8 bg-white/5 rounded-xl"></div>
             </div>
           </div>
         ) : sources.length === 0 ? (
@@ -276,7 +276,7 @@ export function Sidebar() {
             <p className="text-slate-500 text-sm">Nessun libro</p>
             <button
               onClick={() => router.push("/dashboard")}
-              className="text-blue-400 text-sm hover:text-blue-300 mt-2"
+              className="text-purple-400 text-sm hover:text-purple-300 mt-2 transition-colors"
             >
               + Aggiungi il primo
             </button>
@@ -287,10 +287,10 @@ export function Sidebar() {
               <div key={source.id}>
                 {/* Source Item */}
                 <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 group ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all duration-300 group ${
                     isActive(`/dashboard/source/${source.id}`)
-                      ? "bg-slate-700/50 text-white"
-                      : "text-slate-400 hover:bg-slate-700/30 hover:text-white"
+                      ? "bg-white/10 text-white border border-purple-500/30"
+                      : "text-slate-400 hover:bg-white/5 hover:text-white border border-transparent"
                   }`}
                 >
                   <button
@@ -355,14 +355,14 @@ export function Sidebar() {
       </div>
 
       {/* Bottom Section */}
-      <div className="border-t border-slate-700 px-3 py-3 space-y-1">
+      <div className="border-t border-white/10 px-3 py-3 space-y-1">
         <Link
           href="/stats"
           onClick={() => isMobile && setSidebarOpen(false)}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${
+          className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 ${
             pathname === "/stats"
-              ? "bg-slate-700/50 text-white"
-              : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+              ? "bg-white/10 text-white"
+              : "text-slate-400 hover:bg-white/5 hover:text-white"
           }`}
         >
           <span className="text-lg">📊</span>
@@ -371,10 +371,10 @@ export function Sidebar() {
         <Link
           href="/feedback"
           onClick={() => isMobile && setSidebarOpen(false)}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${
+          className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 ${
             pathname === "/feedback"
-              ? "bg-slate-700/50 text-white"
-              : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+              ? "bg-white/10 text-white"
+              : "text-slate-400 hover:bg-white/5 hover:text-white"
           }`}
         >
           <span className="text-lg">💬</span>
@@ -383,10 +383,10 @@ export function Sidebar() {
         <Link
           href="/help"
           onClick={() => isMobile && setSidebarOpen(false)}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 ${
+          className={`flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-300 ${
             pathname === "/help"
-              ? "bg-slate-700/50 text-white"
-              : "text-slate-400 hover:bg-slate-700/50 hover:text-white"
+              ? "bg-white/10 text-white"
+              : "text-slate-400 hover:bg-white/5 hover:text-white"
           }`}
         >
           <span className="text-lg">❓</span>
@@ -395,13 +395,13 @@ export function Sidebar() {
       </div>
 
       {/* User Section */}
-      <div className="border-t border-slate-700 px-3 py-3">
+      <div className="border-t border-white/10 px-3 py-3">
         <Link
           href="/settings"
           onClick={() => isMobile && setSidebarOpen(false)}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-700/50 hover:text-white transition-all duration-200"
+          className="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white transition-all duration-300"
         >
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/25">
             <span className="text-white text-sm font-bold">
               {profile?.display_name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || "?"}
             </span>
@@ -433,7 +433,7 @@ export function Sidebar() {
         )}
         <aside
           ref={sidebarRef}
-          className={`fixed top-0 left-0 h-full w-72 bg-slate-800 border-r border-slate-700 z-50 transform transition-transform duration-300 ease-out ${
+          className={`fixed top-0 left-0 h-full w-72 bg-[#0f172a]/95 backdrop-blur-xl border-r border-white/10 z-50 transform transition-transform duration-300 ease-out ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -448,7 +448,7 @@ export function Sidebar() {
     <aside
       ref={sidebarRef}
       style={{ width: sidebarWidth }}
-      className={`hidden lg:flex fixed top-0 left-0 h-full bg-slate-800 border-r border-slate-700 z-30 flex-col transition-all duration-300 ${
+      className={`hidden lg:flex fixed top-0 left-0 h-full bg-[#0f172a]/80 backdrop-blur-xl border-r border-white/10 z-30 flex-col transition-all duration-300 ${
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
@@ -458,7 +458,7 @@ export function Sidebar() {
       <div
         onMouseDown={startResizing}
         className={`absolute top-0 right-0 w-1.5 h-full cursor-ew-resize transition-colors ${
-          isResizing ? "bg-blue-500" : "bg-transparent hover:bg-blue-500/50"
+          isResizing ? "bg-purple-500" : "bg-transparent hover:bg-purple-500/50"
         }`}
       />
     </aside>
