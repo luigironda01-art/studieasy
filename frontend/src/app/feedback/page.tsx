@@ -103,7 +103,7 @@ function FeedbackPageContent() {
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Invia Feedback</h1>
         <p className="text-slate-400 mb-8">
-          Aiutaci a migliorare Studieasy con i tuoi suggerimenti
+          Aiutaci a migliorare Backup Buddy con i tuoi suggerimenti
         </p>
 
         {error && (

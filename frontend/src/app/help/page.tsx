@@ -17,7 +17,7 @@ function HelpPageContent() {
     },
     {
       question: "Come funziona la ripetizione spaziata?",
-      answer: "Studieasy utilizza l'algoritmo FSRS per ottimizzare i tuoi ripassi. Le flashcard ti vengono mostrate nel momento ideale per massimizzare la memorizzazione a lungo termine."
+      answer: "Backup Buddy utilizza l'algoritmo FSRS per ottimizzare i tuoi ripassi. Le flashcard ti vengono mostrate nel momento ideale per massimizzare la memorizzazione a lungo termine."
     },
     {
       question: "Posso modificare le flashcard generate?",

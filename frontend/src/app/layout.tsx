@@ -6,7 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Studieasy - AI Study App",
+  title: "Backup Buddy - AI Study App",
   description: "Trasforma i tuoi appunti in flashcard intelligenti con AI e spaced repetition",
   manifest: "/manifest.json",
   icons: {

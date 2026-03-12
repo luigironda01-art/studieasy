@@ -23,7 +23,7 @@ export default function Home() {
           <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">S</span>
           </div>
-          <span className="text-white font-semibold text-xl">Studieasy</span>
+          <span className="text-white font-semibold text-xl">Backup Buddy</span>
         </div>
         <div className="flex items-center gap-4">
           <Link
@@ -61,7 +61,7 @@ export default function Home() {
             href="/signup"
             className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-full font-semibold text-lg hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/25"
           >
-            Prova Studieasy gratis →
+            Prova Backup Buddy gratis →
           </Link>
         </div>
 
@@ -110,7 +110,7 @@ export default function Home() {
       {/* Features Section */}
       <section className="max-w-5xl mx-auto px-6 py-20">
         <h2 className="text-3xl font-bold text-white text-center mb-16">
-          Perché Studieasy?
+          Perché Backup Buddy?
         </h2>
 
         <div className="grid md:grid-cols-2 gap-8">
@@ -158,7 +158,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-slate-800 py-8">
         <div className="max-w-5xl mx-auto px-6 text-center text-slate-500">
-          <p>© 2025 Studieasy. Studia meglio, non di più.</p>
+          <p>© 2025 Backup Buddy. Studia meglio, non di più.</p>
         </div>
       </footer>
     </div>
