@@ -2,7 +2,7 @@
 FSRS Service - Spaced Repetition Scheduling
 Implements the Free Spaced Repetition Scheduler algorithm.
 """
-from fsrs import FSRS, Card, Rating, State
+from fsrs import Scheduler as FSRS, Card, Rating, State
 from datetime import datetime, timezone
 from typing import Optional
 

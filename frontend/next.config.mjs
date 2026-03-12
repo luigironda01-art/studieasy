@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Output standalone for Docker
+  output: 'standalone',
+
   // Enable PWA features
   experimental: {
     // Enable app directory features

@@ -38,12 +38,12 @@ async def health_check():
     return {"status": "healthy", "version": "0.1.0"}
 
 
-# Import routers (will be added later)
-# from routers import upload, sources, flashcards, study
-# app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
-# app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
-# app.include_router(flashcards.router, prefix="/api/flashcards", tags=["flashcards"])
-# app.include_router(study.router, prefix="/api/study", tags=["study"])
+# Import routers
+from routers import flashcards, study, process
+
+app.include_router(flashcards.router, prefix="/api/flashcards", tags=["flashcards"])
+app.include_router(study.router, prefix="/api/study", tags=["study"])
+app.include_router(process.router, prefix="/api/process", tags=["process"])
 
 
 if __name__ == "__main__":
