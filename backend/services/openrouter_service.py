@@ -5,7 +5,7 @@ Provides access to Claude, Gemini, and other models via OpenRouter API.
 import os
 import json
 from typing import Optional
-from openai import OpenAI
+from openai import AsyncOpenAI
 from config import get_settings
 
 
@@ -14,9 +14,12 @@ class OpenRouterService:
 
     def __init__(self):
         settings = get_settings()
-        self.client = OpenAI(
+        api_key = settings.openrouter_api_key
+        if not api_key:
+            print("WARNING: OPENROUTER_API_KEY is not set!")
+        self.client = AsyncOpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=settings.openrouter_api_key
+            api_key=api_key or "missing-key"
         )
         # Model selection
         self.content_model = "anthropic/claude-3.5-sonnet"  # For content generation
@@ -56,7 +59,7 @@ Includi descrizioni dettagliate di ogni elemento visivo tra tag [IMMAGINE: descr
 
         # Note: OpenRouter doesn't support vision in the same way as direct API
         # For now, we'll use a text-based approach and enhance later
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.vision_model,
             max_tokens=8000,
             messages=[
@@ -128,7 +131,7 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
   {{"front": "domanda 2", "back": "risposta 2"}}
 ]"""
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.content_model,
             max_tokens=4096,
             messages=[
@@ -197,7 +200,7 @@ TESTO:
 
 Rispondi SOLO con un array JSON valido:"""
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.content_model,
             max_tokens=4096,
             messages=[
@@ -256,7 +259,7 @@ TESTO:
 
 RIASSUNTO:"""
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.content_model,
             max_tokens=4096,
             messages=[
@@ -302,7 +305,7 @@ Rispondi in JSON:
   "mermaid_code": "flowchart TD\\n    A[Concetto] --> B[Altro]"
 }}"""
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.content_model,
             max_tokens=2048,
             messages=[
@@ -367,7 +370,7 @@ TESTO:
 Rispondi SOLO con l'emoji, nient'altro:"""
 
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.content_model,
                 max_tokens=10,
                 messages=[
@@ -412,7 +415,7 @@ COMPITI:
 
 Restituisci il contenuto elaborato in Markdown, mantenendo alta fedeltà al materiale originale ma migliorandone la leggibilità per lo studio."""
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.content_model,
             max_tokens=8000,
             messages=[
