@@ -19,7 +19,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # Next.js dev
-        "https://*.vercel.app",   # Vercel preview
+        "https://backupbuddy.up.railway.app",  # Railway production
+        "https://frontend-production-e8b0.up.railway.app",  # Railway frontend
         os.getenv("FRONTEND_URL", "http://localhost:3000")
     ],
     allow_credentials=True,

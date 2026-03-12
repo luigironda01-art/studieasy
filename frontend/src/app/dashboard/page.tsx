@@ -34,6 +34,70 @@ interface Stats {
   streakDays: number;
 }
 
+// Circular Progress Component
+function CircularProgress({ percentage, size = 160 }: { percentage: number; size?: number }) {
+  const strokeWidth = 12;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const offset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="transform -rotate-90">
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.1)"
+          strokeWidth={strokeWidth}
+        />
+        {/* Progress circle with gradient */}
+        <defs>
+          <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#00d4ff" />
+            <stop offset="50%" stopColor="#a855f7" />
+            <stop offset="100%" stopColor="#f97316" />
+          </linearGradient>
+        </defs>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="url(#progressGradient)"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-all duration-1000 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-orange-400 bg-clip-text text-transparent">
+          {percentage}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Card with gradient border
+function GradientCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`relative group ${className}`}>
+      {/* Gradient border */}
+      <div className="absolute -inset-[1px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 rounded-2xl opacity-50 group-hover:opacity-100 blur-sm transition-opacity duration-300" />
+      <div className="absolute -inset-[1px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 rounded-2xl opacity-30" />
+      {/* Card content */}
+      <div className="relative bg-[#0d1525]/90 backdrop-blur-xl rounded-2xl">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -70,7 +134,6 @@ export default function DashboardPage() {
     setIsLoading(true);
 
     try {
-      // Fetch sources
       const { data: sourcesData } = await supabase
         .from("sources")
         .select("*")
@@ -79,7 +142,6 @@ export default function DashboardPage() {
 
       setSources(sourcesData || []);
 
-      // Fetch due reviews with flashcard and chapter info
       const now = new Date().toISOString();
       const { data: dueReviews } = await supabase
         .from("reviews")
@@ -104,7 +166,6 @@ export default function DashboardPage() {
         .eq("user_id", user.id)
         .lte("due", now);
 
-      // Group due cards by chapter
       const dueByChapter: { [key: string]: DueCardInfo } = {};
 
       if (dueReviews) {
@@ -133,16 +194,13 @@ export default function DashboardPage() {
       const dueCardsList = Object.values(dueByChapter).sort((a, b) => b.dueCount - a.dueCount);
       setDueCards(dueCardsList);
 
-      // Calculate stats
       const totalDue = dueCardsList.reduce((acc, d) => acc + d.dueCount, 0);
 
-      // Get total cards
       const { count: totalCards } = await supabase
         .from("reviews")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user.id);
 
-      // Get today's reviews (studied today)
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
@@ -154,7 +212,6 @@ export default function DashboardPage() {
 
       const studiedToday = todayReviews?.length || 0;
 
-      // Calculate retention (cards with state >= 2 / total)
       const { count: masteredCards } = await supabase
         .from("reviews")
         .select("*", { count: "exact", head: true })
@@ -165,7 +222,6 @@ export default function DashboardPage() {
         ? Math.round((masteredCards || 0) / totalCards * 100)
         : 0;
 
-      // Calculate streak (simplified - check consecutive days with reviews)
       let streakDays = 0;
       const { data: recentReviews } = await supabase
         .from("reviews")
@@ -186,7 +242,6 @@ export default function DashboardPage() {
         const today = new Date();
         let checkDate = new Date(today);
 
-        // If no study today, start from yesterday
         if (!reviewDates.has(today.toDateString())) {
           checkDate.setDate(checkDate.getDate() - 1);
         }
@@ -205,7 +260,6 @@ export default function DashboardPage() {
         streakDays,
       });
 
-      // Calculate weekly activity
       const last7Days: DailyActivity[] = [];
       const dayNames = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
 
@@ -240,13 +294,6 @@ export default function DashboardPage() {
     }
   };
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Buongiorno";
-    if (hour < 18) return "Buon pomeriggio";
-    return "Buonasera";
-  };
-
   const getSourceIcon = (type: string) => {
     switch (type) {
       case "book": return "📘";
@@ -260,317 +307,288 @@ export default function DashboardPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#020617] relative overflow-hidden flex items-center justify-center">
-        {/* Aurora Background */}
-        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] bg-purple-900/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] bg-blue-900/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s', animationDelay: '4s' }} />
-
-        <div className="relative z-10 text-center">
-          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-slate-400">Caricamento...</p>
-        </div>
+      <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
+        <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!user) return null;
 
-  const totalDueMinutes = dueCards.reduce((acc, d) => acc + d.estimatedMinutes, 0);
+  const progressPercentage = stats.totalCards > 0
+    ? Math.round((stats.studiedToday / Math.max(stats.dueToday + stats.studiedToday, 1)) * 100)
+    : 0;
 
   return (
-    <div className="min-h-screen bg-[#020617] relative overflow-hidden">
-      {/* Aurora Background */}
-      <div className="absolute -top-40 -left-40 w-[600px] h-[600px] bg-purple-900/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
-      <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] bg-blue-900/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s', animationDelay: '4s' }} />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-900/10 rounded-full blur-3xl" />
+    <div className="min-h-screen bg-[#080c14] relative overflow-hidden">
+      {/* Mesh/Wireframe decorative elements */}
+      <div className="absolute top-0 left-0 w-96 h-96 opacity-20">
+        <div className="w-full h-full border border-cyan-500/30 rounded-full"
+             style={{
+               background: 'radial-gradient(circle, transparent 60%, rgba(0,212,255,0.1) 100%)',
+               boxShadow: '0 0 60px rgba(0,212,255,0.2)'
+             }} />
+      </div>
+      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] opacity-20">
+        <div className="w-full h-full border border-emerald-500/30 rounded-full"
+             style={{
+               background: 'radial-gradient(circle, transparent 60%, rgba(16,185,129,0.1) 100%)',
+               boxShadow: '0 0 60px rgba(16,185,129,0.2)'
+             }} />
+      </div>
 
-      <div className="relative z-10 p-6 md:p-8">
-        <div className="max-w-6xl mx-auto">
-          {/* Welcome Header */}
-          <div className="flex items-start justify-between mb-8">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white">
-                {getGreeting()}, {profile?.display_name || "Studente"}!
-              </h1>
-              <p className="text-slate-400 mt-1">
-                {stats.dueToday > 0
-                  ? `Hai ${stats.dueToday} carte da studiare oggi`
-                  : "Sei in pari con lo studio!"}
-              </p>
-            </div>
-            {stats.streakDays > 0 && (
-              <div className="flex items-center gap-2 bg-gradient-to-r from-orange-500/20 to-red-500/20 backdrop-blur-md text-orange-400 px-4 py-2 rounded-xl border border-orange-500/30">
-                <span className="text-2xl">🔥</span>
-                <div>
-                  <p className="font-bold text-lg">{stats.streakDays}</p>
-                  <p className="text-xs text-orange-400/80">giorni</p>
-                </div>
-              </div>
-            )}
+      {/* Purple glow in center */}
+      <div className="absolute top-1/3 left-1/4 w-[600px] h-[600px] bg-purple-900/20 rounded-full blur-[120px]" />
+
+      <div className="relative z-10 p-6 lg:p-8">
+        {/* Header with Upload Button */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-white">
+              Ciao, {profile?.display_name || "Studente"}
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">
+              {stats.dueToday > 0 ? `${stats.dueToday} carte da studiare` : "Tutto in pari!"}
+            </p>
           </div>
 
-          {/* Hero CTA - Study Now */}
-          {stats.dueToday > 0 && (
-            <Link href="/dashboard/study" className="block mb-8">
-              <div className="bg-gradient-to-br from-blue-600/90 to-purple-700/90 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-white/10 hover:border-purple-500/50 transition-all duration-300 transform hover:scale-[1.01] hover:shadow-xl hover:shadow-purple-500/20 group">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-3xl">🎯</span>
-                      <h2 className="text-xl md:text-2xl font-bold text-white">Inizia Sessione di Studio</h2>
-                    </div>
-                    <p className="text-blue-100/80">
-                      {stats.dueToday} carte · ~{totalDueMinutes} minuti · {dueCards.length} {dueCards.length === 1 ? "capitolo" : "capitoli"}
-                    </p>
-                  </div>
-                  <div className="hidden md:flex items-center justify-center w-16 h-16 bg-white/10 backdrop-blur-sm rounded-2xl group-hover:bg-white/20 transition-all duration-300">
-                    <svg className="w-8 h-8 text-white group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                    </svg>
-                  </div>
-                </div>
+          {/* Upload Button - Pink/Magenta gradient */}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-full text-white font-medium shadow-lg shadow-pink-500/30 hover:shadow-pink-500/50 hover:scale-105 transition-all duration-300"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            UPLOAD NEW FILE
+          </button>
+        </div>
 
-                {/* Progress bar */}
-                <div className="mt-6">
-                  <div className="flex justify-between text-sm text-blue-100/80 mb-2">
-                    <span>Progresso giornaliero</span>
-                    <span>{stats.studiedToday} studiate oggi</span>
-                  </div>
-                  <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min((stats.studiedToday / Math.max(stats.dueToday + stats.studiedToday, 1)) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </Link>
-          )}
+        {/* Main Grid Layout */}
+        <div className="grid lg:grid-cols-12 gap-6">
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-4 md:p-5 hover:border-purple-500/50 transition-all duration-300 group">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-600/30 to-blue-600/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-xl">📚</span>
-                </div>
-              </div>
-              <p className="text-2xl md:text-3xl font-bold text-white">{stats.totalCards}</p>
-              <p className="text-slate-400 text-sm">Carte totali</p>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-4 md:p-5 hover:border-purple-500/50 transition-all duration-300 group">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-600/30 to-purple-600/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-xl">📅</span>
-                </div>
-              </div>
-              <p className="text-2xl md:text-3xl font-bold text-white">{stats.studiedToday}</p>
-              <p className="text-slate-400 text-sm">Studiate oggi</p>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-4 md:p-5 hover:border-purple-500/50 transition-all duration-300 group">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-emerald-600/30 to-emerald-600/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-xl">🎯</span>
-                </div>
-              </div>
-              <p className="text-2xl md:text-3xl font-bold text-white">{stats.retentionRate}%</p>
-              <p className="text-slate-400 text-sm">Retention</p>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-4 md:p-5 hover:border-purple-500/50 transition-all duration-300 group">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-orange-600/30 to-orange-600/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-xl">🔥</span>
-                </div>
-              </div>
-              <p className="text-2xl md:text-3xl font-bold text-white">{stats.streakDays}</p>
-              <p className="text-slate-400 text-sm">Giorni streak</p>
-            </div>
-          </div>
-
-          {/* Two Column Layout */}
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Due Cards - Left Column (2/3) */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Due Cards by Chapter */}
-              {dueCards.length > 0 && (
-                <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 overflow-hidden">
-                  <div className="flex items-center justify-between p-4 border-b border-white/10">
-                    <h3 className="font-semibold text-white">Da ripassare oggi</h3>
-                    <Link href="/dashboard/study" className="text-purple-400 text-sm hover:text-purple-300 transition-colors">
-                      Studia tutto →
-                    </Link>
-                  </div>
-                  <div className="divide-y divide-white/5">
-                    {dueCards.slice(0, 5).map((item) => (
-                      <Link
-                        key={item.chapterId}
-                        href={`/dashboard/source/${item.sourceId}?chapter=${item.chapterId}`}
-                        className="flex items-center gap-4 p-4 hover:bg-white/5 transition-all duration-300 group"
-                      >
-                        <div className="w-10 h-10 bg-white/5 backdrop-blur-sm rounded-xl flex items-center justify-center text-xl group-hover:scale-110 transition-transform duration-300">
-                          {getSourceIcon(item.sourceType)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium truncate group-hover:text-purple-300 transition-colors">{item.sourceTitle}</p>
-                          <p className="text-slate-400 text-sm truncate">{item.chapterTitle}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-purple-400 font-semibold">{item.dueCount} carte</p>
-                          <p className="text-slate-500 text-xs">~{item.estimatedMinutes} min</p>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                  {dueCards.length > 5 && (
-                    <div className="p-4 border-t border-white/10 text-center">
-                      <Link href="/dashboard/study" className="text-slate-400 text-sm hover:text-purple-400 transition-colors">
-                        +{dueCards.length - 5} altri capitoli
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Books Grid */}
-              <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b border-white/10">
-                  <h3 className="font-semibold text-white">I tuoi libri</h3>
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="text-purple-400 text-sm hover:text-purple-300 flex items-center gap-1 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Aggiungi
+          {/* Left Sidebar - Recent Uploads */}
+          <div className="lg:col-span-2">
+            <GradientCard>
+              <div className="p-4">
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                  RECENT UPLOADS
+                </h3>
+                <nav className="space-y-1">
+                  <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors text-left text-sm">
+                    <span className="text-cyan-400">📁</span>
+                    Upload Files
                   </button>
-                </div>
+                  <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors text-left text-sm">
+                    <span className="text-cyan-400">✓</span>
+                    My Flashcards
+                  </button>
+                  <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition-colors text-left text-sm">
+                    <span className="text-cyan-400">📝</span>
+                    Summaries
+                  </button>
+                  <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-cyan-500/50 text-cyan-400 text-left text-sm">
+                    <span>📊</span>
+                    Infographics
+                  </button>
+                </nav>
+              </div>
+            </GradientCard>
+          </div>
 
-                {isLoading ? (
-                  <div className="p-8">
-                    <div className="animate-pulse grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {[1, 2, 3].map(i => (
-                        <div key={i} className="h-24 bg-white/5 rounded-xl"></div>
+          {/* Center - Generated Assets */}
+          <div className="lg:col-span-6">
+            <GradientCard className="h-full">
+              <div className="p-6">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-6">
+                  GENERATED ASSETS
+                </h3>
+
+                {/* Flashcard Preview */}
+                {dueCards.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
+                      <span className="text-white font-medium">
+                        Flashcard: {dueCards[0]?.chapterTitle || "In attesa"}
+                      </span>
+                    </div>
+
+                    {/* Card Preview Area */}
+                    <div className="relative h-48 bg-gradient-to-br from-[#0a1628] to-[#0d1f35] rounded-xl border border-white/10 flex items-center justify-center overflow-hidden">
+                      {/* Glow effect */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-32 h-32 bg-cyan-500/20 rounded-full blur-3xl" />
+                      </div>
+                      <div className="relative z-10 text-center">
+                        <div className="w-16 h-16 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 border border-white/10">
+                          <span className="text-3xl">🧠</span>
+                        </div>
+                        <p className="text-slate-400 text-sm">{stats.dueToday} carte pronte</p>
+                      </div>
+                    </div>
+
+                    {/* File List */}
+                    <div className="space-y-2 mt-6">
+                      {sources.slice(0, 3).map((source, i) => (
+                        <Link
+                          key={source.id}
+                          href={`/dashboard/source/${source.id}`}
+                          className="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors group"
+                        >
+                          <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                          <span className="text-slate-300 text-sm flex-1 truncate group-hover:text-white transition-colors">
+                            {source.title}
+                          </span>
+                          <span className="text-slate-500 text-xs">{'<-->'}</span>
+                        </Link>
                       ))}
                     </div>
-                  </div>
-                ) : sources.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <div className="w-16 h-16 bg-white/5 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">📖</span>
+
+                    {/* Progress Bar */}
+                    <div className="mt-6">
+                      <div className="flex justify-between text-xs text-slate-500 mb-2">
+                        <span>2.0m</span>
+                        <span>2.5ps</span>
+                      </div>
+                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-cyan-400 to-purple-500 rounded-full transition-all duration-500"
+                          style={{ width: `${progressPercentage}%` }}
+                        />
+                      </div>
                     </div>
-                    <h4 className="text-white font-medium mb-2">Nessun libro</h4>
-                    <p className="text-slate-400 text-sm mb-4">
-                      Aggiungi il tuo primo libro per iniziare
-                    </p>
-                    <button
-                      onClick={() => setShowAddModal(true)}
-                      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:shadow-lg hover:shadow-purple-500/25 transition-all duration-300"
-                    >
-                      Aggiungi libro
-                    </button>
                   </div>
                 ) : (
-                  <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {sources.map((source) => (
-                      <Link
-                        key={source.id}
-                        href={`/dashboard/source/${source.id}`}
-                        className="bg-white/5 backdrop-blur-sm rounded-xl p-4 hover:bg-white/10 hover:border-purple-500/50 border border-transparent transition-all duration-300 group"
+                  <div className="h-64 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="w-20 h-20 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-dashed border-white/20">
+                        <span className="text-4xl">📚</span>
+                      </div>
+                      <p className="text-slate-400 mb-4">Nessun contenuto</p>
+                      <button
+                        onClick={() => setShowAddModal(true)}
+                        className="text-cyan-400 text-sm hover:text-cyan-300 transition-colors"
                       >
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-2xl group-hover:scale-110 transition-transform duration-300">{getSourceIcon(source.source_type)}</span>
-                        </div>
-                        <h4 className="text-white font-medium text-sm truncate group-hover:text-purple-300 transition-colors">
-                          {source.title}
-                        </h4>
-                        {source.author && (
-                          <p className="text-slate-500 text-xs truncate mt-0.5">{source.author}</p>
-                        )}
-                      </Link>
-                    ))}
+                        + Aggiungi il tuo primo libro
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Right Column (1/3) */}
-            <div className="space-y-6">
-              {/* Weekly Activity */}
-              <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-4">
-                <h3 className="font-semibold text-white mb-4">Attività settimanale</h3>
-                <div className="flex items-end justify-between gap-2 h-24">
-                  {weeklyActivity.map((day, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                      <div
-                        className={`w-full rounded-lg transition-all duration-300 ${
-                          day.count > 0 ? "bg-gradient-to-t from-purple-600 to-cyan-400" : "bg-white/10"
-                        }`}
-                        style={{
-                          height: `${Math.max((day.count / maxActivity) * 100, day.count > 0 ? 20 : 10)}%`,
-                          minHeight: day.count > 0 ? "20%" : "10%",
-                        }}
-                        title={`${day.count} carte`}
-                      />
-                      <span className="text-slate-500 text-xs">{day.dayName}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Totale settimana</span>
-                    <span className="text-white font-medium">
-                      {weeklyActivity.reduce((acc, d) => acc + d.count, 0)} carte
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-4">
-                <h3 className="font-semibold text-white mb-4">Azioni rapide</h3>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:border-purple-500/50 border border-transparent transition-all duration-300 text-left group"
-                  >
-                    <span className="text-xl group-hover:scale-110 transition-transform duration-300">📚</span>
-                    <span className="text-slate-300 text-sm">Aggiungi nuovo libro</span>
-                  </button>
-                  <Link
-                    href="/stats"
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:border-purple-500/50 border border-transparent transition-all duration-300 group"
-                  >
-                    <span className="text-xl group-hover:scale-110 transition-transform duration-300">📊</span>
-                    <span className="text-slate-300 text-sm">Vedi statistiche</span>
-                  </Link>
-                  <Link
-                    href="/settings"
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:border-purple-500/50 border border-transparent transition-all duration-300 group"
-                  >
-                    <span className="text-xl group-hover:scale-110 transition-transform duration-300">⚙️</span>
-                    <span className="text-slate-300 text-sm">Impostazioni</span>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Motivation Card */}
-              {stats.streakDays >= 7 && (
-                <div className="bg-gradient-to-br from-amber-500/20 to-orange-500/20 backdrop-blur-md rounded-2xl border border-amber-500/30 p-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">🏆</span>
-                    <h3 className="font-semibold text-amber-400">Grande lavoro!</h3>
-                  </div>
-                  <p className="text-amber-100/80 text-sm">
-                    {stats.streakDays} giorni consecutivi di studio. Continua così!
-                  </p>
-                </div>
-              )}
-            </div>
+            </GradientCard>
           </div>
+
+          {/* Right Column */}
+          <div className="lg:col-span-4 space-y-6">
+            {/* Motor Section - Topic Cards */}
+            <GradientCard>
+              <div className="p-4">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                  I TUOI LIBRI
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {sources.slice(0, 4).map((source) => (
+                    <Link
+                      key={source.id}
+                      href={`/dashboard/source/${source.id}`}
+                      className="relative group overflow-hidden rounded-xl bg-gradient-to-br from-[#0a1628] to-[#0d1f35] border border-white/10 hover:border-cyan-500/50 transition-all duration-300"
+                    >
+                      <div className="p-4">
+                        <div className="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center mb-3">
+                          <span className="text-xl">{getSourceIcon(source.source_type)}</span>
+                        </div>
+                        <p className="text-white text-xs font-medium truncate">{source.title}</p>
+                        {source.author && (
+                          <p className="text-slate-500 text-xs truncate mt-0.5">{source.author}</p>
+                        )}
+                      </div>
+                      {/* Hover glow */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </Link>
+                  ))}
+                  {sources.length === 0 && (
+                    <>
+                      <div className="aspect-square rounded-xl bg-white/5 border border-dashed border-white/20 flex items-center justify-center">
+                        <span className="text-slate-500 text-2xl">+</span>
+                      </div>
+                      <div className="aspect-square rounded-xl bg-white/5 border border-dashed border-white/20 flex items-center justify-center">
+                        <span className="text-slate-500 text-2xl">+</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </GradientCard>
+
+            {/* Study Progress */}
+            <GradientCard>
+              <div className="p-6">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-6">
+                  STUDY PROGRESS
+                </h3>
+                <div className="flex justify-center">
+                  <CircularProgress percentage={stats.retentionRate || progressPercentage} />
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold text-white">{stats.studiedToday}</p>
+                    <p className="text-xs text-slate-500">Studiate oggi</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-white">{stats.streakDays}</p>
+                    <p className="text-xs text-slate-500">Giorni streak</p>
+                  </div>
+                </div>
+              </div>
+            </GradientCard>
+
+            {/* Quick Study Button */}
+            {stats.dueToday > 0 && (
+              <Link href="/dashboard/study" className="block">
+                <div className="relative group">
+                  <div className="absolute -inset-[1px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 rounded-xl opacity-70 group-hover:opacity-100 blur-sm transition-opacity" />
+                  <div className="relative bg-gradient-to-r from-cyan-600 to-purple-600 rounded-xl p-4 text-center">
+                    <span className="text-white font-semibold">🎯 Inizia Studio → {stats.dueToday} carte</span>
+                  </div>
+                </div>
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {/* Weekly Activity - Bottom */}
+        <div className="mt-6">
+          <GradientCard>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+                  ATTIVITÀ SETTIMANALE
+                </h3>
+                <span className="text-cyan-400 text-sm">
+                  {weeklyActivity.reduce((acc, d) => acc + d.count, 0)} carte questa settimana
+                </span>
+              </div>
+              <div className="flex items-end justify-between gap-2 h-20">
+                {weeklyActivity.map((day, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                    <div
+                      className="w-full rounded-t-lg transition-all duration-300"
+                      style={{
+                        height: `${Math.max((day.count / maxActivity) * 100, day.count > 0 ? 20 : 8)}%`,
+                        minHeight: day.count > 0 ? "20%" : "8%",
+                        background: day.count > 0
+                          ? 'linear-gradient(to top, #06b6d4, #a855f7)'
+                          : 'rgba(255,255,255,0.1)',
+                        boxShadow: day.count > 0 ? '0 0 20px rgba(6,182,212,0.3)' : 'none'
+                      }}
+                    />
+                    <span className="text-slate-500 text-xs">{day.dayName}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </GradientCard>
         </div>
       </div>
 
