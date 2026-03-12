@@ -1,24 +1,35 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+// Lazy initialization - client is created on first access, not at module load time
+let _supabase: SupabaseClient | null = null;
 
-// Only create client if we have valid credentials
-const createSupabaseClient = () => {
+const getSupabaseClient = (): SupabaseClient => {
+  if (_supabase) return _supabase;
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Missing Supabase credentials");
+    throw new Error("Missing Supabase credentials. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
 
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  _supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false,
     },
   });
+
+  return _supabase;
 };
 
-export const supabase = createSupabaseClient();
+// Export a getter that creates the client lazily
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return getSupabaseClient()[prop as keyof SupabaseClient];
+  },
+});
 
 // Types for database tables
 export interface Profile {
