@@ -96,8 +96,8 @@ ISTRUZIONI:
 1. Scrivi un riassunto di circa ${wordTarget} parole (±10%)
 2. STILE: ${lengthDesc}
 3. Usa un linguaggio chiaro e accessibile
-4. Mantieni tutti i concetti chiave e le informazioni importanti
-5. **IMPORTANTE**: Dividi il riassunto in SEZIONI ben definite con titoli
+4. **CRITICO**: Il riassunto DEVE coprire TUTTO il contenuto del documento, dall'inizio alla fine. NON fermarti a metà. Ogni argomento e sezione del testo originale deve essere rappresentata nel riassunto.
+5. **IMPORTANTE**: Dividi il riassunto in SEZIONI ben definite con titoli che rispecchiano la struttura del documento
 6. Usa elenchi puntati dove appropriato per migliorare la leggibilità
 7. Lingua: ${langName}
 
@@ -130,9 +130,12 @@ Scrivi il riassunto strutturato:`;
     const modelToUse = chapter.preferred_model || "anthropic/claude-3.5-sonnet";
     console.log("Generating summary with model:", modelToUse);
 
+    // Scale max_tokens based on target word count (roughly 1.5 tokens per word + buffer)
+    const maxTokens = Math.max(4096, Math.ceil(wordTarget * 3));
+
     const response = await openrouter.chat.completions.create({
       model: modelToUse,
-      max_tokens: 2048,
+      max_tokens: maxTokens,
       messages: [
         { role: "user", content: prompt }
       ],

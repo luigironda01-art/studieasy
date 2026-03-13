@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, DragEvent } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -12,6 +13,7 @@ interface AddSourceModalProps {
 
 export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSourceModalProps) {
   const { user } = useAuth();
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [sourceType, setSourceType] = useState<"pdf" | "notes">("pdf");
@@ -173,6 +175,11 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
       console.log("AddSourceModal: calling onSuccess (refreshSidebar)");
       onSuccess();
       onClose();
+
+      // Navigate to the source detail page
+      if (sourceData) {
+        router.push(`/dashboard/source/${sourceData.id}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Errore sconosciuto");
       setLoading(false);
