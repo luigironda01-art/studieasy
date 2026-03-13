@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,6 +9,14 @@ import { supabase, Source, Chapter, Flashcard } from "@/lib/supabase";
 
 interface FlashcardWithChapter extends Flashcard {
   chapter?: { title: string };
+}
+
+interface BatchGroup {
+  batchId: string;
+  date: string;
+  difficulty: string;
+  chapterTitle: string;
+  cards: FlashcardWithChapter[];
 }
 
 export default function SourceFlashcardsPage() {
@@ -21,10 +29,16 @@ export default function SourceFlashcardsPage() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [flashcards, setFlashcards] = useState<FlashcardWithChapter[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedChapter, setSelectedChapter] = useState<string>("all");
   const [viewingCard, setViewingCard] = useState<FlashcardWithChapter | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [groupByDifficulty, setGroupByDifficulty] = useState(true);
+
+  // Filters
+  const [filterDifficulty, setFilterDifficulty] = useState<string>("all");
+  const [filterChapter, setFilterChapter] = useState<string>("all");
+  const [filterDate, setFilterDate] = useState<string>("all");
+
+  // Collapsed batches
+  const [collapsedBatches, setCollapsedBatches] = useState<Set<string>>(new Set());
 
   // Generate modal
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -58,7 +72,6 @@ export default function SourceFlashcardsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch source
       const { data: sourceData } = await supabase
         .from("sources")
         .select("*")
@@ -67,7 +80,6 @@ export default function SourceFlashcardsPage() {
 
       if (sourceData) setSource(sourceData);
 
-      // Fetch chapters
       const { data: chaptersData } = await supabase
         .from("chapters")
         .select("*")
@@ -82,7 +94,6 @@ export default function SourceFlashcardsPage() {
         }
       }
 
-      // Fetch flashcards for all chapters of this source
       const chapterIds = chaptersData?.map(c => c.id) || [];
       if (chapterIds.length > 0) {
         const { data: flashcardsData } = await supabase
@@ -140,9 +151,7 @@ export default function SourceFlashcardsPage() {
     if (!user) return;
 
     try {
-      // Delete reviews first
       await supabase.from("reviews").delete().eq("flashcard_id", cardId);
-      // Delete flashcard
       await supabase.from("flashcards").delete().eq("id", cardId);
 
       setFlashcards(prev => prev.filter(f => f.id !== cardId));
@@ -152,9 +161,105 @@ export default function SourceFlashcardsPage() {
     }
   };
 
-  const filteredCards = selectedChapter === "all"
-    ? flashcards
-    : flashcards.filter(f => f.chapter_id === selectedChapter);
+  // Get unique generation dates for filter
+  const uniqueDates = useMemo(() => {
+    const dates = new Set<string>();
+    flashcards.forEach(f => {
+      if (f.created_at) {
+        dates.add(new Date(f.created_at).toLocaleDateString("it-IT"));
+      }
+    });
+    return Array.from(dates).sort().reverse();
+  }, [flashcards]);
+
+  // Apply filters
+  const filteredCards = useMemo(() => {
+    return flashcards.filter(card => {
+      if (filterDifficulty !== "all" && card.difficulty !== filterDifficulty) return false;
+      if (filterChapter !== "all" && card.chapter_id !== filterChapter) return false;
+      if (filterDate !== "all") {
+        const cardDate = card.created_at ? new Date(card.created_at).toLocaleDateString("it-IT") : "";
+        if (cardDate !== filterDate) return false;
+      }
+      return true;
+    });
+  }, [flashcards, filterDifficulty, filterChapter, filterDate]);
+
+  // Group filtered cards by batch
+  const batches = useMemo(() => {
+    const batchMap = new Map<string, FlashcardWithChapter[]>();
+
+    filteredCards.forEach(card => {
+      const key = (card as any).batch_id || `single-${card.id}`;
+      if (!batchMap.has(key)) {
+        batchMap.set(key, []);
+      }
+      batchMap.get(key)!.push(card);
+    });
+
+    const groups: BatchGroup[] = [];
+    batchMap.forEach((cards, batchId) => {
+      const firstCard = cards[0];
+      const date = firstCard.created_at
+        ? new Date(firstCard.created_at).toLocaleDateString("it-IT", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Data sconosciuta";
+
+      const difficulty = firstCard.difficulty || "medium";
+      const chapterTitle = firstCard.chapter?.title || "Capitolo";
+
+      groups.push({ batchId, date, difficulty, chapterTitle, cards });
+    });
+
+    // Sort by date (newest first)
+    groups.sort((a, b) => {
+      const dateA = a.cards[0]?.created_at || "";
+      const dateB = b.cards[0]?.created_at || "";
+      return dateB.localeCompare(dateA);
+    });
+
+    return groups;
+  }, [filteredCards]);
+
+  const toggleBatch = (batchId: string) => {
+    setCollapsedBatches(prev => {
+      const next = new Set(prev);
+      if (next.has(batchId)) {
+        next.delete(batchId);
+      } else {
+        next.add(batchId);
+      }
+      return next;
+    });
+  };
+
+  const collapseAll = () => {
+    setCollapsedBatches(new Set(batches.map(b => b.batchId)));
+  };
+
+  const expandAll = () => {
+    setCollapsedBatches(new Set());
+  };
+
+  const difficultyLabel = (d: string) =>
+    d === "easy" ? "Facile" : d === "hard" ? "Difficile" : "Media";
+
+  const difficultyStyle = (d: string) =>
+    d === "easy"
+      ? "bg-green-500/20 text-green-400 border-green-500/30"
+      : d === "hard"
+      ? "bg-red-500/20 text-red-400 border-red-500/30"
+      : "bg-amber-500/20 text-amber-400 border-amber-500/30";
+
+  const difficultyIcon = (d: string) =>
+    d === "easy" ? "🟢" : d === "hard" ? "🔴" : "🟡";
+
+  const activeFiltersCount = [filterDifficulty, filterChapter, filterDate].filter(f => f !== "all").length;
 
   if (authLoading || loading) {
     return (
@@ -197,16 +302,85 @@ export default function SourceFlashcardsPage() {
         </div>
       </div>
 
-      {/* Filter & View Toggle */}
-      <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-4">
-          <label className="text-slate-400 text-sm">Filtra per capitolo:</label>
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+          <div className="text-3xl font-bold text-white">{flashcards.length}</div>
+          <div className="text-slate-400 text-sm">Totale</div>
+        </div>
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+          <div className="text-3xl font-bold text-green-400">{flashcards.filter(f => f.difficulty === "easy").length}</div>
+          <div className="text-slate-400 text-sm">Facili</div>
+        </div>
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+          <div className="text-3xl font-bold text-amber-400">{flashcards.filter(f => f.difficulty === "medium").length}</div>
+          <div className="text-slate-400 text-sm">Medie</div>
+        </div>
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4">
+          <div className="text-3xl font-bold text-red-400">{flashcards.filter(f => f.difficulty === "hard").length}</div>
+          <div className="text-slate-400 text-sm">Difficili</div>
+        </div>
+      </div>
+
+      {/* Filters Bar */}
+      <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <span className="text-white font-medium text-sm">Filtri</span>
+            {activeFiltersCount > 0 && (
+              <span className="bg-purple-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                {activeFiltersCount}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={() => { setFilterDifficulty("all"); setFilterChapter("all"); setFilterDate("all"); }}
+                className="text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                Resetta filtri
+              </button>
+            )}
+            <span className="text-slate-600">|</span>
+            <button
+              onClick={collapseAll}
+              className="text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              Chiudi tutti
+            </button>
+            <button
+              onClick={expandAll}
+              className="text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              Apri tutti
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          {/* Difficulty filter */}
           <select
-            value={selectedChapter}
-            onChange={(e) => setSelectedChapter(e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            value={filterDifficulty}
+            onChange={(e) => setFilterDifficulty(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
           >
-            <option value="all">Tutti ({flashcards.length})</option>
+            <option value="all">Tutte le difficolta</option>
+            <option value="easy">🟢 Facile ({flashcards.filter(f => f.difficulty === "easy").length})</option>
+            <option value="medium">🟡 Media ({flashcards.filter(f => f.difficulty === "medium").length})</option>
+            <option value="hard">🔴 Difficile ({flashcards.filter(f => f.difficulty === "hard").length})</option>
+          </select>
+
+          {/* Chapter filter */}
+          <select
+            value={filterChapter}
+            onChange={(e) => setFilterChapter(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="all">Tutti i capitoli</option>
             {chapters.map(ch => {
               const count = flashcards.filter(f => f.chapter_id === ch.id).length;
               return (
@@ -216,52 +390,46 @@ export default function SourceFlashcardsPage() {
               );
             })}
           </select>
+
+          {/* Date filter */}
+          <select
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="all">Tutte le date</option>
+            {uniqueDates.map(date => (
+              <option key={date} value={date}>{date}</option>
+            ))}
+          </select>
         </div>
-        <button
-          onClick={() => setGroupByDifficulty(!groupByDifficulty)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-            groupByDifficulty
-              ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-              : "bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-          </svg>
-          Per difficoltà
-        </button>
+
+        {/* Active filter count info */}
+        {filteredCards.length !== flashcards.length && (
+          <div className="mt-3 text-sm text-slate-400">
+            Mostrando {filteredCards.length} di {flashcards.length} flashcard
+          </div>
+        )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-          <div className="text-3xl font-bold text-white">{flashcards.length}</div>
-          <div className="text-slate-400 text-sm">Totale flashcard</div>
-        </div>
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-          <div className="text-3xl font-bold text-green-400">{flashcards.filter(f => (f as any).ease_factor > 2.5).length}</div>
-          <div className="text-slate-400 text-sm">Padroneggiati</div>
-        </div>
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-          <div className="text-3xl font-bold text-amber-400">{flashcards.filter(f => (f as any).repetitions === 0).length}</div>
-          <div className="text-slate-400 text-sm">Da ripassare</div>
-        </div>
-      </div>
-
-      {/* Flashcards Grid */}
+      {/* Flashcards by Batch */}
       {filteredCards.length === 0 ? (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-12 text-center">
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
           <div className="w-20 h-20 bg-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">🎴</span>
           </div>
-          <h3 className="text-white font-semibold text-lg mb-2">Nessuna flashcard</h3>
+          <h3 className="text-white font-semibold text-lg mb-2">
+            {flashcards.length === 0 ? "Nessuna flashcard" : "Nessun risultato"}
+          </h3>
           <p className="text-slate-400 mb-6">
-            {chapters.length === 0
-              ? "Elabora prima un capitolo per generare flashcard"
-              : "Genera le tue prime flashcard per iniziare a studiare"
+            {flashcards.length === 0
+              ? chapters.length === 0
+                ? "Elabora prima un capitolo per generare flashcard"
+                : "Genera le tue prime flashcard per iniziare a studiare"
+              : "Prova a modificare i filtri per visualizzare le flashcard"
             }
           </p>
-          {chapters.length > 0 && (
+          {flashcards.length === 0 && chapters.length > 0 && (
             <button
               onClick={() => setShowGenerateModal(true)}
               className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl font-semibold hover:opacity-90 transition-opacity"
@@ -269,75 +437,94 @@ export default function SourceFlashcardsPage() {
               Genera Flashcards
             </button>
           )}
+          {flashcards.length > 0 && activeFiltersCount > 0 && (
+            <button
+              onClick={() => { setFilterDifficulty("all"); setFilterChapter("all"); setFilterDate("all"); }}
+              className="px-6 py-3 bg-slate-700 text-white rounded-xl font-semibold hover:bg-slate-600 transition-colors"
+            >
+              Resetta filtri
+            </button>
+          )}
         </div>
-      ) : groupByDifficulty ? (
-        // Grouped by difficulty
-        <div className="space-y-8">
-          {([
-            { key: "easy", label: "Facile", icon: "🟢", color: "green", borderColor: "border-green-500/30", bgColor: "bg-green-500/10" },
-            { key: "medium", label: "Media", icon: "🟡", color: "amber", borderColor: "border-amber-500/30", bgColor: "bg-amber-500/10" },
-            { key: "hard", label: "Difficile", icon: "🔴", color: "red", borderColor: "border-red-500/30", bgColor: "bg-red-500/10" },
-          ] as const).map(group => {
-            const cards = filteredCards.filter(c => c.difficulty === group.key);
-            if (cards.length === 0) return null;
+      ) : (
+        <div className="space-y-4">
+          {batches.map((batch) => {
+            const isCollapsed = collapsedBatches.has(batch.batchId);
 
             return (
-              <div key={group.key}>
-                <div className={`flex items-center gap-3 mb-4 px-4 py-3 ${group.bgColor} ${group.borderColor} border rounded-xl`}>
-                  <span className="text-lg">{group.icon}</span>
-                  <h3 className="text-white font-semibold">{group.label}</h3>
-                  <span className="text-slate-400 text-sm ml-auto">{cards.length} carte</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {cards.map((card) => (
-                    <div
-                      key={card.id}
-                      onClick={() => { setViewingCard(card); setShowAnswer(false); }}
-                      className="bg-slate-800 border border-slate-700 rounded-xl p-5 cursor-pointer hover:border-purple-500/50 transition-all group"
-                    >
-                      <div className="text-purple-400 text-xs mb-2 font-medium">
-                        {card.chapter?.title || "Capitolo"}
-                      </div>
-                      <p className="text-white font-medium line-clamp-3 group-hover:text-purple-300 transition-colors">
-                        {card.front}
-                      </p>
-                      <div className="mt-3 pt-3 border-t border-slate-700 text-right">
-                        <span className="text-slate-500 text-xs">Clicca per vedere</span>
+              <div
+                key={batch.batchId}
+                className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden"
+              >
+                {/* Batch Header - Clickable */}
+                <button
+                  onClick={() => toggleBatch(batch.batchId)}
+                  className="w-full px-5 py-4 flex items-center gap-4 hover:bg-white/5 transition-colors"
+                >
+                  {/* Collapse arrow */}
+                  <svg
+                    className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                      isCollapsed ? "" : "rotate-90"
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+
+                  {/* Difficulty icon */}
+                  <span className="text-lg">{difficultyIcon(batch.difficulty)}</span>
+
+                  {/* Batch info */}
+                  <div className="flex-1 text-left">
+                    <div className="flex items-center gap-3">
+                      <span className="text-white font-medium">
+                        {batch.cards.length} flashcard
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${difficultyStyle(batch.difficulty)}`}>
+                        {difficultyLabel(batch.difficulty)}
+                      </span>
+                    </div>
+                    <div className="text-slate-400 text-xs mt-0.5 flex items-center gap-2">
+                      <span>{batch.chapterTitle}</span>
+                      <span className="text-slate-600">·</span>
+                      <span>{batch.date}</span>
+                    </div>
+                  </div>
+
+                  {/* Card count badge */}
+                  <span className="bg-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded-lg font-medium">
+                    {batch.cards.length}
+                  </span>
+                </button>
+
+                {/* Batch Cards - Collapsible */}
+                {!isCollapsed && (
+                  <div className="px-5 pb-5">
+                    <div className="border-t border-white/10 pt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {batch.cards.map((card) => (
+                          <div
+                            key={card.id}
+                            onClick={() => { setViewingCard(card); setShowAnswer(false); }}
+                            className="bg-slate-800/80 border border-slate-700 rounded-xl p-4 cursor-pointer hover:border-purple-500/50 hover:bg-slate-800 transition-all group"
+                          >
+                            <p className="text-white font-medium text-sm line-clamp-3 group-hover:text-purple-300 transition-colors">
+                              {card.front}
+                            </p>
+                            <div className="mt-3 pt-2 border-t border-slate-700/50 text-right">
+                              <span className="text-slate-500 text-xs">Clicca per vedere</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
-        </div>
-      ) : (
-        // Flat grid
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCards.map((card) => (
-            <div
-              key={card.id}
-              onClick={() => { setViewingCard(card); setShowAnswer(false); }}
-              className="bg-slate-800 border border-slate-700 rounded-xl p-5 cursor-pointer hover:border-purple-500/50 transition-all group"
-            >
-              <div className="text-purple-400 text-xs mb-2 font-medium">
-                {card.chapter?.title || "Capitolo"}
-              </div>
-              <p className="text-white font-medium line-clamp-3 group-hover:text-purple-300 transition-colors">
-                {card.front}
-              </p>
-              <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
-                <span className={`text-xs px-2 py-1 rounded ${
-                  card.difficulty === "easy" ? "bg-green-500/20 text-green-400" :
-                  card.difficulty === "hard" ? "bg-red-500/20 text-red-400" :
-                  "bg-amber-500/20 text-amber-400"
-                }`}>
-                  {card.difficulty === "easy" ? "Facile" : card.difficulty === "hard" ? "Difficile" : "Media"}
-                </span>
-                <span className="text-slate-500 text-xs">Clicca per vedere</span>
-              </div>
-            </div>
-          ))}
         </div>
       )}
 
@@ -347,8 +534,13 @@ export default function SourceFlashcardsPage() {
           <div className="fixed inset-0 bg-black/70 z-40" onClick={() => setViewingCard(null)} />
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl z-50 overflow-hidden">
             <div className="p-6">
-              <div className="text-purple-400 text-sm mb-3 font-medium">
-                {viewingCard.chapter?.title}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-purple-400 text-sm font-medium">
+                  {viewingCard.chapter?.title}
+                </span>
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${difficultyStyle(viewingCard.difficulty || "medium")}`}>
+                  {difficultyLabel(viewingCard.difficulty || "medium")}
+                </span>
               </div>
               <div className="mb-6">
                 <h3 className="text-white text-xl font-semibold mb-4">{viewingCard.front}</h3>
@@ -433,7 +625,7 @@ export default function SourceFlashcardsPage() {
                           : "border-slate-600 text-slate-400 hover:border-slate-500"
                       }`}
                     >
-                      {d === "easy" ? "Facile" : d === "medium" ? "Media" : "Difficile"}
+                      {difficultyLabel(d)}
                     </button>
                   ))}
                 </div>

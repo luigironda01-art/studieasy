@@ -40,7 +40,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    // Proactively refresh session every 10 minutes to prevent token expiry
+    const refreshInterval = setInterval(async () => {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) {
+        console.warn("Session refresh failed:", error.message);
+      } else if (data.session) {
+        setSession(data.session);
+        setUser(data.session.user);
+      }
+    }, 10 * 60 * 1000);
+
+    // Also refresh when window regains focus after being hidden
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible") {
+        const { data, error } = await supabase.auth.refreshSession();
+        if (error) {
+          console.warn("Session refresh on focus failed:", error.message);
+        } else if (data.session) {
+          setSession(data.session);
+          setUser(data.session.user);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(refreshInterval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   // Fetch profile when user changes
