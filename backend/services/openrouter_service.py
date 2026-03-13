@@ -21,8 +21,8 @@ class OpenRouterService:
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key or "missing-key"
         )
-        # Model selection
-        self.content_model = "anthropic/claude-3.5-sonnet"  # For content generation
+        # Model selection - using stable model IDs
+        self.content_model = "anthropic/claude-3-5-sonnet-20241022"  # Claude 3.5 Sonnet
         self.vision_model = "google/gemini-2.0-flash-001"   # For PDF/image processing
 
     async def process_document(self, file_url: str, mime_type: str = "application/pdf") -> dict:
@@ -131,23 +131,37 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
   {{"front": "domanda 2", "back": "risposta 2"}}
 ]"""
 
-        response = await self.client.chat.completions.create(
-            model=self.content_model,
-            max_tokens=4096,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+        try:
+            print(f"Calling OpenRouter with model: {self.content_model}")
+            response = await self.client.chat.completions.create(
+                model=self.content_model,
+                max_tokens=4096,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            print(f"OpenRouter response received")
+        except Exception as api_error:
+            print(f"OpenRouter API error: {type(api_error).__name__}: {api_error}")
+            raise Exception(f"OpenRouter API call failed: {api_error}")
 
         # Parse JSON response
         response_text = response.choices[0].message.content
+        print(f"Response text (first 200 chars): {response_text[:200] if response_text else 'EMPTY'}")
         # Clean up potential markdown code blocks
         if "```json" in response_text:
             response_text = response_text.split("```json")[1].split("```")[0]
         elif "```" in response_text:
             response_text = response_text.split("```")[1].split("```")[0]
 
-        return json.loads(response_text.strip())
+        try:
+            result = json.loads(response_text.strip())
+            print(f"Successfully parsed {len(result)} flashcards")
+            return result
+        except json.JSONDecodeError as e:
+            print(f"JSON parse error: {e}")
+            print(f"Raw response: {response_text}")
+            raise Exception(f"Failed to parse AI response as JSON: {e}")
 
     async def generate_quiz(
         self,
