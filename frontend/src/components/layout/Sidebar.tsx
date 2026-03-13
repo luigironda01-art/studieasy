@@ -38,8 +38,8 @@ export function Sidebar() {
   useEffect(() => {
     if (!user) return;
 
-    const fetchData = async () => {
-      setIsLoading(true);
+    const fetchData = async (isInitial = false) => {
+      if (isInitial) setIsLoading(true);
 
       try {
         // Fetch sources
@@ -167,13 +167,14 @@ export function Sidebar() {
       }
     };
 
-    fetchData();
+    // Show loading only on first load (no sources yet)
+    fetchData(sources.length === 0);
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
+    // Refresh every 30 seconds (silent, no loading state)
+    const interval = setInterval(() => fetchData(false), 30000);
 
-    // Also refresh when window regains focus
-    const handleFocus = () => fetchData();
+    // Also refresh when window regains focus (silent)
+    const handleFocus = () => fetchData(false);
     window.addEventListener("focus", handleFocus);
 
     return () => {
