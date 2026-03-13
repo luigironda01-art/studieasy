@@ -30,6 +30,8 @@ supabase>=2.3.0
 
 # PDF Processing
 PyPDF2>=3.0.0
+pdf2image>=1.16.0
+Pillow>=10.0.0
 
 # Async
 anyio>=4.2.0

@@ -288,6 +288,9 @@ Aggiunto a MEMORY.md per garantire qualità frontend impeccabile in tutte le ses
 - [x] **Logging integrato** in tutte le API di generazione
 - [x] Rinominato "Appunti" in "Testo digitale"
 - [x] Build verificata con successo
+- [x] **PDF Vision**: Supporto PDF basati su immagini (slides, scansioni)
+- [x] **AI Focus**: Feature approfondimenti + risorse web correlate
+- [x] Dockerfile aggiornato con poppler per Vision AI
 
 ---
 
@@ -301,6 +304,8 @@ Aggiunto a MEMORY.md per garantire qualità frontend impeccabile in tutte le ses
 | Quiz + Difficoltà | ✅ | Completato |
 | Riassunti | ✅ | Completato |
 | **Analytics/Usage Logs** | ✅ | **Completato** |
+| **PDF Vision (slides/scansioni)** | ✅ | **Completato** |
+| **AI Focus (approfondimenti)** | ✅ | **Completato** |
 | Mappe Concettuali | ⬜ | Prossimo |
 | Tutorial iniziale | ⬜ | Backlog |
 | Infografiche | ⬜ | Backlog |

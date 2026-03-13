@@ -18,6 +18,7 @@ export type ActionType =
   | "generate_flashcards"
   | "generate_quiz"
   | "generate_summary"
+  | "generate_ai_focus"
   | "evaluate_answer"
   | "upload_file";
 

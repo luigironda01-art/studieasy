@@ -42,6 +42,14 @@ interface Summary {
   created_at: string;
 }
 
+interface AIFocusData {
+  main_topic: string;
+  subtopics: string[];
+  concepts_to_explore: { concept: string; why: string }[];
+  search_queries: { query: string; purpose: string; type: string }[];
+  study_tips: string[];
+}
+
 interface ChapterWithContent extends Chapter {
   flashcardCount: number;
   dueCount: number;
@@ -49,7 +57,7 @@ interface ChapterWithContent extends Chapter {
   summary: Summary | null;
 }
 
-type TabType = "flashcards" | "quiz" | "summaries" | "maps" | "infographics" | "presentations";
+type TabType = "flashcards" | "quiz" | "summaries" | "ai-focus" | "maps" | "infographics" | "presentations";
 
 interface GeneratePopover {
   chapterId: string;
@@ -67,6 +75,7 @@ const TOOLS = [
   { id: "flashcards" as TabType, label: "Flashcard", icon: "🎴", available: true, description: "Ripassa con spaced repetition" },
   { id: "quiz" as TabType, label: "Quiz", icon: "📝", available: true, description: "Metti alla prova le tue conoscenze" },
   { id: "summaries" as TabType, label: "Riassunti", icon: "📄", available: true, description: "Riassunti AI dei capitoli" },
+  { id: "ai-focus" as TabType, label: "AI Focus", icon: "🔍", available: true, description: "Approfondimenti e risorse correlate suggerite dall'AI" },
   { id: "maps" as TabType, label: "Mappe", icon: "🗺️", available: false, description: "Mappe concettuali visive" },
   { id: "infographics" as TabType, label: "Infografiche", icon: "📊", available: false, description: "Visualizzazioni dei concetti" },
   { id: "presentations" as TabType, label: "Slides", icon: "🎬", available: false, description: "Presentazioni generate" },
@@ -76,6 +85,7 @@ const GENERATION_LABELS: Record<TabType, string> = {
   flashcards: "flashcard",
   quiz: "domande",
   summaries: "parole (x50)",
+  "ai-focus": "suggerimenti",
   maps: "nodi",
   infographics: "sezioni",
   presentations: "slide",
@@ -100,6 +110,11 @@ export default function StudyHubPage() {
 
   // Summary reader modal
   const [showSummaryReader, setShowSummaryReader] = useState<Summary | null>(null);
+
+  // AI Focus state
+  const [generatingFocusId, setGeneratingFocusId] = useState<string | null>(null);
+  const [aiFocusData, setAiFocusData] = useState<Record<string, AIFocusData>>({});
+  const [showFocusModal, setShowFocusModal] = useState<{ chapterId: string; chapterTitle: string } | null>(null);
 
   // Generation popover state
   const [showGeneratePopover, setShowGeneratePopover] = useState<GeneratePopover | null>(null);
@@ -444,6 +459,45 @@ export default function StudyHubPage() {
       setError(err instanceof Error ? err.message : "Errore durante la generazione del riassunto");
     } finally {
       setGeneratingSummaryId(null);
+    }
+  };
+
+  const handleGenerateAIFocus = async (chapterId: string, chapterTitle: string) => {
+    if (!user) return;
+
+    setGeneratingFocusId(chapterId);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/ai-focus/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chapterId,
+          userId: user.id,
+          language: "it",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Generazione AI Focus fallita");
+      }
+
+      // Store the focus data
+      setAiFocusData(prev => ({
+        ...prev,
+        [chapterId]: data.focus
+      }));
+
+      // Open the modal to show results
+      setShowFocusModal({ chapterId, chapterTitle });
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Errore durante la generazione AI Focus");
+    } finally {
+      setGeneratingFocusId(null);
     }
   };
 
@@ -1156,6 +1210,82 @@ export default function StudyHubPage() {
                         </div>
                       ))}
                     </div>
+                  ) : selectedTool === "ai-focus" ? (
+                    /* AI FOCUS: Chapter-based display */
+                    <div className="divide-y divide-slate-700/50">
+                      {source.chapters.map((chapter) => (
+                        <div key={chapter.id} className="p-4 hover:bg-slate-700/30 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <h4 className="text-white font-medium">{chapter.title}</h4>
+                              <div className="mt-2">
+                                {aiFocusData[chapter.id] ? (
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-cyan-400 text-sm flex items-center gap-1">
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Focus disponibile
+                                    </span>
+                                    <span className="text-slate-500 text-sm">
+                                      {aiFocusData[chapter.id].search_queries?.length || 0} suggerimenti
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500 text-sm">Nessun focus generato</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* AI Focus Actions */}
+                            <div className="flex items-center gap-2 ml-4">
+                              {aiFocusData[chapter.id] ? (
+                                <>
+                                  <button
+                                    onClick={() => setShowFocusModal({ chapterId: chapter.id, chapterTitle: chapter.title })}
+                                    className="px-3 py-1.5 bg-cyan-500 text-white text-sm rounded-lg hover:bg-cyan-600 transition-colors flex items-center gap-2"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    Visualizza
+                                  </button>
+                                  <button
+                                    onClick={() => handleGenerateAIFocus(chapter.id, chapter.title)}
+                                    disabled={generatingFocusId !== null}
+                                    className="px-3 py-1.5 bg-slate-700 text-slate-300 text-sm rounded-lg hover:bg-slate-600 transition-colors"
+                                    title="Rigenera AI Focus"
+                                  >
+                                    🔄
+                                  </button>
+                                </>
+                              ) : chapter.processing_status === "completed" ? (
+                                <button
+                                  onClick={() => handleGenerateAIFocus(chapter.id, chapter.title)}
+                                  disabled={generatingFocusId !== null}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+                                >
+                                  {generatingFocusId === chapter.id ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                      Analizzando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span>🔍</span>
+                                      Genera AI Focus
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="text-slate-500 text-sm">Capitolo non elaborato</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     /* Coming Soon */
                     <div className="p-6 text-center text-slate-500">
@@ -1441,6 +1571,165 @@ export default function StudyHubPage() {
               </div>
               <button
                 onClick={() => setShowSummaryReader(null)}
+                className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* AI Focus Modal */}
+      {showFocusModal && aiFocusData[showFocusModal.chapterId] && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/70 z-40"
+            onClick={() => setShowFocusModal(null)}
+          />
+          {/* Modal */}
+          <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-slate-900 rounded-2xl border border-cyan-500/30 shadow-2xl z-50 flex flex-col overflow-hidden animate-fadeIn">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-gradient-to-r from-cyan-900/30 to-blue-900/30">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🔍</span>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">AI Focus</h3>
+                  <p className="text-slate-400 text-sm">
+                    {showFocusModal.chapterTitle}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFocusModal(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8">
+              <div className="max-w-4xl mx-auto space-y-8">
+                {/* Main Topic */}
+                <div className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 rounded-xl p-6 border border-cyan-500/20">
+                  <h2 className="text-2xl font-bold text-white mb-2">
+                    {aiFocusData[showFocusModal.chapterId].main_topic}
+                  </h2>
+                  {aiFocusData[showFocusModal.chapterId].subtopics.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {aiFocusData[showFocusModal.chapterId].subtopics.map((subtopic, i) => (
+                        <span key={i} className="px-3 py-1 bg-slate-800 text-slate-300 rounded-full text-sm">
+                          {subtopic}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Concepts to Explore */}
+                {aiFocusData[showFocusModal.chapterId].concepts_to_explore.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                      <span className="text-cyan-400">💡</span>
+                      Concetti da approfondire
+                    </h3>
+                    <div className="grid gap-3">
+                      {aiFocusData[showFocusModal.chapterId].concepts_to_explore.map((item, i) => (
+                        <div key={i} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                          <div className="text-white font-medium mb-1">{item.concept}</div>
+                          <div className="text-slate-400 text-sm">{item.why}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Search Queries / Resources */}
+                {aiFocusData[showFocusModal.chapterId].search_queries.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                      <span className="text-cyan-400">🔗</span>
+                      Risorse suggerite
+                    </h3>
+                    <div className="grid gap-3">
+                      {aiFocusData[showFocusModal.chapterId].search_queries.map((item, i) => {
+                        const typeIcons: Record<string, string> = {
+                          video: "🎬",
+                          article: "📰",
+                          tutorial: "📚",
+                          example: "💻",
+                        };
+                        const typeColors: Record<string, string> = {
+                          video: "from-red-500/20 to-pink-500/20 border-red-500/30",
+                          article: "from-blue-500/20 to-indigo-500/20 border-blue-500/30",
+                          tutorial: "from-green-500/20 to-emerald-500/20 border-green-500/30",
+                          example: "from-purple-500/20 to-violet-500/20 border-purple-500/30",
+                        };
+                        const bgClass = typeColors[item.type] || "from-slate-500/20 to-slate-600/20 border-slate-500/30";
+
+                        return (
+                          <a
+                            key={i}
+                            href={`https://www.google.com/search?q=${encodeURIComponent(item.query)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`bg-gradient-to-r ${bgClass} rounded-xl p-4 border hover:scale-[1.02] transition-transform group`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <span className="text-2xl">{typeIcons[item.type] || "🔍"}</span>
+                              <div className="flex-1">
+                                <div className="text-white font-medium group-hover:text-cyan-300 transition-colors flex items-center gap-2">
+                                  {item.query}
+                                  <svg className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </div>
+                                <div className="text-slate-400 text-sm mt-1">{item.purpose}</div>
+                              </div>
+                              <span className="text-xs uppercase tracking-wider text-slate-500 bg-slate-800 px-2 py-1 rounded">
+                                {item.type}
+                              </span>
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Study Tips */}
+                {aiFocusData[showFocusModal.chapterId].study_tips.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                      <span className="text-cyan-400">✨</span>
+                      Consigli di studio
+                    </h3>
+                    <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+                      <ul className="space-y-3">
+                        {aiFocusData[showFocusModal.chapterId].study_tips.map((tip, i) => (
+                          <li key={i} className="flex items-start gap-3 text-slate-300">
+                            <span className="text-cyan-400 mt-0.5">•</span>
+                            <span>{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-700 bg-slate-800/50">
+              <div className="text-slate-500 text-sm">
+                Clicca sulle risorse per cercare su Google
+              </div>
+              <button
+                onClick={() => setShowFocusModal(null)}
                 className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
               >
                 Chiudi

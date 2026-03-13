@@ -25,55 +25,130 @@ class OpenRouterService:
         self.content_model = "anthropic/claude-3-5-sonnet-20241022"  # Claude 3.5 Sonnet
         self.vision_model = "google/gemini-2.0-flash-001"   # For PDF/image processing
 
-    async def process_document(self, file_url: str, mime_type: str = "application/pdf") -> dict:
+    async def process_document_with_vision(self, images_base64: list[str]) -> str:
         """
-        Process a document (PDF/image) and extract structured content.
-        Uses Gemini for vision capabilities.
+        Process document images using Gemini Vision via OpenRouter.
 
         Args:
-            file_url: URL to the document
-            mime_type: MIME type of the document
+            images_base64: List of base64-encoded images (from PDF pages)
 
         Returns:
-            Dict with extracted text and structure
+            Extracted text content
         """
-        import httpx
-        import base64
+        prompt = """Analizza queste pagine di documento e estrai TUTTO il contenuto testuale.
 
-        # Download file
-        async with httpx.AsyncClient() as client:
-            response = await client.get(file_url)
-            file_content = response.content
+ISTRUZIONI:
+1. Estrai il testo esattamente come appare in ogni pagina
+2. Per immagini, grafici, diagrammi: descrivi dettagliatamente cosa rappresentano tra tag [IMMAGINE: descrizione]
+3. Per formule matematiche/chimiche: trascrivi in formato leggibile tra tag [FORMULA: formula]
+4. Per tabelle: converti in formato markdown
+5. Mantieni la struttura logica: titoli, paragrafi, elenchi
+6. Separa chiaramente le pagine con "---" tra una e l'altra
 
-        file_data = base64.b64encode(file_content).decode("utf-8")
+Restituisci il contenuto completo in formato Markdown."""
 
-        prompt = """Analizza questo documento e estrai tutto il contenuto in modo strutturato.
+        # Build message content with images
+        content = [{"type": "text", "text": prompt}]
 
-Per ogni elemento (testo, immagini, grafici, formule, tabelle):
-1. Estrai il testo esattamente come appare
-2. Per immagini/grafici/formule: descrivi dettagliatamente cosa rappresentano
-3. Mantieni la struttura logica del documento (titoli, paragrafi, elenchi)
-
-Restituisci il contenuto in formato Markdown ben strutturato.
-Includi descrizioni dettagliate di ogni elemento visivo tra tag [IMMAGINE: descrizione] o [FORMULA: descrizione]."""
-
-        # Note: OpenRouter doesn't support vision in the same way as direct API
-        # For now, we'll use a text-based approach and enhance later
-        response = await self.client.chat.completions.create(
-            model=self.vision_model,
-            max_tokens=8000,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt + "\n\n[Document content would be processed here]"
+        for i, img_b64 in enumerate(images_base64[:20]):  # Limit to 20 pages
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{img_b64}"
                 }
-            ]
-        )
+            })
 
-        return {
-            "extracted_text": response.choices[0].message.content,
-            "status": "completed"
-        }
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.vision_model,
+                max_tokens=8000,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": content
+                    }
+                ]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"Vision processing error: {e}")
+            raise Exception(f"Failed to process document with vision: {e}")
+
+    async def generate_ai_focus(self, processed_text: str, language: str = "it") -> dict:
+        """
+        Analyze document content and generate focus suggestions for deeper learning.
+        Returns topic analysis and search queries for related resources.
+
+        Args:
+            processed_text: The document's processed text content
+            language: 'it' or 'en'
+
+        Returns:
+            Dict with topic analysis and suggested search queries
+        """
+        lang_name = "Italiano" if language == "it" else "English"
+
+        # Take sample of text for analysis (first 4000 chars)
+        sample_text = processed_text[:4000] if len(processed_text) > 4000 else processed_text
+
+        prompt = f"""Sei un tutor esperto. Analizza questo materiale di studio e suggerisci risorse per approfondire.
+
+MATERIALE:
+{sample_text}
+
+COMPITI:
+1. Identifica l'argomento principale e i sotto-argomenti chiave
+2. Individua concetti che potrebbero beneficiare di approfondimento
+3. Suggerisci 5-8 query di ricerca specifiche per trovare:
+   - Video tutorial correlati
+   - Articoli accademici
+   - Spiegazioni alternative
+   - Esempi pratici
+   - Risorse gratuite online
+
+LINGUA: {lang_name}
+
+Rispondi in JSON con questo formato:
+{{
+  "main_topic": "Argomento principale",
+  "subtopics": ["sotto-argomento 1", "sotto-argomento 2"],
+  "concepts_to_explore": [
+    {{"concept": "concetto", "why": "perché approfondire"}}
+  ],
+  "search_queries": [
+    {{"query": "query di ricerca", "purpose": "cosa troverai", "type": "video|article|tutorial|example"}}
+  ],
+  "study_tips": ["suggerimento 1", "suggerimento 2"]
+}}"""
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.content_model,
+                max_tokens=2048,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            response_text = response.choices[0].message.content
+
+            # Clean up markdown code blocks
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+
+            return json.loads(response_text.strip())
+
+        except Exception as e:
+            print(f"AI Focus generation error: {e}")
+            return {
+                "main_topic": "Analisi non disponibile",
+                "subtopics": [],
+                "concepts_to_explore": [],
+                "search_queries": [],
+                "study_tips": ["Riprova più tardi"]
+            }
 
     async def generate_flashcards(
         self,
