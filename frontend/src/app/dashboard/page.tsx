@@ -177,8 +177,8 @@ function StatCard({
           showTooltip ? "opacity-100 visible" : "opacity-0 invisible"
         }`}
       >
-        <div className="bg-[#1e293b] border border-white/10 rounded-lg px-3 py-2 shadow-xl max-w-[220px]">
-          <p className="text-sm text-slate-200 leading-relaxed">{tooltip}</p>
+        <div className="bg-[#1e293b] border border-white/10 rounded-lg px-3 py-2.5 shadow-xl w-56">
+          <p className="text-xs text-slate-200 leading-relaxed">{tooltip}</p>
           {/* Arrow */}
           <div className={`absolute ${arrowPositionClasses[tooltipAlign]} -bottom-1.5 w-3 h-3 bg-[#1e293b] border-r border-b border-white/10 rotate-45`} />
         </div>
@@ -511,28 +511,28 @@ export default function DashboardPage() {
             label="Da Ripassare"
             icon="📚"
             color="orange"
-            tooltip="Numero di flashcard che hai in scadenza oggi. L'algoritmo FSRS calcola quando ripassare ogni carta per massimizzare la memorizzazione."
+            tooltip="Carte in scadenza oggi. Il sistema FSRS le programma nel momento ottimale per la memorizzazione."
           />
           <StatCard
             value={stats.studiedToday}
             label="Studiate Oggi"
             icon="✅"
             color="green"
-            tooltip="Flashcard che hai ripassato oggi. Più studi regolarmente, meglio funziona la ripetizione spaziata!"
+            tooltip="Carte che hai ripassato oggi. Include sia le nuove che quelle in revisione."
           />
           <StatCard
             value={`${stats.retentionRate}%`}
             label="Ritenzione"
             icon="🧠"
             color="purple"
-            tooltip="Percentuale di carte 'mature' (state ≥2 nel sistema FSRS). Indica quante carte hai memorizzato stabilmente."
+            tooltip="Percentuale di carte che ricordi stabilmente. Più alto = memoria a lungo termine consolidata."
           />
           <StatCard
             value={stats.streakDays}
             label="Giorni Streak"
             icon="🔥"
             color="pink"
-            tooltip="Giorni consecutivi in cui hai studiato. Mantenere una streak costante migliora drasticamente la memoria a lungo termine!"
+            tooltip="Giorni consecutivi di studio. La costanza è la chiave per una memoria duratura!"
             tooltipAlign="right"
           />
         </div>
