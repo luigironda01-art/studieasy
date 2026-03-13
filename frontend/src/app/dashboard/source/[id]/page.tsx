@@ -84,7 +84,7 @@ export default function SourceDetailPage() {
   useEffect(() => {
     if (selectedChapterId && chapters.length > 0) {
       const chapter = chapters.find(c => c.id === selectedChapterId);
-      if (chapter && chapter.processing_status === "completed") {
+      if (chapter) {
         setViewingChapter(chapter);
       }
     }
