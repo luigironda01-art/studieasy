@@ -251,7 +251,7 @@ Aggiunto a MEMORY.md per garantire qualità frontend impeccabile in tutte le ses
 - [x] Aggiungere selezione difficoltà anche per Quiz
 - [x] Fix tooltip StatCard - allineamento per card a destra dello schermo
 - [x] Rimuovere opzione "Libro" da AddSourceModal (tenere solo PDF e Appunti)
-- [ ] Deploy su Railway (frontend) delle modifiche
+- [x] Deploy su Railway (frontend) delle modifiche ✅ b5b14a3
 
 ### Prossime Feature da Implementare
 
