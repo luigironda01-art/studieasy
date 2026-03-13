@@ -153,7 +153,6 @@ export default function SourceSummariesPage() {
   };
 
   const handleDownloadPdf = async (text: string, title: string) => {
-    // Dynamic import to avoid SSR issues
     const { jsPDF } = await import("jspdf");
 
     const doc = new jsPDF({
@@ -169,60 +168,103 @@ export default function SourceSummariesPage() {
     let y = margin;
 
     // Title
-    doc.setFontSize(18);
+    doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
     const titleLines = doc.splitTextToSize(title, maxWidth);
     doc.text(titleLines, margin, y);
-    y += titleLines.length * 8 + 5;
+    y += titleLines.length * 8 + 4;
 
-    // Separator
-    doc.setDrawColor(200);
+    // Separator line
+    doc.setDrawColor(180);
+    doc.setLineWidth(0.5);
     doc.line(margin, y, pageWidth - margin, y);
-    y += 8;
+    y += 10;
 
-    // Process text - clean markdown for PDF
-    const cleanText = text
-      .replace(/^#{1,3}\s*/gm, '')
-      .replace(/\*\*(.*?)\*\*/g, '$1')
-      .replace(/\*(.*?)\*/g, '$1')
-      .replace(/^- /gm, '• ')
-      .replace(/\|[^\n]+\|/g, '') // Remove table syntax
-      .replace(/\n{3,}/g, '\n\n');
+    // Clean and parse text into structured blocks
+    const blocks = parseMarkdownBlocks(text);
 
-    const paragraphs = cleanText.split('\n');
-
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-
-    for (const para of paragraphs) {
-      const trimmed = para.trim();
-      if (!trimmed) {
-        y += 4;
-        continue;
+    for (const block of blocks) {
+      // Check page break
+      if (y > pageHeight - margin - 10) {
+        doc.addPage();
+        y = margin;
       }
 
-      // Check if it looks like a heading (all caps or short line)
-      const isHeading = trimmed.length < 60 && trimmed === trimmed.replace(/[a-z]/g, '').trim();
+      switch (block.type) {
+        case "h1":
+          y += 4;
+          doc.setFontSize(16);
+          doc.setFont("helvetica", "bold");
+          const h1Lines = doc.splitTextToSize(block.text, maxWidth);
+          for (const line of h1Lines) {
+            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
+            doc.text(line, margin, y);
+            y += 7;
+          }
+          // Underline
+          doc.setDrawColor(200);
+          doc.setLineWidth(0.3);
+          doc.line(margin, y, pageWidth - margin, y);
+          y += 6;
+          break;
 
-      if (isHeading && trimmed.length > 2) {
-        doc.setFontSize(13);
-        doc.setFont("helvetica", "bold");
-      } else {
-        doc.setFontSize(11);
-        doc.setFont("helvetica", "normal");
+        case "h2":
+          y += 3;
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          const h2Lines = doc.splitTextToSize(block.text, maxWidth);
+          for (const line of h2Lines) {
+            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
+            doc.text(line, margin, y);
+            y += 6.5;
+          }
+          y += 2;
+          break;
+
+        case "h3":
+          y += 2;
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          const h3Lines = doc.splitTextToSize(block.text, maxWidth);
+          for (const line of h3Lines) {
+            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
+            doc.text(line, margin, y);
+            y += 6;
+          }
+          y += 1;
+          break;
+
+        case "list":
+          doc.setFontSize(11);
+          doc.setFont("helvetica", "normal");
+          const bulletText = `\u2022  ${block.text}`;
+          const listLines = doc.splitTextToSize(bulletText, maxWidth - 6);
+          for (let i = 0; i < listLines.length; i++) {
+            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
+            doc.text(listLines[i], margin + (i === 0 ? 0 : 4), y);
+            y += 5.5;
+          }
+          y += 1;
+          break;
+
+        case "paragraph":
+          doc.setFontSize(11);
+          doc.setFont("helvetica", "normal");
+          // Strip markdown bold/italic for PDF
+          const cleanPara = block.text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1');
+          const paraLines = doc.splitTextToSize(cleanPara, maxWidth);
+          for (const line of paraLines) {
+            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
+            doc.text(line, margin, y);
+            y += 5.5;
+          }
+          y += 3;
+          break;
+
+        case "empty":
+          y += 2;
+          break;
       }
-
-      const lines = doc.splitTextToSize(trimmed, maxWidth);
-
-      for (const line of lines) {
-        if (y > pageHeight - margin) {
-          doc.addPage();
-          y = margin;
-        }
-        doc.text(line, margin, y);
-        y += 6;
-      }
-      y += 2;
     }
 
     // Footer on each page
@@ -243,6 +285,35 @@ export default function SourceSummariesPage() {
 
     const filename = `${title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
     doc.save(filename);
+  };
+
+  // Parse markdown text into structured blocks for PDF rendering
+  const parseMarkdownBlocks = (text: string): Array<{ type: string; text: string }> => {
+    const lines = text.split('\n');
+    const blocks: Array<{ type: string; text: string }> = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (!line) {
+        blocks.push({ type: "empty", text: "" });
+      } else if (line.startsWith('### ')) {
+        blocks.push({ type: "h3", text: line.replace(/^### /, '') });
+      } else if (line.startsWith('## ')) {
+        blocks.push({ type: "h2", text: line.replace(/^## /, '') });
+      } else if (line.startsWith('# ')) {
+        blocks.push({ type: "h1", text: line.replace(/^# /, '') });
+      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+        blocks.push({ type: "list", text: line.replace(/^[-*] /, '') });
+      } else if (line.match(/^\|.*\|$/)) {
+        // Skip table syntax for now
+        continue;
+      } else {
+        blocks.push({ type: "paragraph", text: line });
+      }
+    }
+
+    return blocks;
   };
 
   const openGenerateModal = (chapterId: string) => {
@@ -386,7 +457,7 @@ export default function SourceSummariesPage() {
 
             {!generatedSummary ? (
               <>
-                {/* Accuracy / Detail Level */}
+                {/* Detail Level */}
                 <div className="mb-6">
                   <label className="text-slate-400 text-sm block mb-3">Livello di dettaglio</label>
                   <div className="grid grid-cols-3 gap-3">
@@ -530,7 +601,7 @@ export default function SourceSummariesPage() {
 
       {/* Chapters List */}
       {completedChapters.length === 0 ? (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-12 text-center">
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
           <div className="w-20 h-20 bg-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">📖</span>
           </div>
@@ -544,7 +615,7 @@ export default function SourceSummariesPage() {
           {completedChapters.map((chapter) => (
             <div
               key={chapter.id}
-              className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 hover:border-slate-600 transition-all"
+              className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-5 hover:border-blue-500/30 transition-all"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">

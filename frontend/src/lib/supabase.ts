@@ -119,6 +119,7 @@ export interface Quiz {
   title: string;
   total_questions: number;
   score: number;
+  difficulty: string;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
