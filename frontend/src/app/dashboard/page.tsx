@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
+import { useLayout } from "@/contexts/LayoutContext";
 import { supabase, Source } from "@/lib/supabase";
 import AddSourceModal from "@/components/AddSourceModal";
 import Link from "next/link";
@@ -245,6 +246,7 @@ function ProgressBar({
 export default function DashboardPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { refreshSidebar } = useLayout();
 
   const [sources, setSources] = useState<Source[]>([]);
   const [dueCards, setDueCards] = useState<DueCardInfo[]>([]);
@@ -741,7 +743,7 @@ export default function DashboardPage() {
       <AddSourceModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
-        onSuccess={fetchDashboardData}
+        onSuccess={() => { fetchDashboardData(); refreshSidebar(); }}
       />
     </div>
   );

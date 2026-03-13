@@ -158,6 +158,12 @@ export default function SourceDetailPage() {
     if (chapters.length > 0 && user) {
       fetchFlashcardCounts();
       fetchQuizCounts();
+
+      // Auto-detect chapters already in processing state (e.g. after upload redirect)
+      const processingChapter = chapters.find(c => c.processing_status === "processing");
+      if (processingChapter && !processingChapterId) {
+        setProcessingChapterId(processingChapter.id);
+      }
     }
   }, [chapters, user]);
 
@@ -644,8 +650,18 @@ export default function SourceDetailPage() {
             In elaborazione...
           </span>
         );
-      case "error":
-        return <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full">Errore</span>;
+      case "error": {
+        const chapter = chapters.find(c => c.id === chapterId);
+        const errorNote = chapter?.extraction_notes || "Errore durante l'elaborazione";
+        return (
+          <span className="group relative px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-full cursor-help">
+            Errore
+            <span className="invisible group-hover:visible absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 border border-red-500/30 rounded-xl text-xs text-red-300 shadow-xl z-50">
+              {errorNote}
+            </span>
+          </span>
+        );
+      }
       default:
         return <span className="px-2 py-1 bg-slate-500/20 text-slate-400 text-xs rounded-full">In attesa</span>;
     }
@@ -1127,10 +1143,51 @@ export default function SourceDetailPage() {
           {chapters.some(c => c.processing_status === "processing") && (
             <>
               <hr className="border-slate-700 my-4" />
-              <div className="flex items-center gap-2 text-blue-400">
-                <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
-                <span className="text-sm">Elaborazione in corso...</span>
-              </div>
+              {processingChapterId ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-400 font-medium">Elaborazione in corso...</span>
+                    <span className="text-blue-400 font-medium">{processingProgress}%</span>
+                  </div>
+                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500 ease-out"
+                      style={{ width: `${processingProgress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-blue-400">
+                  <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                  <span className="text-sm">Elaborazione in corso...</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Error indicator with details */}
+          {chapters.some(c => c.processing_status === "error") && (
+            <>
+              <hr className="border-slate-700 my-4" />
+              {chapters.filter(c => c.processing_status === "error").map(ch => (
+                <div key={ch.id} className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                  <div className="flex items-center gap-2 text-red-400 mb-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm font-medium">Elaborazione fallita</span>
+                  </div>
+                  <p className="text-red-300/80 text-xs mb-3">
+                    {ch.extraction_notes || "Si è verificato un errore durante l'elaborazione del documento."}
+                  </p>
+                  <button
+                    onClick={() => handleProcess(ch)}
+                    className="text-xs px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 transition-colors"
+                  >
+                    Riprova elaborazione
+                  </button>
+                </div>
+              ))}
             </>
           )}
         </div>

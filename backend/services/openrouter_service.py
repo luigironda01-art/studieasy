@@ -4,6 +4,7 @@ Provides access to Claude, Gemini, and other models via OpenRouter API.
 """
 import os
 import json
+import asyncio
 from typing import Optional
 from openai import AsyncOpenAI
 from config import get_settings
@@ -59,17 +60,23 @@ Restituisci il contenuto completo in formato Markdown."""
             })
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.vision_model,
-                max_tokens=8000,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": content
-                    }
-                ]
+            response = await asyncio.wait_for(
+                self.client.chat.completions.create(
+                    model=self.vision_model,
+                    max_tokens=8000,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": content
+                        }
+                    ]
+                ),
+                timeout=300.0
             )
             return response.choices[0].message.content
+        except asyncio.TimeoutError:
+            print("Vision processing timed out after 300s")
+            raise Exception("Vision processing timed out (300s)")
         except Exception as e:
             print(f"Vision processing error: {e}")
             raise Exception(f"Failed to process document with vision: {e}")
@@ -476,9 +483,49 @@ Rispondi SOLO con l'emoji, nient'altro:"""
             print(f"Error determining topic emoji: {e}")
             return "📖"  # Default fallback
 
+    def _clean_pdf_text(self, text: str) -> str:
+        """
+        Programmatic cleanup of PDF-extracted text.
+        Fixes spacing issues, formatting artifacts without losing content.
+        """
+        import re
+
+        # Fix common PDF extraction spacing issues
+        # "dal50al98%" → "dal 50 al 98%"
+        text = re.sub(r'([a-zà-ú])(\d)', r'\1 \2', text)
+        text = re.sub(r'(\d)([a-zA-Zà-ú])', r'\1 \2', text)
+
+        # Fix missing spaces after punctuation
+        text = re.sub(r'\.([A-ZÀ-Ú])', r'. \1', text)
+        text = re.sub(r',([a-zA-Zà-ú])', r', \1', text)
+        text = re.sub(r':([a-zA-Zà-ú])', r': \1', text)
+        text = re.sub(r';([a-zA-Zà-ú])', r'; \1', text)
+
+        # Fix words glued together (lowercase followed by uppercase)
+        text = re.sub(r'([a-zà-ú])([A-ZÀ-Ú])', r'\1 \2', text)
+
+        # Fix spaces before punctuation that shouldn't be there
+        text = re.sub(r'\s+\.', '.', text)
+        text = re.sub(r'\s+,', ',', text)
+
+        # Clean up multiple spaces
+        text = re.sub(r'  +', ' ', text)
+
+        # Clean up multiple blank lines (keep max 2)
+        text = re.sub(r'\n{4,}', '\n\n\n', text)
+
+        # Fix bullet points
+        text = re.sub(r'^❖\s*', '- ', text, flags=re.MULTILINE)
+        text = re.sub(r'^➢\s*', '- ', text, flags=re.MULTILINE)
+        text = re.sub(r'^•\s*', '- ', text, flags=re.MULTILINE)
+
+        return text.strip()
+
     async def enhance_processed_text(self, raw_text: str, language: str = "it") -> str:
         """
         Enhance and structure raw extracted text for better studying.
+        Step 1: Programmatic cleanup (fix spacing, formatting - no content loss)
+        Step 2: AI adds section headings and bold keywords (preserving all content)
 
         Args:
             raw_text: Raw text extracted from document
@@ -487,32 +534,76 @@ Rispondi SOLO con l'emoji, nient'altro:"""
         Returns:
             Enhanced text in Markdown
         """
-        lang_name = "Italiano" if language == "it" else "English"
+        # Step 1: Programmatic cleanup - zero content loss
+        cleaned = self._clean_pdf_text(raw_text)
+        print(f"Enhancement Step 1 (cleanup): {len(raw_text)} → {len(cleaned)} chars")
 
-        prompt = f"""Sei un assistente di studio esperto. Analizza il seguente contenuto estratto da un documento accademico e crea un'analisi strutturata di alta qualità.
+        # Step 2: Use Vision model (Gemini Flash) for formatting
+        # Gemini follows instructions more literally than Claude for reformatting
+        # Process in chunks
+        chunk_size = 12000
+        chunks = []
+        text = cleaned
 
-CONTENUTO ESTRATTO:
-{raw_text}
+        while len(text) > chunk_size:
+            split_at = text.rfind("\n\n", 0, chunk_size)
+            if split_at == -1:
+                split_at = text.rfind("\n", 0, chunk_size)
+            if split_at == -1:
+                split_at = chunk_size
+            chunks.append(text[:split_at])
+            text = text[split_at:].lstrip()
+        if text:
+            chunks.append(text)
 
-COMPITI:
-1. Riorganizza il contenuto in modo chiaro e logico
-2. Identifica i concetti chiave e le definizioni importanti
-3. Evidenzia le relazioni tra concetti
-4. Mantieni tutte le informazioni tecniche accurate (formule, dati, etc.)
-5. Struttura il testo per facilitare lo studio
-6. Lingua output: {lang_name}
+        print(f"Enhancement Step 2 (AI structure): {len(chunks)} chunks")
 
-Restituisci il contenuto elaborato in Markdown, mantenendo alta fedeltà al materiale originale ma migliorandone la leggibilità per lo studio."""
+        enhanced_parts = []
+        for i, chunk in enumerate(chunks):
+            prompt = f"""Aggiungi SOLO formattazione Markdown al seguente testo. NON modificare, rimuovere o riassumere il contenuto.
 
-        response = await self.client.chat.completions.create(
-            model=self.content_model,
-            max_tokens=8000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+TESTO:
+{chunk}
 
-        return response.choices[0].message.content
+REGOLE TASSATIVE:
+1. Aggiungi ## per i titoli di sezione e ### per i sotto-titoli
+2. Metti in **grassetto** i termini chiave e le definizioni importanti
+3. NON eliminare NESSUNA frase o informazione
+4. NON riscrivere le frasi - mantieni il testo originale
+5. NON aggiungere introduzioni, conclusioni o commenti tuoi
+6. Restituisci SOLO il testo formattato"""
+
+            try:
+                response = await asyncio.wait_for(
+                    self.client.chat.completions.create(
+                        model=self.vision_model,  # Gemini Flash - follows formatting instructions better
+                        max_tokens=16000,
+                        messages=[
+                            {"role": "user", "content": prompt}
+                        ]
+                    ),
+                    timeout=120.0
+                )
+                part = response.choices[0].message.content
+                # Safety check: if AI compressed too much, use cleaned text instead
+                if len(part) < len(chunk) * 0.7:
+                    print(f"Chunk {i+1}: AI compressed too much ({len(chunk)} → {len(part)}), using cleaned text")
+                    enhanced_parts.append(chunk)
+                else:
+                    enhanced_parts.append(part)
+                    print(f"Chunk {i+1}/{len(chunks)}: {len(chunk)} → {len(part)} chars")
+            except Exception as e:
+                print(f"Chunk {i+1} error: {e}, using cleaned text")
+                enhanced_parts.append(chunk)
+
+        result = "\n\n".join(enhanced_parts)
+        # Final safety: if result is too short, return cleaned text
+        if len(result) < len(cleaned) * 0.7:
+            print(f"Enhancement too aggressive ({len(result)} vs {len(cleaned)}), returning cleaned text")
+            return cleaned
+
+        print(f"Enhancement complete: {len(raw_text)} → {len(result)} chars ({len(result)/max(len(raw_text),1)*100:.0f}%)")
+        return result
 
 
 # Singleton instance

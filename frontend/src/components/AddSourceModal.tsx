@@ -167,9 +167,10 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
       setFile(null);
       setUploadProgress(0);
 
-      // Small delay to ensure DB transaction is committed
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Delay to ensure DB transaction is committed
+      await new Promise(resolve => setTimeout(resolve, 500));
 
+      console.log("AddSourceModal: calling onSuccess (refreshSidebar)");
       onSuccess();
       onClose();
     } catch (err) {

@@ -22,7 +22,7 @@ interface DueCountByChapter {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { sidebarOpen, setSidebarOpen, sidebarWidth, setSidebarWidth, isMobile } = useLayout();
+  const { sidebarOpen, setSidebarOpen, sidebarWidth, setSidebarWidth, isMobile, sidebarRefreshKey } = useLayout();
   const { user, profile } = useAuth();
 
   const [sources, setSources] = useState<SourceWithChapters[]>([]);
@@ -169,10 +169,18 @@ export function Sidebar() {
 
     fetchData();
 
-    // Refresh every 2 minutes
-    const interval = setInterval(fetchData, 120000);
-    return () => clearInterval(interval);
-  }, [user, pathname]);
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchData, 30000);
+
+    // Also refresh when window regains focus
+    const handleFocus = () => fetchData();
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [user, pathname, sidebarRefreshKey]);
 
   // Handle resize
   const startResizing = (e: React.MouseEvent) => {

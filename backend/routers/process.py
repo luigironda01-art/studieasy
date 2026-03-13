@@ -43,6 +43,11 @@ else:
 supabase = create_client(supabase_url, supabase_key)
 
 
+# Admin users with no processing limits
+ADMIN_USER_IDS = {
+    "a0c920fe-6b40-47b7-8524-86f06c294afa",  # Luigi Rondanini
+}
+
 class ProcessRequest(BaseModel):
     source_id: str
     chapter_id: str
@@ -57,6 +62,11 @@ class ProcessResponse(BaseModel):
 @router.post("/", response_model=ProcessResponse)
 async def process_pdf(request: ProcessRequest):
     """Process a PDF: extract text and analyze with AI"""
+
+    # Check if user is admin (no limits)
+    source_data = supabase.table("sources").select("user_id").eq("id", request.source_id).single().execute()
+    is_admin = source_data.data and source_data.data.get("user_id") in ADMIN_USER_IDS
+    max_vision_pages = 100 if is_admin else 20  # No practical limit for admins
 
     # Quality tracking variables
     extraction_quality = 0
@@ -120,9 +130,15 @@ async def process_pdf(request: ProcessRequest):
             chars_extracted = len(extracted_text)
 
             # Check if text extraction was successful
-            # If less than 100 chars per page on average, likely image-based PDF
             avg_chars_per_page = chars_extracted / max(page_count, 1)
-            if avg_chars_per_page < 100:
+
+            # For admin users: always use vision to capture images/diagrams (hybrid mode)
+            if is_admin:
+                print(f"Admin user: forcing hybrid mode (text + vision)")
+                use_vision = True
+                extraction_notes.append("Modalità ibrida (testo + vision) per massima qualità")
+            elif avg_chars_per_page < 100:
+                # Low text density - likely image-based PDF
                 print(f"Low text density ({avg_chars_per_page:.0f} chars/page) - trying vision")
                 use_vision = True
                 extraction_notes.append(f"Bassa densità testo ({avg_chars_per_page:.0f} char/pagina)")
@@ -137,9 +153,9 @@ async def process_pdf(request: ProcessRequest):
         update_progress(50, "Estrazione testo completata")
 
         # Fallback to vision processing for image-based PDFs
-        if use_vision and PDF2IMAGE_AVAILABLE and page_count <= 20:
+        if use_vision and PDF2IMAGE_AVAILABLE and page_count <= max_vision_pages:
             try:
-                print("Using Vision AI for image-based PDF...")
+                print(f"Using Vision AI for image-based PDF ({page_count} pages, limit={max_vision_pages})...")
                 extraction_method = "vision"
                 update_progress(55, "Avviando Vision AI...")
 
@@ -150,21 +166,47 @@ async def process_pdf(request: ProcessRequest):
 
                 # Convert images to base64
                 images_base64 = []
-                for img in images[:20]:  # Limit to 20 pages
+                for img in images[:max_vision_pages]:
                     buffer = BytesIO()
                     img.save(buffer, format='PNG')
                     img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
                     images_base64.append(img_b64)
 
-                update_progress(65, "Elaborazione con Vision AI...")
-                # Process with vision AI
-                vision_text = await openrouter.process_document_with_vision(images_base64)
+                # Process in batches of 20 pages for API limits
+                vision_text = ""
+                batch_size = 20
+                total_batches = (len(images_base64) + batch_size - 1) // batch_size
+
+                for batch_idx in range(total_batches):
+                    start = batch_idx * batch_size
+                    end = min(start + batch_size, len(images_base64))
+                    batch = images_base64[start:end]
+
+                    batch_progress = 65 + int((batch_idx / total_batches) * 5)
+                    update_progress(batch_progress, f"Vision AI: batch {batch_idx+1}/{total_batches} (pagine {start+1}-{end})...")
+
+                    try:
+                        batch_text = await openrouter.process_document_with_vision(batch)
+                        vision_text += batch_text + "\n\n"
+                        print(f"Batch {batch_idx+1}/{total_batches}: extracted {len(batch_text)} chars")
+                    except Exception as batch_error:
+                        print(f"Batch {batch_idx+1}/{total_batches} failed: {batch_error}")
+                        extraction_notes.append(f"Batch {batch_idx+1} fallito (pagine {start+1}-{end})")
+                        # Continue with other batches instead of failing entirely
+
                 vision_chars = len(vision_text)
-                print(f"Vision extracted {vision_chars} chars")
+                print(f"Vision total: {vision_chars} chars")
                 update_progress(70, f"Vision AI: estratti {vision_chars} caratteri")
 
-                # Use vision text if better than text extraction
-                if vision_chars > chars_extracted:
+                # Combine or choose best extraction
+                if is_admin and chars_extracted > 0 and vision_chars > 0:
+                    # Admin: combine both for maximum content
+                    extracted_text = extracted_text + "\n\n--- CONTENUTO VISIVO (immagini, diagrammi, formule) ---\n\n" + vision_text
+                    chars_extracted = len(extracted_text)
+                    extraction_method = "hybrid"
+                    extraction_quality = min(100, int((chars_extracted / (page_count * 500)) * 100))
+                    extraction_notes.append(f"Combinato testo ({chars_extracted} chars) + Vision AI ({vision_chars} chars)")
+                elif vision_chars > chars_extracted:
                     extracted_text = vision_text
                     chars_extracted = vision_chars
                     extraction_method = "vision"
@@ -195,8 +237,8 @@ async def process_pdf(request: ProcessRequest):
             else:
                 extraction_quality = min(30, int((chars_extracted / (page_count * 500)) * 100))
 
-        elif use_vision and page_count > 20:
-            extraction_notes.append(f"PDF troppo lungo per Vision AI ({page_count} pagine, max 20)")
+        elif use_vision and page_count > max_vision_pages:
+            extraction_notes.append(f"PDF troppo lungo per Vision AI ({page_count} pagine, max {max_vision_pages})")
             extraction_quality = min(30, int((chars_extracted / (page_count * 500)) * 100))
 
         # Ensure minimum quality if we have meaningful text
@@ -226,8 +268,8 @@ async def process_pdf(request: ProcessRequest):
             "extraction_quality": extraction_quality,
             "extraction_method": extraction_method,
             "extraction_notes": notes_string,
+            "chars_extracted": chars_extracted,
             "page_count": page_count,
-            "chars_extracted": chars_extracted
         }
         update_result = supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
         print(f"Update result: {update_result}")
@@ -249,8 +291,8 @@ async def process_pdf(request: ProcessRequest):
                 "extraction_quality": 0,
                 "extraction_method": "failed",
                 "extraction_notes": f"Errore critico: {str(e)[:200]}",
+                "chars_extracted": chars_extracted,
                 "page_count": page_count,
-                "chars_extracted": chars_extracted
             }).eq("id", request.chapter_id).execute()
         except:
             pass

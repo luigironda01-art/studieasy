@@ -8,6 +8,8 @@ interface LayoutContextType {
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
   isMobile: boolean;
+  sidebarRefreshKey: number;
+  refreshSidebar: () => void;
 }
 
 const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
@@ -27,6 +29,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const [sidebarWidth, setSidebarWidthState] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [isMobile, setIsMobile] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+
+  const refreshSidebar = () => {
+    setSidebarRefreshKey(prev => prev + 1);
+  };
 
   // Load preferences from localStorage
   useEffect(() => {
@@ -111,6 +118,8 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
         sidebarWidth,
         setSidebarWidth,
         isMobile,
+        sidebarRefreshKey,
+        refreshSidebar,
       }}
     >
       {children}
