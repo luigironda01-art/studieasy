@@ -362,17 +362,8 @@ export function Sidebar() {
 
       {/* Library Section */}
       <div className="flex-1 overflow-y-auto px-3 py-2">
-        <div className="flex items-center justify-between mb-2 px-3">
+        <div className="flex items-center mb-2 px-3">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Libreria</span>
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="text-slate-500 hover:text-purple-400 transition-all duration-300 p-1 rounded-lg hover:bg-white/5"
-            title="Aggiungi libro"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
         </div>
 
         {isLoading ? (

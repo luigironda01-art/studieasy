@@ -20,14 +20,20 @@ export async function POST(request: NextRequest) {
   );
 
   try {
+    const body = await request.json();
     const {
       chapterId,
       userId,
-      targetWords = 500,
+      targetWords,
+      maxWords,
+      length = "medium",
       language = "it"
-    } = await request.json();
+    } = body;
 
-    console.log("Request data:", { chapterId, userId, targetWords, language });
+    // Support both targetWords and maxWords for backward compatibility
+    const wordTarget = targetWords || maxWords || 500;
+
+    console.log("Request data:", { chapterId, userId, wordTarget, length, language });
 
     if (!chapterId || !userId) {
       return NextResponse.json(
@@ -75,15 +81,25 @@ export async function POST(request: NextRequest) {
 
     const langName = language === "it" ? "Italiano" : "English";
 
+    // Adjust instructions based on length/detail level
+    const lengthInstructions: Record<string, string> = {
+      short: "Concentrati SOLO sui punti chiave essenziali. Sii molto conciso e sintetico.",
+      medium: "Bilancia sintesi e dettaglio. Includi i concetti principali con spiegazioni moderate.",
+      detailed: "Sii approfondito e esaustivo. Includi dettagli, esempi e spiegazioni complete."
+    };
+
+    const lengthDesc = lengthInstructions[length] || lengthInstructions.medium;
+
     const prompt = `Sei un esperto di sintesi e didattica. Il tuo compito è creare un riassunto chiaro, completo e ben strutturato.
 
 ISTRUZIONI:
-1. Scrivi un riassunto di circa ${targetWords} parole (±10%)
-2. Usa un linguaggio chiaro e accessibile
-3. Mantieni tutti i concetti chiave e le informazioni importanti
-4. **IMPORTANTE**: Dividi il riassunto in SEZIONI ben definite con titoli
-5. Usa elenchi puntati dove appropriato per migliorare la leggibilità
-6. Lingua: ${langName}
+1. Scrivi un riassunto di circa ${wordTarget} parole (±10%)
+2. STILE: ${lengthDesc}
+3. Usa un linguaggio chiaro e accessibile
+4. Mantieni tutti i concetti chiave e le informazioni importanti
+5. **IMPORTANTE**: Dividi il riassunto in SEZIONI ben definite con titoli
+6. Usa elenchi puntati dove appropriato per migliorare la leggibilità
+7. Lingua: ${langName}
 
 FORMATO OUTPUT OBBLIGATORIO:
 - Usa ## per i titoli delle sezioni principali (es: ## Introduzione, ## Concetti Chiave)
@@ -134,7 +150,7 @@ Scrivi il riassunto strutturato:`;
         user_id: userId,
         content: summaryContent,
         word_count: wordCount,
-        target_words: targetWords
+        target_words: wordTarget
       })
       .select()
       .single();
@@ -169,6 +185,7 @@ Scrivi il riassunto strutturato:`;
     return NextResponse.json({
       success: true,
       summary_id: summary.id,
+      summary: summaryContent,
       word_count: wordCount,
       message: `Riassunto generato con ${wordCount} parole`
     });
