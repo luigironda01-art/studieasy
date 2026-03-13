@@ -757,7 +757,7 @@ export default function StudyHubPage() {
           {/* Modal */}
           <div
             ref={popoverRef}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl z-50 p-6 animate-fadeIn"
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl z-50 p-6 animate-fadeIn"
           >
             <h4 className="text-white font-semibold text-lg mb-4">
               Configura generazione {GENERATION_LABELS[showGeneratePopover.type]}
