@@ -7,6 +7,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { supabase, Source, Chapter } from "@/lib/supabase";
 
+// PDF block types
+interface PdfBlock {
+  type: "h1" | "h2" | "h3" | "paragraph" | "list" | "empty" | "table" | "image";
+  text: string;
+  rows?: string[][];
+}
+
 export default function SourceSummariesPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -18,6 +25,10 @@ export default function SourceSummariesPage() {
   const [loading, setLoading] = useState(true);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "read">("list");
+
+  // PDF generation progress
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState("");
 
   // Summary generation modal
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -152,168 +163,480 @@ export default function SourceSummariesPage() {
       .replace(/\n\n/g, '</p><p class="mb-4 text-slate-300 leading-relaxed">');
   };
 
-  const handleDownloadPdf = async (text: string, title: string) => {
-    const { jsPDF } = await import("jspdf");
-
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
-
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 20;
-    const maxWidth = pageWidth - margin * 2;
-    let y = margin;
-
-    // Title
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    const titleLines = doc.splitTextToSize(title, maxWidth);
-    doc.text(titleLines, margin, y);
-    y += titleLines.length * 8 + 4;
-
-    // Separator line
-    doc.setDrawColor(180);
-    doc.setLineWidth(0.5);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 10;
-
-    // Clean and parse text into structured blocks
-    const blocks = parseMarkdownBlocks(text);
-
-    for (const block of blocks) {
-      // Check page break
-      if (y > pageHeight - margin - 10) {
-        doc.addPage();
-        y = margin;
-      }
-
-      switch (block.type) {
-        case "h1":
-          y += 4;
-          doc.setFontSize(16);
-          doc.setFont("helvetica", "bold");
-          const h1Lines = doc.splitTextToSize(block.text, maxWidth);
-          for (const line of h1Lines) {
-            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
-            doc.text(line, margin, y);
-            y += 7;
-          }
-          // Underline
-          doc.setDrawColor(200);
-          doc.setLineWidth(0.3);
-          doc.line(margin, y, pageWidth - margin, y);
-          y += 6;
-          break;
-
-        case "h2":
-          y += 3;
-          doc.setFontSize(14);
-          doc.setFont("helvetica", "bold");
-          const h2Lines = doc.splitTextToSize(block.text, maxWidth);
-          for (const line of h2Lines) {
-            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
-            doc.text(line, margin, y);
-            y += 6.5;
-          }
-          y += 2;
-          break;
-
-        case "h3":
-          y += 2;
-          doc.setFontSize(12);
-          doc.setFont("helvetica", "bold");
-          const h3Lines = doc.splitTextToSize(block.text, maxWidth);
-          for (const line of h3Lines) {
-            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
-            doc.text(line, margin, y);
-            y += 6;
-          }
-          y += 1;
-          break;
-
-        case "list":
-          doc.setFontSize(11);
-          doc.setFont("helvetica", "normal");
-          const bulletText = `\u2022  ${block.text}`;
-          const listLines = doc.splitTextToSize(bulletText, maxWidth - 6);
-          for (let i = 0; i < listLines.length; i++) {
-            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
-            doc.text(listLines[i], margin + (i === 0 ? 0 : 4), y);
-            y += 5.5;
-          }
-          y += 1;
-          break;
-
-        case "paragraph":
-          doc.setFontSize(11);
-          doc.setFont("helvetica", "normal");
-          // Strip markdown bold/italic for PDF
-          const cleanPara = block.text.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1');
-          const paraLines = doc.splitTextToSize(cleanPara, maxWidth);
-          for (const line of paraLines) {
-            if (y > pageHeight - margin) { doc.addPage(); y = margin; }
-            doc.text(line, margin, y);
-            y += 5.5;
-          }
-          y += 3;
-          break;
-
-        case "empty":
-          y += 2;
-          break;
-      }
-    }
-
-    // Footer on each page
-    const totalPages = doc.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(150);
-      doc.text(
-        `Generato da Backup Buddy - Pagina ${i}/${totalPages}`,
-        pageWidth / 2,
-        pageHeight - 10,
-        { align: "center" }
-      );
-      doc.setTextColor(0);
-    }
-
-    const filename = `${title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-    doc.save(filename);
-  };
-
   // Parse markdown text into structured blocks for PDF rendering
-  const parseMarkdownBlocks = (text: string): Array<{ type: string; text: string }> => {
-    const lines = text.split('\n');
-    const blocks: Array<{ type: string; text: string }> = [];
+  const parseMarkdownBlocks = (text: string): PdfBlock[] => {
+    // Step 1: Clean artifacts
+    let cleaned = text
+      // Remove markdown code fences
+      .replace(/```(?:markdown|text)?\s*/gi, "")
+      // Remove horizontal rules (---, ___, ***)
+      .replace(/^[-_*]{3,}\s*$/gm, "")
+      // Fix spaced-out letters: "D I R I T T O" → "DIRITTO"
+      // Matches 3+ single uppercase/accented letters separated by single spaces
+      .replace(/(^|[\s(])((?:[A-ZÀ-ÚÄ-Ü]\s){2,}[A-ZÀ-ÚÄ-Ü])(?=[\s).,;:!?]|$)/gm, (_match, prefix, spaced) => {
+        // Handle double-space as word boundary within spaced text
+        const fixed = spaced.split(/\s{2,}/).map((word: string) => word.replace(/\s/g, "")).join(" ");
+        return prefix + fixed;
+      })
+      // Remove orphan markdown bold/italic markers
+      .replace(/\*{1,3}([^*\n]+)\*{1,3}/g, "$1");
 
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
+    const lines = cleaned.split("\n");
+    const blocks: PdfBlock[] = [];
+    let tableRows: string[][] = [];
+    let inTable = false;
 
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // Table rows (pipe-delimited)
+      if (line.match(/^\|.*\|$/)) {
+        // Skip separator rows like |---|---|
+        if (!line.match(/^\|[\s\-:|]+\|$/)) {
+          const cells = line
+            .split("|")
+            .filter((c) => c.trim() !== "")
+            .map((c) => c.trim());
+          tableRows.push(cells);
+        }
+        inTable = true;
+        continue;
+      }
+
+      // End of table block
+      if (inTable) {
+        if (tableRows.length > 0) {
+          blocks.push({ type: "table", text: "", rows: [...tableRows] });
+        }
+        tableRows = [];
+        inTable = false;
+      }
+
+      // Empty line
       if (!line) {
         blocks.push({ type: "empty", text: "" });
-      } else if (line.startsWith('### ')) {
-        blocks.push({ type: "h3", text: line.replace(/^### /, '') });
-      } else if (line.startsWith('## ')) {
-        blocks.push({ type: "h2", text: line.replace(/^## /, '') });
-      } else if (line.startsWith('# ')) {
-        blocks.push({ type: "h1", text: line.replace(/^# /, '') });
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
-        blocks.push({ type: "list", text: line.replace(/^[-*] /, '') });
-      } else if (line.match(/^\|.*\|$/)) {
-        // Skip table syntax for now
         continue;
-      } else {
+      }
+
+      // Image tags: [IMMAGINE: description]
+      const imageMatch = line.match(/\[IMMAGINE:\s*(.*?)\]/i);
+      if (imageMatch) {
+        blocks.push({ type: "image", text: imageMatch[1] });
+        continue;
+      }
+
+      // Markdown headings
+      if (line.startsWith("### ")) {
+        blocks.push({ type: "h3", text: line.replace(/^###\s+/, "") });
+      } else if (line.startsWith("## ")) {
+        blocks.push({ type: "h2", text: line.replace(/^##\s+/, "") });
+      } else if (line.startsWith("# ")) {
+        blocks.push({ type: "h1", text: line.replace(/^#\s+/, "") });
+      }
+      // Bullet lists
+      else if (line.match(/^[-*]\s/)) {
+        blocks.push({ type: "list", text: line.replace(/^[-*]\s+/, "") });
+      }
+      // Numbered lists
+      else if (line.match(/^\d+[.)]\s/)) {
+        blocks.push({ type: "list", text: line });
+      }
+      // Plain text heading detection: ALL CAPS, short, no punctuation ending
+      else if (
+        line.length > 3 &&
+        line.length < 80 &&
+        line === line.toUpperCase() &&
+        /[A-ZÀ-Ú]/.test(line) &&
+        !line.endsWith(".") &&
+        !line.endsWith(",") &&
+        !line.endsWith(";")
+      ) {
+        blocks.push({ type: "h1", text: line });
+      }
+      // Plain text heading detection: short line after blank, no ending punctuation, followed by longer text
+      else if (
+        line.length > 3 &&
+        line.length < 70 &&
+        !line.endsWith(".") &&
+        !line.endsWith(",") &&
+        !line.endsWith(";") &&
+        !line.endsWith(":") &&
+        (blocks.length === 0 || blocks[blocks.length - 1].type === "empty") &&
+        i + 1 < lines.length &&
+        lines[i + 1].trim().length > line.length
+      ) {
+        blocks.push({ type: "h2", text: line });
+      }
+      // Regular paragraph
+      else {
         blocks.push({ type: "paragraph", text: line });
       }
     }
 
+    // Remaining table
+    if (inTable && tableRows.length > 0) {
+      blocks.push({ type: "table", text: "", rows: [...tableRows] });
+    }
+
     return blocks;
+  };
+
+  // Generate an image from a description via Gemini
+  const generateImage = async (description: string): Promise<string | null> => {
+    try {
+      const res = await fetch("/api/images/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description }),
+      });
+      const data = await res.json();
+      if (data.image) return data.image; // base64 string
+      return null;
+    } catch {
+      console.warn("Image generation failed for:", description);
+      return null;
+    }
+  };
+
+  const handleDownloadPdf = async (text: string, title: string) => {
+    setPdfGenerating(true);
+    setPdfProgress("Analisi del documento...");
+
+    try {
+      const { jsPDF } = await import("jspdf");
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const maxWidth = pageWidth - margin * 2;
+      let y = margin;
+
+      const blocks = parseMarkdownBlocks(text);
+
+      // Pre-generate images if any [IMMAGINE:] blocks exist
+      const imageBlocks = blocks.filter((b) => b.type === "image");
+      const imageMap: Record<string, string> = {};
+
+      if (imageBlocks.length > 0) {
+        for (let i = 0; i < imageBlocks.length; i++) {
+          setPdfProgress(
+            `Generazione immagine ${i + 1} di ${imageBlocks.length}...`
+          );
+          const base64 = await generateImage(imageBlocks[i].text);
+          if (base64) {
+            imageMap[imageBlocks[i].text] = base64;
+          }
+        }
+      }
+
+      setPdfProgress("Creazione PDF...");
+
+      // Helper: check page break and add new page if needed
+      const ensureSpace = (needed: number) => {
+        if (y + needed > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+        }
+      };
+
+      // ── Document Title ──
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      const titleLines = doc.splitTextToSize(title, maxWidth);
+      for (const tl of titleLines) {
+        ensureSpace(10);
+        doc.text(tl, margin, y);
+        y += 9;
+      }
+      y += 2;
+
+      // Title underline
+      doc.setDrawColor(60, 60, 60);
+      doc.setLineWidth(0.6);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 12;
+
+      // ── Render blocks ──
+      for (const block of blocks) {
+        switch (block.type) {
+          case "h1": {
+            ensureSpace(16);
+            y += 6;
+            doc.setFontSize(16);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(0);
+            const h1Lines = doc.splitTextToSize(block.text, maxWidth);
+            for (const line of h1Lines) {
+              ensureSpace(8);
+              doc.text(line, margin, y);
+              y += 7;
+            }
+            // Underline for h1
+            doc.setDrawColor(180);
+            doc.setLineWidth(0.3);
+            doc.line(margin, y + 1, pageWidth - margin, y + 1);
+            y += 6;
+            break;
+          }
+
+          case "h2": {
+            ensureSpace(14);
+            y += 4;
+            doc.setFontSize(13);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(30, 30, 30);
+            const h2Lines = doc.splitTextToSize(block.text, maxWidth);
+            for (const line of h2Lines) {
+              ensureSpace(7);
+              doc.text(line, margin, y);
+              y += 6.5;
+            }
+            y += 3;
+            doc.setTextColor(0);
+            break;
+          }
+
+          case "h3": {
+            ensureSpace(12);
+            y += 3;
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(50, 50, 50);
+            const h3Lines = doc.splitTextToSize(block.text, maxWidth);
+            for (const line of h3Lines) {
+              ensureSpace(6);
+              doc.text(line, margin, y);
+              y += 6;
+            }
+            y += 2;
+            doc.setTextColor(0);
+            break;
+          }
+
+          case "list": {
+            doc.setFontSize(10.5);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(30, 30, 30);
+            const bulletChar = "\u2022";
+            const indentFirst = margin + 4;
+            const indentWrap = margin + 8;
+            const cleanItem = block.text
+              .replace(/\*\*(.*?)\*\*/g, "$1")
+              .replace(/\*(.*?)\*/g, "$1");
+            const listLines = doc.splitTextToSize(cleanItem, maxWidth - 10);
+            for (let li = 0; li < listLines.length; li++) {
+              ensureSpace(6);
+              if (li === 0) {
+                doc.text(bulletChar, margin, y);
+                doc.text(listLines[li], indentFirst, y);
+              } else {
+                doc.text(listLines[li], indentWrap, y);
+              }
+              y += 5.5;
+            }
+            y += 1;
+            doc.setTextColor(0);
+            break;
+          }
+
+          case "table": {
+            if (block.rows && block.rows.length > 0) {
+              ensureSpace(14);
+              y += 2;
+              const colCount = Math.max(
+                ...block.rows.map((r) => r.length)
+              );
+              const cellWidth = maxWidth / colCount;
+              const cellPadding = 2;
+              const rowHeight = 7;
+
+              doc.setFontSize(9);
+
+              for (
+                let rowIdx = 0;
+                rowIdx < block.rows.length;
+                rowIdx++
+              ) {
+                ensureSpace(rowHeight + 2);
+                const isHeader = rowIdx === 0;
+                const row = block.rows[rowIdx];
+
+                for (let colIdx = 0; colIdx < colCount; colIdx++) {
+                  const cellX = margin + colIdx * cellWidth;
+
+                  // Header background
+                  if (isHeader) {
+                    doc.setFillColor(230, 230, 240);
+                    doc.rect(cellX, y - 5, cellWidth, rowHeight, "F");
+                    doc.setFont("helvetica", "bold");
+                  } else {
+                    if (rowIdx % 2 === 0) {
+                      doc.setFillColor(248, 248, 252);
+                      doc.rect(cellX, y - 5, cellWidth, rowHeight, "F");
+                    }
+                    doc.setFont("helvetica", "normal");
+                  }
+
+                  // Cell border
+                  doc.setDrawColor(180, 180, 200);
+                  doc.setLineWidth(0.2);
+                  doc.rect(cellX, y - 5, cellWidth, rowHeight);
+
+                  // Cell text
+                  doc.setTextColor(30, 30, 30);
+                  const cellText = (row[colIdx] || "")
+                    .replace(/\*\*(.*?)\*\*/g, "$1")
+                    .replace(/\*(.*?)\*/g, "$1");
+                  const truncated = doc.splitTextToSize(
+                    cellText,
+                    cellWidth - cellPadding * 2
+                  );
+                  doc.text(
+                    truncated[0] || "",
+                    cellX + cellPadding,
+                    y
+                  );
+                }
+
+                y += rowHeight;
+              }
+              y += 5;
+              doc.setTextColor(0);
+            }
+            break;
+          }
+
+          case "image": {
+            const imgBase64 = imageMap[block.text];
+            if (imgBase64) {
+              // Embed generated image
+              const imgWidth = maxWidth * 0.8;
+              const imgHeight = imgWidth * 0.6; // 4:3 aspect ratio
+              ensureSpace(imgHeight + 16);
+
+              const imgX = margin + (maxWidth - imgWidth) / 2;
+              try {
+                doc.addImage(
+                  `data:image/png;base64,${imgBase64}`,
+                  "PNG",
+                  imgX,
+                  y,
+                  imgWidth,
+                  imgHeight
+                );
+                y += imgHeight + 3;
+              } catch {
+                // If image embedding fails, fall through to caption-only
+                doc.setFontSize(9);
+                doc.setFont("helvetica", "italic");
+                doc.setTextColor(100);
+                doc.text(
+                  `[Illustrazione: ${block.text}]`,
+                  margin,
+                  y
+                );
+                y += 6;
+              }
+            } else {
+              // Placeholder box with description
+              ensureSpace(20);
+              const boxHeight = 16;
+              doc.setDrawColor(150, 150, 180);
+              doc.setLineWidth(0.3);
+              doc.setFillColor(245, 245, 250);
+              doc.roundedRect(
+                margin,
+                y,
+                maxWidth,
+                boxHeight,
+                2,
+                2,
+                "FD"
+              );
+              doc.setFontSize(9);
+              doc.setFont("helvetica", "italic");
+              doc.setTextColor(80, 80, 100);
+              const captionLines = doc.splitTextToSize(
+                `Illustrazione: ${block.text}`,
+                maxWidth - 10
+              );
+              doc.text(captionLines[0], margin + 5, y + boxHeight / 2 + 1);
+              y += boxHeight + 5;
+            }
+
+            // Caption text
+            doc.setFontSize(8.5);
+            doc.setFont("helvetica", "italic");
+            doc.setTextColor(100, 100, 120);
+            const captionText = doc.splitTextToSize(
+              block.text,
+              maxWidth - 20
+            );
+            for (const ct of captionText) {
+              ensureSpace(5);
+              doc.text(ct, pageWidth / 2, y, { align: "center" });
+              y += 4.5;
+            }
+            y += 4;
+            doc.setTextColor(0);
+            break;
+          }
+
+          case "paragraph": {
+            doc.setFontSize(10.5);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(30, 30, 30);
+            // Strip remaining markdown
+            const cleanPara = block.text
+              .replace(/\*\*(.*?)\*\*/g, "$1")
+              .replace(/\*(.*?)\*/g, "$1");
+            const paraLines = doc.splitTextToSize(cleanPara, maxWidth);
+            for (const line of paraLines) {
+              ensureSpace(6);
+              doc.text(line, margin, y);
+              y += 5.5;
+            }
+            y += 3;
+            doc.setTextColor(0);
+            break;
+          }
+
+          case "empty":
+            y += 2;
+            break;
+        }
+      }
+
+      // ── Footer on each page ──
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(150);
+        doc.text(
+          `Generato da Backup Buddy — Pagina ${i}/${totalPages}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: "center" }
+        );
+        doc.setTextColor(0);
+      }
+
+      const filename = `${title.replace(/[^a-z0-9]/gi, "_")}.pdf`;
+      doc.save(filename);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+    } finally {
+      setPdfGenerating(false);
+      setPdfProgress("");
+    }
   };
 
   const openGenerateModal = (chapterId: string) => {
@@ -392,12 +715,22 @@ export default function SourceSummariesPage() {
                   selectedChapter.processed_text || "",
                   selectedChapter.title
                 )}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm"
+                disabled={pdfGenerating}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Scarica PDF
+                {pdfGenerating ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
+                    {pdfProgress || "Generando..."}
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Scarica PDF
+                  </>
+                )}
               </button>
               <button
                 onClick={() => openGenerateModal(selectedChapter.id)}
@@ -437,6 +770,20 @@ export default function SourceSummariesPage() {
 
         {/* Generate Summary Modal */}
         {renderGenerateModal()}
+
+        {/* PDF Generation Progress Overlay */}
+        {pdfGenerating && (
+          <>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
+            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
+              <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-2xl text-center min-w-[320px]">
+                <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <h3 className="text-white font-semibold text-lg mb-2">Generazione PDF</h3>
+                <p className="text-slate-400 text-sm">{pdfProgress || "Preparazione..."}</p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -658,7 +1005,8 @@ export default function SourceSummariesPage() {
                       chapter.processed_text || "",
                       chapter.title
                     )}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm"
+                    disabled={pdfGenerating}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Scarica come PDF"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -675,6 +1023,20 @@ export default function SourceSummariesPage() {
 
       {/* Generate Summary Modal */}
       {renderGenerateModal()}
+
+      {/* PDF Generation Progress Overlay */}
+      {pdfGenerating && (
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-2xl text-center min-w-[320px]">
+              <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <h3 className="text-white font-semibold text-lg mb-2">Generazione PDF</h3>
+              <p className="text-slate-400 text-sm">{pdfProgress || "Preparazione..."}</p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
