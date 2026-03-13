@@ -365,16 +365,22 @@ export default function SourceSummariesPage() {
     setPdfProgress("Caricamento dati aggiornati...");
 
     try {
-      // Re-fetch fresh chapter data to avoid stale cache
+      // Re-fetch fresh chapter data via server-side API to bypass client cache and RLS
       let freshText = text;
       if (chapterId) {
-        const { data: freshChapter } = await supabase
-          .from("chapters")
-          .select("processed_text")
-          .eq("id", chapterId)
-          .single();
-        if (freshChapter?.processed_text) {
-          freshText = freshChapter.processed_text;
+        try {
+          const res = await fetch(`/api/chapters/${chapterId}/text`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.processed_text) {
+              freshText = json.processed_text;
+              console.log("Fresh text fetched successfully, length:", freshText.length);
+            }
+          } else {
+            console.error("Fresh fetch API error:", res.status, await res.text());
+          }
+        } catch (fetchErr) {
+          console.error("Fresh fetch failed:", fetchErr);
         }
       }
 
