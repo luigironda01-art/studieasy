@@ -24,6 +24,7 @@ export default function SourceFlashcardsPage() {
   const [selectedChapter, setSelectedChapter] = useState<string>("all");
   const [viewingCard, setViewingCard] = useState<FlashcardWithChapter | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [groupByDifficulty, setGroupByDifficulty] = useState(true);
 
   // Generate modal
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -196,24 +197,39 @@ export default function SourceFlashcardsPage() {
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="mb-6 flex items-center gap-4">
-        <label className="text-slate-400 text-sm">Filtra per capitolo:</label>
-        <select
-          value={selectedChapter}
-          onChange={(e) => setSelectedChapter(e.target.value)}
-          className="bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+      {/* Filter & View Toggle */}
+      <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-4">
+          <label className="text-slate-400 text-sm">Filtra per capitolo:</label>
+          <select
+            value={selectedChapter}
+            onChange={(e) => setSelectedChapter(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="all">Tutti ({flashcards.length})</option>
+            {chapters.map(ch => {
+              const count = flashcards.filter(f => f.chapter_id === ch.id).length;
+              return (
+                <option key={ch.id} value={ch.id}>
+                  {ch.title} ({count})
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        <button
+          onClick={() => setGroupByDifficulty(!groupByDifficulty)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            groupByDifficulty
+              ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+              : "bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600"
+          }`}
         >
-          <option value="all">Tutti ({flashcards.length})</option>
-          {chapters.map(ch => {
-            const count = flashcards.filter(f => f.chapter_id === ch.id).length;
-            return (
-              <option key={ch.id} value={ch.id}>
-                {ch.title} ({count})
-              </option>
-            );
-          })}
-        </select>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+          Per difficoltà
+        </button>
       </div>
 
       {/* Stats */}
@@ -254,7 +270,49 @@ export default function SourceFlashcardsPage() {
             </button>
           )}
         </div>
+      ) : groupByDifficulty ? (
+        // Grouped by difficulty
+        <div className="space-y-8">
+          {([
+            { key: "easy", label: "Facile", icon: "🟢", color: "green", borderColor: "border-green-500/30", bgColor: "bg-green-500/10" },
+            { key: "medium", label: "Media", icon: "🟡", color: "amber", borderColor: "border-amber-500/30", bgColor: "bg-amber-500/10" },
+            { key: "hard", label: "Difficile", icon: "🔴", color: "red", borderColor: "border-red-500/30", bgColor: "bg-red-500/10" },
+          ] as const).map(group => {
+            const cards = filteredCards.filter(c => c.difficulty === group.key);
+            if (cards.length === 0) return null;
+
+            return (
+              <div key={group.key}>
+                <div className={`flex items-center gap-3 mb-4 px-4 py-3 ${group.bgColor} ${group.borderColor} border rounded-xl`}>
+                  <span className="text-lg">{group.icon}</span>
+                  <h3 className="text-white font-semibold">{group.label}</h3>
+                  <span className="text-slate-400 text-sm ml-auto">{cards.length} carte</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {cards.map((card) => (
+                    <div
+                      key={card.id}
+                      onClick={() => { setViewingCard(card); setShowAnswer(false); }}
+                      className="bg-slate-800 border border-slate-700 rounded-xl p-5 cursor-pointer hover:border-purple-500/50 transition-all group"
+                    >
+                      <div className="text-purple-400 text-xs mb-2 font-medium">
+                        {card.chapter?.title || "Capitolo"}
+                      </div>
+                      <p className="text-white font-medium line-clamp-3 group-hover:text-purple-300 transition-colors">
+                        {card.front}
+                      </p>
+                      <div className="mt-3 pt-3 border-t border-slate-700 text-right">
+                        <span className="text-slate-500 text-xs">Clicca per vedere</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        // Flat grid
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredCards.map((card) => (
             <div

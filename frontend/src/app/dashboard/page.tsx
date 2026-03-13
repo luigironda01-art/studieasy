@@ -178,8 +178,8 @@ function StatCard({
           showTooltip ? "opacity-100 visible" : "opacity-0 invisible"
         }`}
       >
-        <div className="bg-[#1e293b] border border-white/10 rounded-lg px-3 py-2.5 shadow-xl w-56">
-          <p className="text-xs text-slate-200 leading-relaxed">{tooltip}</p>
+        <div className="bg-[#1e293b] border border-white/10 rounded-lg px-3 py-2.5 shadow-xl w-64 max-w-[90vw]">
+          <p className="text-xs text-slate-200 leading-relaxed whitespace-normal">{tooltip}</p>
           {/* Arrow */}
           <div className={`absolute ${arrowPositionClasses[tooltipAlign]} -bottom-1.5 w-3 h-3 bg-[#1e293b] border-r border-b border-white/10 rotate-45`} />
         </div>
@@ -513,28 +513,29 @@ export default function DashboardPage() {
             label="Da Ripassare"
             icon="📚"
             color="orange"
-            tooltip="Carte in scadenza oggi. Il sistema FSRS le programma nel momento ottimale per la memorizzazione."
+            tooltip="Carte in scadenza oggi. L'algoritmo FSRS calcola il momento migliore per ripassare ogni carta, massimizzando la memorizzazione."
+            tooltipAlign="left"
           />
           <StatCard
             value={stats.studiedToday}
             label="Studiate Oggi"
             icon="✅"
             color="green"
-            tooltip="Carte che hai ripassato oggi. Include sia le nuove che quelle in revisione."
+            tooltip="Numero di carte che hai ripassato oggi. Include nuove carte apprese e revisioni di carte già studiate."
           />
           <StatCard
             value={`${stats.retentionRate}%`}
             label="Ritenzione"
             icon="🧠"
             color="purple"
-            tooltip="Percentuale di carte che ricordi stabilmente. Più alto = memoria a lungo termine consolidata."
+            tooltip="Percentuale di carte memorizzate stabilmente. Indica quante carte hai padroneggiato rispetto al totale. Obiettivo: sopra l'80%."
           />
           <StatCard
             value={stats.streakDays}
             label="Giorni Streak"
             icon="🔥"
             color="pink"
-            tooltip="Giorni consecutivi di studio. La costanza è la chiave per una memoria duratura!"
+            tooltip="Giorni consecutivi in cui hai studiato. La costanza quotidiana è fondamentale per una memoria duratura!"
             tooltipAlign="right"
           />
         </div>

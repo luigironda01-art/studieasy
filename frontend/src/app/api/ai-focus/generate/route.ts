@@ -91,9 +91,12 @@ Rispondi in JSON con questo formato esatto:
   "study_tips": ["suggerimento pratico 1", "suggerimento pratico 2", "suggerimento pratico 3"]
 }`;
 
-    console.log("Generating AI Focus with Claude...");
+    // Use smart model selection if available, fallback to Claude
+    const modelToUse = chapter.preferred_model || "anthropic/claude-3.5-sonnet";
+    console.log("Generating AI Focus with model:", modelToUse);
+
     const response = await openrouter.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: modelToUse,
       max_tokens: 2048,
       messages: [
         { role: "user", content: prompt }
@@ -124,7 +127,7 @@ Rispondi in JSON con questo formato esatto:
       chapterId,
       tokensInput,
       tokensOutput,
-      modelUsed: "anthropic/claude-3.5-sonnet",
+      modelUsed: modelToUse,
       itemsGenerated: focusData.search_queries?.length || 0,
       durationMs,
       status: "success",

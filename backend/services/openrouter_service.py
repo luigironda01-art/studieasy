@@ -514,6 +514,11 @@ Rispondi SOLO con l'emoji, nient'altro:"""
         # Clean up multiple blank lines (keep max 2)
         text = re.sub(r'\n{4,}', '\n\n\n', text)
 
+        # Remove raw image URLs extracted from PDF
+        text = re.sub(r'https?://\S+\.(jpg|jpeg|png|gif|bmp|svg|webp)\S*', '', text, flags=re.IGNORECASE)
+        # Remove standalone URLs on their own line
+        text = re.sub(r'^\s*https?://\S+\s*$', '', text, flags=re.MULTILINE)
+
         # Fix bullet points
         text = re.sub(r'^❖\s*', '- ', text, flags=re.MULTILINE)
         text = re.sub(r'^➢\s*', '- ', text, flags=re.MULTILINE)

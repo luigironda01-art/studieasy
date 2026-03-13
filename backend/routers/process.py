@@ -48,6 +48,50 @@ ADMIN_USER_IDS = {
     "a0c920fe-6b40-47b7-8524-86f06c294afa",  # Luigi Rondanini
 }
 
+def determine_preferred_model(text: str, extraction_method: str) -> str:
+    """Analyze content to determine the best AI model for generation tasks.
+
+    Returns a model identifier that generation endpoints can use.
+    """
+    import re
+    text_lower = text.lower()
+
+    # Count indicators for different content types
+    scientific_indicators = 0
+
+    # Chemical formulas: H2O, NaCl, CO2, etc.
+    chemical_formulas = len(re.findall(r'\b[A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)+\b', text))
+    if chemical_formulas > 5:
+        scientific_indicators += 3
+
+    # Math symbols and patterns
+    math_patterns = len(re.findall(r'[±×÷∑∫∂√∞≈≠≤≥∈∉⊂⊃∪∩]', text))
+    math_patterns += len(re.findall(r'\b(?:mol|mmol|mg/dl|µg|nm|kDa|pH)\b', text, re.IGNORECASE))
+    if math_patterns > 10:
+        scientific_indicators += 2
+
+    # Scientific keywords
+    sci_keywords = ['molecol', 'enzim', 'protein', 'cellul', 'dna', 'rna', 'formula',
+                    'reazion', 'equazion', 'derivat', 'integral', 'matrice',
+                    'stechiometr', 'termodinamic', 'cinetic', 'cataliz',
+                    'isotop', 'elettron', 'nucleotid', 'aminoacid']
+    for kw in sci_keywords:
+        if kw in text_lower:
+            scientific_indicators += 1
+
+    # Image-heavy content (vision was needed)
+    if extraction_method in ("hybrid", "vision"):
+        scientific_indicators += 1
+
+    # Decision
+    if scientific_indicators >= 5:
+        # Gemini Pro is better for scientific/formula-heavy content
+        return "google/gemini-2.0-flash-001"
+    else:
+        # Claude is better for discursive/humanistic content
+        return "anthropic/claude-sonnet-4"
+
+
 class ProcessRequest(BaseModel):
     source_id: str
     chapter_id: str
@@ -258,6 +302,10 @@ async def process_pdf(request: ProcessRequest):
         # Prepare notes string
         notes_string = " | ".join(extraction_notes) if extraction_notes else None
 
+        # Smart model selection based on content analysis
+        preferred_model = determine_preferred_model(extracted_text, extraction_method)
+        print(f"Smart model selection: {preferred_model}")
+
         # Save to database with quality metrics
         print(f"Updating chapter {request.chapter_id} with processed text...")
         update_data = {
@@ -270,6 +318,7 @@ async def process_pdf(request: ProcessRequest):
             "extraction_notes": notes_string,
             "chars_extracted": chars_extracted,
             "page_count": page_count,
+            "preferred_model": preferred_model,
         }
         update_result = supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
         print(f"Update result: {update_result}")

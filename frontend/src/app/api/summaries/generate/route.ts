@@ -126,9 +126,12 @@ ${chapter.processed_text}
 
 Scrivi il riassunto strutturato:`;
 
-    console.log("Generating summary with AI...");
+    // Use smart model selection if available, fallback to Claude
+    const modelToUse = chapter.preferred_model || "anthropic/claude-3.5-sonnet";
+    console.log("Generating summary with model:", modelToUse);
+
     const response = await openrouter.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: modelToUse,
       max_tokens: 2048,
       messages: [
         { role: "user", content: prompt }
@@ -176,7 +179,7 @@ Scrivi il riassunto strutturato:`;
       chapterId,
       tokensInput,
       tokensOutput,
-      modelUsed: "anthropic/claude-3.5-sonnet",
+      modelUsed: modelToUse,
       itemsGenerated: wordCount, // Using word count as "items"
       durationMs,
       status: "success",

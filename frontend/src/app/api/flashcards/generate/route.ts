@@ -95,8 +95,12 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
   {"front": "domanda 2", "back": "risposta 2"}
 ]`;
 
+    // Use smart model selection if available, fallback to Claude
+    const modelToUse = chapter.preferred_model || "anthropic/claude-3.5-sonnet";
+    console.log("Using model:", modelToUse);
+
     const response = await openrouter.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: modelToUse,
       max_tokens: 4096,
       messages: [
         { role: "user", content: prompt }
@@ -170,7 +174,7 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
       chapterId,
       tokensInput,
       tokensOutput,
-      modelUsed: "anthropic/claude-3.5-sonnet",
+      modelUsed: modelToUse,
       itemsGenerated: createdCount,
       difficulty,
       durationMs,

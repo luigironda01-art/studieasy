@@ -167,6 +167,39 @@ export default function SourceDetailPage() {
     }
   }, [chapters, user]);
 
+  // Poll for chapters in "pending" state - detect when processing starts
+  useEffect(() => {
+    const hasPending = chapters.some(c => c.processing_status === "pending");
+    if (!hasPending || processingChapterId) return;
+
+    const pollPendingStatus = async () => {
+      try {
+        const pendingChapter = chapters.find(c => c.processing_status === "pending");
+        if (!pendingChapter) return;
+
+        const { data: chapter } = await supabase
+          .from("chapters")
+          .select("processing_status, processing_progress")
+          .eq("id", pendingChapter.id)
+          .single();
+
+        if (chapter && chapter.processing_status === "processing") {
+          setProcessingChapterId(pendingChapter.id);
+          setProcessingProgress(chapter.processing_progress || 0);
+        } else if (chapter && (chapter.processing_status === "completed" || chapter.processing_status === "error")) {
+          await fetchSourceDetails();
+        }
+      } catch (err) {
+        console.error("Error polling pending status:", err);
+      }
+    };
+
+    const interval = setInterval(pollPendingStatus, 2000);
+    pollPendingStatus();
+
+    return () => clearInterval(interval);
+  }, [chapters, processingChapterId]);
+
   // Poll for processing progress
   useEffect(() => {
     if (!processingChapterId) return;
@@ -799,6 +832,41 @@ export default function SourceDetailPage() {
           </div>
         )}
 
+        {/* Prominent processing progress bar */}
+        {(processingChapterId || chapters.some(c => c.processing_status === "processing" || c.processing_status === "pending")) && (
+          <div className="mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+              </div>
+              <div>
+                <h3 className="text-white font-medium">Elaborazione in corso</h3>
+                <p className="text-slate-400 text-sm">
+                  {processingProgress > 0
+                    ? processingProgress < 30
+                      ? "Estrazione testo e immagini..."
+                      : processingProgress < 70
+                      ? "Analisi del contenuto con AI..."
+                      : processingProgress < 95
+                      ? "Formattazione e ottimizzazione..."
+                      : "Finalizzazione..."
+                    : "Preparazione elaborazione..."}
+                </p>
+              </div>
+              <span className="ml-auto text-blue-400 font-bold text-lg">{processingProgress}%</span>
+            </div>
+            <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${Math.max(processingProgress, 2)}%`,
+                  boxShadow: '0 0 12px rgba(99, 102, 241, 0.5)'
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Chapters section */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
@@ -1025,70 +1093,69 @@ export default function SourceDetailPage() {
                 Elaborazione completata
               </h4>
               <dl className="space-y-3 text-sm">
-                {/* Total pages */}
-                {(() => {
-                  const totalPages = chapters
-                    .filter(c => c.processing_status === "completed")
-                    .reduce((sum, c) => sum + (c.page_count || 0), 0);
-                  return totalPages > 0 && (
-                    <div className="flex justify-between">
-                      <dt className="text-slate-400">Pagine rilevate</dt>
-                      <dd className="text-white font-medium">{totalPages}</dd>
-                    </div>
-                  );
-                })()}
-
-                {/* Total characters extracted */}
-                {(() => {
-                  const totalChars = chapters
-                    .filter(c => c.processing_status === "completed")
-                    .reduce((sum, c) => sum + (c.chars_extracted || 0), 0);
-                  return totalChars > 0 && (
-                    <div className="flex justify-between">
-                      <dt className="text-slate-400">Caratteri estratti</dt>
-                      <dd className="text-white font-medium">
-                        {totalChars > 1000
-                          ? `${(totalChars / 1000).toFixed(1)}k`
-                          : totalChars}
-                      </dd>
-                    </div>
-                  );
-                })()}
-
-                {/* Extraction method breakdown */}
+                {/* Detailed extraction info */}
                 {(() => {
                   const completedChapters = chapters.filter(c => c.processing_status === "completed");
-                  const methods = {
-                    text: completedChapters.filter(c => c.extraction_method === "text").length,
-                    vision: completedChapters.filter(c => c.extraction_method === "vision").length,
-                    hybrid: completedChapters.filter(c => c.extraction_method === "hybrid").length,
-                  };
+                  const totalPages = completedChapters.reduce((sum, c) => sum + (c.page_count || 0), 0);
+                  const hasVision = completedChapters.some(c => c.extraction_method === "hybrid" || c.extraction_method === "vision");
+                  const isTextOnly = completedChapters.every(c => c.extraction_method === "text");
+                  const notes = completedChapters
+                    .map(c => c.extraction_notes || "")
+                    .join(" | ");
+
+                  // Determine extraction mode description
+                  let modeLabel = "Solo testo";
+                  let modeColor = "text-slate-300";
+                  if (hasVision) {
+                    if (completedChapters.some(c => c.extraction_method === "hybrid")) {
+                      modeLabel = "Testo + Immagini (AI Vision)";
+                      modeColor = "text-purple-400";
+                    } else {
+                      modeLabel = "Solo immagini (AI Vision)";
+                      modeColor = "text-purple-400";
+                    }
+                  }
 
                   return (
-                    <div className="flex justify-between items-start">
-                      <dt className="text-slate-400">Metodo estrazione</dt>
-                      <dd className="text-right">
-                        {methods.text > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-slate-300 rounded text-xs mr-1">
-                            📝 Testo: {methods.text}
+                    <>
+                      {totalPages > 0 && (
+                        <div className="flex justify-between">
+                          <dt className="text-slate-400">Slides analizzate</dt>
+                          <dd className="text-white font-medium">{totalPages}</dd>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <dt className="text-slate-400">Modalità</dt>
+                        <dd className={`font-medium text-xs ${modeColor}`}>{modeLabel}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-400 mb-1.5">Contenuto rilevato</dt>
+                        <dd className="flex flex-wrap gap-1.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-slate-300 rounded text-xs">
+                            📝 Testo
                           </span>
-                        )}
-                        {methods.vision > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs mr-1">
-                            👁 Vision AI: {methods.vision}
-                          </span>
-                        )}
-                        {methods.hybrid > 0 && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
-                            🔀 Ibrido: {methods.hybrid}
-                          </span>
-                        )}
-                      </dd>
-                    </div>
+                          {hasVision && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
+                              🖼️ Immagini/Slides
+                            </span>
+                          )}
+                          {notes.toLowerCase().includes("formula") && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded text-xs">
+                              🧪 Formule
+                            </span>
+                          )}
+                        </dd>
+                      </div>
+                      {isTextOnly && totalPages > 5 && (
+                        <p className="text-amber-400/80 text-xs mt-1">
+                          ⚠️ Elaborazione solo testo. Se il documento contiene immagini/grafici, rielabora per includerli.
+                        </p>
+                      )}
+                    </>
                   );
                 })()}
 
-                {/* Average extraction quality */}
+                {/* Quality indicator - user friendly */}
                 {(() => {
                   const completedWithQuality = chapters.filter(
                     c => c.processing_status === "completed" && c.extraction_quality !== null
@@ -1100,35 +1167,46 @@ export default function SourceDetailPage() {
                     completedWithQuality.length
                   );
 
-                  let qualityColor = "text-green-400";
-                  let qualityLabel = "Eccellente";
+                  let qualityColor = "bg-green-500";
+                  let qualityLabel = "Elaborazione completa";
+                  let qualityDesc = "Tutto il contenuto è stato estratto correttamente";
                   if (avgQuality < 50) {
-                    qualityColor = "text-red-400";
-                    qualityLabel = "Parziale";
+                    qualityColor = "bg-red-500";
+                    qualityLabel = "Elaborazione parziale";
+                    qualityDesc = "Alcune parti del documento non sono state estratte";
                   } else if (avgQuality < 80) {
-                    qualityColor = "text-amber-400";
-                    qualityLabel = "Buono";
+                    qualityColor = "bg-amber-500";
+                    qualityLabel = "Buona elaborazione";
+                    qualityDesc = "La maggior parte del contenuto è stata estratta";
                   }
 
                   return (
-                    <div className="flex justify-between">
-                      <dt className="text-slate-400">Qualità estrazione</dt>
-                      <dd className={`font-medium ${qualityColor}`}>
-                        {avgQuality}% - {qualityLabel}
-                      </dd>
+                    <div className="mt-1">
+                      <div className="flex justify-between items-center mb-1.5">
+                        <dt className="text-slate-400">{qualityLabel}</dt>
+                        <dd className="text-white font-medium text-xs">{avgQuality}%</dd>
+                      </div>
+                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${qualityColor} rounded-full transition-all`}
+                          style={{ width: `${avgQuality}%` }}
+                        />
+                      </div>
+                      <p className="text-slate-500 text-xs mt-1.5">{qualityDesc}</p>
                     </div>
                   );
                 })()}
 
-                {/* Extraction notes/warnings */}
+                {/* Extraction notes/warnings - only show if issues */}
                 {(() => {
                   const notes = chapters
                     .filter(c => c.processing_status === "completed" && c.extraction_notes)
-                    .map(c => c.extraction_notes);
+                    .flatMap(c => (c.extraction_notes || "").split(" | "))
+                    .filter(n => n.toLowerCase().includes("errore") || n.toLowerCase().includes("fallito") || n.toLowerCase().includes("timeout"));
 
                   return notes.length > 0 && (
                     <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                      <p className="text-amber-400 text-xs font-medium mb-1">⚠️ Note estrazione:</p>
+                      <p className="text-amber-400 text-xs font-medium mb-1">⚠️ Problemi rilevati:</p>
                       {notes.map((note, i) => (
                         <p key={i} className="text-amber-300/80 text-xs">{note}</p>
                       ))}
@@ -1139,29 +1217,14 @@ export default function SourceDetailPage() {
             </>
           )}
 
-          {/* Processing in progress indicator */}
-          {chapters.some(c => c.processing_status === "processing") && (
+          {/* Processing status note in info card */}
+          {chapters.some(c => c.processing_status === "processing" || c.processing_status === "pending") && (
             <>
               <hr className="border-slate-700 my-4" />
-              {processingChapterId ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-blue-400 font-medium">Elaborazione in corso...</span>
-                    <span className="text-blue-400 font-medium">{processingProgress}%</span>
-                  </div>
-                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500 ease-out"
-                      style={{ width: `${processingProgress}%` }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-blue-400">
-                  <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
-                  <span className="text-sm">Elaborazione in corso...</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-blue-400">
+                <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                <span className="text-sm font-medium">Elaborazione in corso ({processingProgress}%)</span>
+              </div>
             </>
           )}
 
