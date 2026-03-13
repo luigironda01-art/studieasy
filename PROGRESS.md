@@ -240,54 +240,101 @@ Aggiunto a MEMORY.md per garantire qualità frontend impeccabile in tutte le ses
 
 ---
 
-## SPRINT CORRENTE (2026-03-13)
+---
 
-### Bug Fix & UX Improvements
+# SPRINT TRACKER (Live)
 
-- [x] Fix 500 error flashcard generation (mancavano env vars su frontend Railway)
-- [x] Aggiungere modal configurazione pre-generazione flashcard (Study page)
-- [x] Aggiungere selezione difficoltà (easy/medium/hard) nel modal
-- [x] Aggiungere modal configurazione pre-generazione flashcard (Source page)
-- [x] Aggiungere selezione difficoltà anche per Quiz
-- [x] Fix tooltip StatCard - allineamento per card a destra dello schermo
-- [x] Rimuovere opzione "Libro" da AddSourceModal (tenere solo PDF e Appunti)
-- [x] Deploy su Railway (frontend) delle modifiche ✅ b5b14a3
+> **Ultimo aggiornamento**: 13 Marzo 2026 16:30
 
-### Prossime Feature da Implementare
+---
 
-#### Flashcard & Quiz (Completamento)
-- [ ] Test manuale generazione flashcard con difficoltà
-- [ ] Test manuale generazione quiz con difficoltà
-- [ ] Visualizzare difficoltà della flashcard durante lo studio
+## SPRINT ATTIVO: Riassunti + Analytics
 
-#### Riassunti (Phase 2)
-- [ ] API backend `POST /api/summaries/generate`
-- [ ] Frontend UI generazione riassunti
-- [ ] Frontend visualizzazione riassunti (Markdown)
-- [ ] Selezione livello dettaglio (brief/medium/detailed)
+```
+╔══════════════════════════════════════════════════════════╗
+║  RIASSUNTI AI                                   ✅ 100%  ║
+╠══════════════════════════════════════════════════════════╣
+║  [✅] Migrazione DB tabella summaries                    ║
+║  [✅] API /api/summaries/generate                        ║
+║  [✅] UI tab Riassunti in Study page                     ║
+║  [✅] Modal lettura riassunto                            ║
+╚══════════════════════════════════════════════════════════╝
 
-#### Mappe Concettuali (Phase 2)
-- [ ] API backend `POST /api/maps/generate`
-- [ ] Frontend UI generazione mappe
-- [ ] Integrazione Mermaid.js per rendering
-- [ ] Export come immagine
+╔══════════════════════════════════════════════════════════╗
+║  ANALYTICS / USAGE LOGS                         ✅ 100%  ║
+╠══════════════════════════════════════════════════════════╣
+║  [✅] Migrazione DB tabella usage_logs                   ║
+║  [✅] Helper usage-logger.ts con cost tracking           ║
+║  [✅] Logging in flashcards/quiz/summaries API           ║
+║  [⏳] Eseguire migrazioni SQL su Supabase   ← DA FARE    ║
+╚══════════════════════════════════════════════════════════╝
+```
 
-#### Infografiche (Phase 2)
-- [ ] API backend `POST /api/infographics/generate`
-- [ ] Frontend UI generazione
-- [ ] Rendering HTML styled
-- [ ] Export PNG con html-to-image
+---
 
-#### Presentazioni (Phase 2)
-- [ ] API backend `POST /api/presentations/generate`
-- [ ] Frontend UI generazione
-- [ ] Preview slides
-- [ ] Export .pptx con pptxgenjs
+## Completato Oggi
 
-### Miglioramenti UX Generali
-- [ ] Toast notifications per feedback operazioni
-- [ ] Conferma eliminazione più chiara
-- [ ] Loading skeleton per liste
-- [ ] Animazioni transizione pagine
-- [ ] Dark mode toggle (già dark-first)
+- [x] Flashcards organizzate per difficoltà (Facile/Media/Difficile)
+- [x] Raggruppamento flashcard per batch di generazione
+- [x] Ordinamento batch (data/quantità)
+- [x] Eliminazione batch
+- [x] Push commit `b9fe39a`
+- [x] API generazione riassunti (`/api/summaries/generate`)
+- [x] Tab Riassunti attivo in Study page
+- [x] Modal reader per riassunti con rendering markdown
+- [x] Scelta lunghezza riassunto (300/500/700/1000 parole)
+- [x] **Analytics: tabella usage_logs** con tracking completo
+- [x] **Helper usage-logger.ts** con stima costi per modello
+- [x] **Logging integrato** in tutte le API di generazione
+- [x] Rinominato "Appunti" in "Testo digitale"
+- [x] Build verificata con successo
+
+---
+
+## Feature Status
+
+| Feature | Status | Sprint |
+|---------|--------|--------|
+| Auth | ✅ | - |
+| Upload PDF | ✅ | - |
+| Flashcards + Difficoltà + Batch | ✅ | Completato |
+| Quiz + Difficoltà | ✅ | Completato |
+| Riassunti | ✅ | Completato |
+| **Analytics/Usage Logs** | ✅ | **Completato** |
+| Mappe Concettuali | ⬜ | Prossimo |
+| Tutorial iniziale | ⬜ | Backlog |
+| Infografiche | ⬜ | Backlog |
+| Slides | ⬜ | Backlog |
+| Stats Dashboard | ⬜ | Backlog |
+| Gamification | ⬜ | Backlog |
+
+---
+
+## Prossimi Passi
+
+1. ⏳ **Eseguire migrazioni SQL** su Supabase:
+   - `supabase/add_summaries.sql`
+   - `supabase/add_usage_logs.sql`
+2. ⬜ Test generazione riassunti
+3. ⬜ Git push
+4. ⬜ Iniziare Mappe Concettuali
+
+---
+
+## Quick Commands
+
+```bash
+# Frontend
+cd frontend && npm run dev
+
+# Backend
+cd backend && uvicorn main:app --reload
+
+# Deploy
+git add . && git commit -m "feat: ..." && git push
+```
+
+---
+
+*Legenda: ✅ Done | 🔄 In corso | ⏳ Prossimo | ⬜ Todo*
 

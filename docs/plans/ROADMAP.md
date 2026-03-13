@@ -1,6 +1,7 @@
 # Studio App - Roadmap Completa
 
 > Documento vivente che guida lo sviluppo di Studio, l'app AI-powered per lo studio intelligente.
+> **Ultimo aggiornamento**: 13 Marzo 2026
 
 ---
 
@@ -12,23 +13,28 @@
 
 ---
 
-## Stato Attuale (MVP)
+## Stato Attuale
 
 ### Completato
-- Autenticazione utenti (Supabase Auth)
-- Upload PDF e elaborazione con AI (Gemini)
-- Generazione flashcard con spaced repetition (FSRS)
-- Generazione quiz misti (scelta multipla, vero/falso, risposta aperta)
-- Valutazione AI per risposte aperte
-- Sessione studio flashcard funzionante
-- Sessione quiz interattiva con feedback
+- [x] Autenticazione utenti (Supabase Auth)
+- [x] Upload PDF e note testuali
+- [x] Elaborazione documenti con AI (Gemini)
+- [x] Generazione flashcard con difficoltà selezionabile (Facile/Media/Difficile)
+- [x] Raggruppamento flashcard per batch di generazione
+- [x] FSRS (Free Spaced Repetition Scheduler)
+- [x] Sessione studio flashcard con rating
+- [x] Generazione quiz misti (scelta multipla, vero/falso, risposta aperta)
+- [x] Valutazione AI per risposte aperte
+- [x] Design system "Aurora Flow" (dark theme, glassmorphism)
+- [x] Sidebar navigation
+- [x] Pagina Study con accordion per difficoltà
+
+### In Sviluppo (Sprint Corrente)
+- [ ] **Riassunti AI** - Generazione riassunti per capitolo con lunghezza configurabile
 
 ### Limitazioni Attuali
-- Solo PDF supportato
-- Nessuna organizzazione gerarchica contenuti
-- Navigazione basilare
-- Nessuna personalizzazione generazione
-- Statistiche assenti
+- Solo PDF e note supportati (no audio/video)
+- Statistiche base
 - Mobile experience da migliorare
 
 ---

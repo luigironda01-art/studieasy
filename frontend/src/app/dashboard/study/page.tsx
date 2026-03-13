@@ -32,10 +32,21 @@ interface SourceWithContent extends Source {
   totalDue: number;
 }
 
+interface Summary {
+  id: string;
+  chapter_id: string;
+  user_id: string;
+  content: string;
+  word_count: number;
+  target_words: number;
+  created_at: string;
+}
+
 interface ChapterWithContent extends Chapter {
   flashcardCount: number;
   dueCount: number;
   quizzes: Quiz[];
+  summary: Summary | null;
 }
 
 type TabType = "flashcards" | "quiz" | "summaries" | "maps" | "infographics" | "presentations";
@@ -55,7 +66,7 @@ interface DeleteModal {
 const TOOLS = [
   { id: "flashcards" as TabType, label: "Flashcard", icon: "🎴", available: true, description: "Ripassa con spaced repetition" },
   { id: "quiz" as TabType, label: "Quiz", icon: "📝", available: true, description: "Metti alla prova le tue conoscenze" },
-  { id: "summaries" as TabType, label: "Riassunti", icon: "📄", available: false, description: "Riassunti AI dei capitoli" },
+  { id: "summaries" as TabType, label: "Riassunti", icon: "📄", available: true, description: "Riassunti AI dei capitoli" },
   { id: "maps" as TabType, label: "Mappe", icon: "🗺️", available: false, description: "Mappe concettuali visive" },
   { id: "infographics" as TabType, label: "Infografiche", icon: "📊", available: false, description: "Visualizzazioni dei concetti" },
   { id: "presentations" as TabType, label: "Slides", icon: "🎬", available: false, description: "Presentazioni generate" },
@@ -64,7 +75,7 @@ const TOOLS = [
 const GENERATION_LABELS: Record<TabType, string> = {
   flashcards: "flashcard",
   quiz: "domande",
-  summaries: "paragrafi",
+  summaries: "parole (x50)",
   maps: "nodi",
   infographics: "sezioni",
   presentations: "slide",
@@ -84,7 +95,11 @@ export default function StudyHubPage() {
   const [totalDue, setTotalDue] = useState(0);
   const [generatingFlashcardsId, setGeneratingFlashcardsId] = useState<string | null>(null);
   const [generatingQuizId, setGeneratingQuizId] = useState<string | null>(null);
+  const [generatingSummaryId, setGeneratingSummaryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Summary reader modal
+  const [showSummaryReader, setShowSummaryReader] = useState<Summary | null>(null);
 
   // Generation popover state
   const [showGeneratePopover, setShowGeneratePopover] = useState<GeneratePopover | null>(null);
@@ -201,6 +216,21 @@ export default function StudyHubPage() {
         quizzesByChapter[quiz.chapter_id].push(quiz);
       });
 
+      // Fetch summaries
+      const { data: summariesData } = await supabase
+        .from("summaries")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      const summaryByChapter: Record<string, Summary> = {};
+      summariesData?.forEach((summary: Summary) => {
+        // Keep only the most recent summary per chapter
+        if (!summaryByChapter[summary.chapter_id]) {
+          summaryByChapter[summary.chapter_id] = summary;
+        }
+      });
+
       // Group flashcards by source -> difficulty -> batch
       const flashcardsBySource: Record<string, FlashcardsByDifficulty> = {};
       const dueByFlashcardId: Set<string> = new Set();
@@ -267,6 +297,7 @@ export default function StudyHubPage() {
             ...chapter,
             flashcardCount: fcCountByChapter[chapter.id] || 0,
             dueCount: dueByChapter[chapter.id] || 0,
+            summary: summaryByChapter[chapter.id] || null,
             quizzes: quizzesByChapter[chapter.id] || [],
           }));
 
@@ -382,6 +413,63 @@ export default function StudyHubPage() {
     }
   };
 
+  const handleGenerateSummary = async (chapterId: string, targetWords: number) => {
+    if (!user) return;
+
+    setShowGeneratePopover(null);
+    setGeneratingSummaryId(chapterId);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/summaries/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chapterId,
+          userId: user.id,
+          targetWords,
+          language: "it",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Generazione riassunto fallita");
+      }
+
+      // Refresh content to show new summary
+      await fetchContent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Errore durante la generazione del riassunto");
+    } finally {
+      setGeneratingSummaryId(null);
+    }
+  };
+
+  const handleDeleteSummary = async (summaryId: string) => {
+    if (!user) return;
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      const { error: deleteError } = await supabase
+        .from("summaries")
+        .delete()
+        .eq("id", summaryId)
+        .eq("user_id", user.id);
+
+      if (deleteError) throw deleteError;
+
+      await fetchContent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Errore durante l'eliminazione del riassunto");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const openGeneratePopover = (chapterId: string, type: TabType) => {
     setGenerateCount(10);
     setGenerateDifficulty("medium");
@@ -396,8 +484,11 @@ export default function StudyHubPage() {
       handleGenerateFlashcards(chapterId, generateCount, generateDifficulty);
     } else if (type === "quiz") {
       handleGenerateQuiz(chapterId, generateCount);
+    } else if (type === "summaries") {
+      // For summaries, generateCount represents target words (multiplied by 50 for word count)
+      handleGenerateSummary(chapterId, generateCount * 50);
     }
-    // Future: summaries, maps, infographics, presentations
+    // Future: maps, infographics, presentations
   };
 
   const handleDeleteFlashcards = async (chapterId: string) => {
@@ -720,6 +811,11 @@ export default function StudyHubPage() {
                       {source.chapters.reduce((acc, c) => acc + c.quizzes.length, 0)} quiz
                     </span>
                   )}
+                  {selectedTool === "summaries" && (
+                    <span className="text-emerald-400 text-sm">
+                      {source.chapters.filter(c => c.summary !== null).length}/{source.chapters.length} riassunti
+                    </span>
+                  )}
                   <svg
                     className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
                       expandedSources.has(source.id) ? "rotate-180" : ""
@@ -977,6 +1073,89 @@ export default function StudyHubPage() {
                         </div>
                       ))}
                     </div>
+                  ) : selectedTool === "summaries" ? (
+                    /* SUMMARIES: Chapter-based display */
+                    <div className="divide-y divide-slate-700/50">
+                      {source.chapters.map((chapter) => (
+                        <div key={chapter.id} className="p-4 hover:bg-slate-700/30 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <h4 className="text-white font-medium">{chapter.title}</h4>
+                              <div className="mt-2">
+                                {chapter.summary ? (
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-green-400 text-sm flex items-center gap-1">
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Riassunto disponibile
+                                    </span>
+                                    <span className="text-slate-500 text-sm">
+                                      {chapter.summary.word_count} parole
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500 text-sm">Nessun riassunto</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Summary Actions */}
+                            <div className="flex items-center gap-2 ml-4">
+                              {chapter.summary ? (
+                                <>
+                                  <button
+                                    onClick={() => setShowSummaryReader(chapter.summary)}
+                                    className="px-3 py-1.5 bg-emerald-500 text-white text-sm rounded-lg hover:bg-emerald-600 transition-colors flex items-center gap-2"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    Leggi
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSummary(chapter.summary!.id)}
+                                    disabled={deleting}
+                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                                    title="Elimina riassunto"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => openGeneratePopover(chapter.id, "summaries")}
+                                    disabled={generatingSummaryId !== null}
+                                    className="px-3 py-1.5 bg-slate-700 text-slate-300 text-sm rounded-lg hover:bg-slate-600 transition-colors"
+                                    title="Rigenera riassunto"
+                                  >
+                                    🔄
+                                  </button>
+                                </>
+                              ) : chapter.processing_status === "completed" ? (
+                                <button
+                                  onClick={() => openGeneratePopover(chapter.id, "summaries")}
+                                  disabled={generatingSummaryId !== null}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+                                >
+                                  {generatingSummaryId === chapter.id ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                      Generando...
+                                    </>
+                                  ) : (
+                                    "+ Genera Riassunto"
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="text-slate-500 text-sm">Capitolo non elaborato</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     /* Coming Soon */
                     <div className="p-6 text-center text-slate-500">
@@ -990,12 +1169,12 @@ export default function StudyHubPage() {
         </div>
 
         {/* Quick Stats */}
-        <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="mt-8 grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
             <p className="text-3xl font-bold text-blue-400">
               {sources.reduce((acc, s) => acc + s.chapters.reduce((a, c) => a + c.flashcardCount, 0), 0)}
             </p>
-            <p className="text-slate-400 text-sm">Flashcard totali</p>
+            <p className="text-slate-400 text-sm">Flashcard</p>
           </div>
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
             <p className="text-3xl font-bold text-orange-400">{totalDue}</p>
@@ -1005,7 +1184,13 @@ export default function StudyHubPage() {
             <p className="text-3xl font-bold text-purple-400">
               {sources.reduce((acc, s) => acc + s.chapters.reduce((a, c) => a + c.quizzes.length, 0), 0)}
             </p>
-            <p className="text-slate-400 text-sm">Quiz creati</p>
+            <p className="text-slate-400 text-sm">Quiz</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
+            <p className="text-3xl font-bold text-emerald-400">
+              {sources.reduce((acc, s) => acc + s.chapters.filter(c => c.summary !== null).length, 0)}
+            </p>
+            <p className="text-slate-400 text-sm">Riassunti</p>
           </div>
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
             <p className="text-3xl font-bold text-green-400">
@@ -1035,25 +1220,51 @@ export default function StudyHubPage() {
 
             {/* Quantity */}
             <div className="mb-5">
-              <label className="text-slate-400 text-sm mb-2 block">Quantità</label>
-              <div className="flex items-center gap-4">
-                <input
-                  type="range"
-                  min="1"
-                  max="30"
-                  value={generateCount}
-                  onChange={(e) => setGenerateCount(Number(e.target.value))}
-                  className="flex-1 accent-blue-500 h-2"
-                />
-                <input
-                  type="number"
-                  min="1"
-                  max="30"
-                  value={generateCount}
-                  onChange={(e) => setGenerateCount(Math.min(30, Math.max(1, Number(e.target.value))))}
-                  className="w-20 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-center text-lg font-medium"
-                />
-              </div>
+              <label className="text-slate-400 text-sm mb-2 block">
+                {showGeneratePopover.type === "summaries" ? "Lunghezza riassunto" : "Quantità"}
+              </label>
+              {showGeneratePopover.type === "summaries" ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { value: 6, label: "300", desc: "Breve" },
+                    { value: 10, label: "500", desc: "Standard" },
+                    { value: 14, label: "700", desc: "Dettagliato" },
+                    { value: 20, label: "1000", desc: "Completo" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setGenerateCount(opt.value)}
+                      className={`p-3 rounded-xl border-2 transition-all ${
+                        generateCount === opt.value
+                          ? "border-emerald-500 bg-emerald-500/20"
+                          : "border-slate-600 bg-slate-700/50 hover:border-slate-500"
+                      }`}
+                    >
+                      <div className="text-white text-lg font-bold">{opt.label}</div>
+                      <div className="text-slate-400 text-xs">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min="1"
+                    max="30"
+                    value={generateCount}
+                    onChange={(e) => setGenerateCount(Number(e.target.value))}
+                    className="flex-1 accent-blue-500 h-2"
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={generateCount}
+                    onChange={(e) => setGenerateCount(Math.min(30, Math.max(1, Number(e.target.value))))}
+                    className="w-20 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-center text-lg font-medium"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Difficulty - only for flashcards */}
@@ -1156,6 +1367,74 @@ export default function StudyHubPage() {
                 ) : (
                   "Elimina"
                 )}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Summary Reader Modal */}
+      {showSummaryReader && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/70 z-40"
+            onClick={() => setShowSummaryReader(null)}
+          />
+          {/* Modal */}
+          <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-50 flex flex-col overflow-hidden animate-fadeIn">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-slate-800/50">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📄</span>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">Riassunto</h3>
+                  <p className="text-slate-400 text-sm">
+                    {showSummaryReader.word_count} parole • Generato il {new Date(showSummaryReader.created_at).toLocaleDateString('it-IT', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSummaryReader(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8">
+              <div className="max-w-3xl mx-auto prose prose-invert prose-slate">
+                <div
+                  className="text-slate-200 leading-relaxed whitespace-pre-wrap"
+                  dangerouslySetInnerHTML={{
+                    __html: showSummaryReader.content
+                      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+                      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                      .replace(/^- (.*)/gm, '<li class="ml-4">$1</li>')
+                      .replace(/^• (.*)/gm, '<li class="ml-4">$1</li>')
+                      .replace(/\n\n/g, '</p><p class="mb-4">')
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-700 bg-slate-800/50">
+              <div className="text-slate-500 text-sm">
+                Usa i riassunti per ripassare velocemente i concetti chiave
+              </div>
+              <button
+                onClick={() => setShowSummaryReader(null)}
+                className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Chiudi
               </button>
             </div>
           </div>

@@ -196,7 +196,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
                 selected={sourceType === "notes"}
                 onClick={() => { setSourceType("notes"); setFile(null); }}
                 icon="📝"
-                label="Appunti"
+                label="Testo digitale"
               />
             </div>
           </div>

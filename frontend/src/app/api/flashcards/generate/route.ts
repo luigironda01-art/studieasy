@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { logUsage, estimateTokens } from "@/lib/usage-logger";
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
   console.log("=== Flashcard Generation API Called ===");
-  console.log("SERVICE_ROLE_KEY present:", !!process.env.SUPABASE_SERVICE_ROLE_KEY);
-  console.log("SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
 
   // Initialize clients inside the function to ensure fresh env vars
   const openrouter = new OpenAI({
@@ -159,6 +159,24 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
       }
     }
 
+    // Log usage analytics
+    const durationMs = Date.now() - startTime;
+    const tokensInput = response.usage?.prompt_tokens || estimateTokens(prompt);
+    const tokensOutput = response.usage?.completion_tokens || estimateTokens(responseText);
+
+    await logUsage({
+      userId,
+      actionType: "generate_flashcards",
+      chapterId,
+      tokensInput,
+      tokensOutput,
+      modelUsed: "anthropic/claude-3.5-sonnet",
+      itemsGenerated: createdCount,
+      difficulty,
+      durationMs,
+      status: "success",
+    });
+
     return NextResponse.json({
       success: true,
       flashcards_created: createdCount,
@@ -168,6 +186,17 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
     });
   } catch (error) {
     console.error("Flashcard generation error:", error);
+
+    // Log error
+    const durationMs = Date.now() - startTime;
+    await logUsage({
+      userId: "unknown",
+      actionType: "generate_flashcards",
+      durationMs,
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : "Generation failed",
+    });
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Generation failed" },
       { status: 500 }
