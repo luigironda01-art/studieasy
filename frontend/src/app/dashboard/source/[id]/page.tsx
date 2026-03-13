@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState, useRef } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { supabase, Source, Chapter, Quiz } from "@/lib/supabase";
@@ -13,12 +13,17 @@ export default function SourceDetailPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const sourceId = params.id as string;
+  const selectedChapterId = searchParams.get("chapter");
 
   const [source, setSource] = useState<Source | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Content viewer modal state
+  const [viewingChapter, setViewingChapter] = useState<Chapter | null>(null);
   const [processingChapterId, setProcessingChapterId] = useState<string | null>(null);
   const [generatingFlashcardsId, setGeneratingFlashcardsId] = useState<string | null>(null);
   const [generatingQuizId, setGeneratingQuizId] = useState<string | null>(null);
@@ -74,6 +79,16 @@ export default function SourceDetailPage() {
       setLoading(false);
     }
   }, [user, authLoading, sourceId]);
+
+  // Auto-open chapter content viewer when chapter param is present
+  useEffect(() => {
+    if (selectedChapterId && chapters.length > 0) {
+      const chapter = chapters.find(c => c.id === selectedChapterId);
+      if (chapter && chapter.processing_status === "completed") {
+        setViewingChapter(chapter);
+      }
+    }
+  }, [selectedChapterId, chapters]);
 
   const fetchSourceDetails = async () => {
     setLoading(true);
@@ -859,6 +874,13 @@ export default function SourceDetailPage() {
                             </div>
                           )}
                           <button
+                            onClick={() => setViewingChapter(chapter)}
+                            className="px-4 py-2 bg-slate-700 text-white text-sm rounded-lg font-medium hover:bg-slate-600 transition-colors flex items-center gap-2"
+                          >
+                            <span>📖</span>
+                            Leggi
+                          </button>
+                          <button
                             onClick={() => openGenerateModal(chapter.id, chapter.title, "flashcards")}
                             disabled={generatingFlashcardsId !== null || generatingQuizId !== null}
                             className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white text-sm rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
@@ -1103,6 +1125,72 @@ export default function SourceDetailPage() {
                   "Elimina"
                 )}
               </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Chapter Content Viewer Modal */}
+      {viewingChapter && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40"
+            onClick={() => {
+              setViewingChapter(null);
+              router.push(`/dashboard/source/${sourceId}`);
+            }}
+          />
+          {/* Modal */}
+          <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl z-50 flex flex-col animate-fadeIn">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <div>
+                <h3 className="text-white font-semibold text-lg">{viewingChapter.title}</h3>
+                <p className="text-slate-400 text-sm">{source?.title}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setViewingChapter(null);
+                  router.push(`/dashboard/source/${sourceId}`);
+                }}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {viewingChapter.processed_text ? (
+                <div className="prose prose-invert prose-slate max-w-none">
+                  <div
+                    className="whitespace-pre-wrap text-slate-300 leading-relaxed"
+                    dangerouslySetInnerHTML={{
+                      __html: viewingChapter.processed_text
+                        .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-white mt-6 mb-3">$1</h1>')
+                        .replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-white mt-5 mb-2">$1</h2>')
+                        .replace(/^### (.*$)/gm, '<h3 class="text-lg font-medium text-white mt-4 mb-2">$1</h3>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                        .replace(/^- (.*$)/gm, '<li class="ml-4">$1</li>')
+                        .replace(/\n\n/g, '</p><p class="mb-4">')
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                    <span className="text-3xl">📄</span>
+                  </div>
+                  <h4 className="text-white font-medium mb-2">Contenuto non disponibile</h4>
+                  <p className="text-slate-400 text-sm max-w-md">
+                    Il documento non è stato ancora elaborato o il contenuto non è stato estratto correttamente.
+                    Prova a rielaborare il capitolo.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </>

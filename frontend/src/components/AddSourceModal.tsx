@@ -110,22 +110,52 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
 
       if (insertError) throw insertError;
 
-      // If PDF, create a chapter with the file reference
+      // If PDF, create a chapter with the file reference and auto-process
       if (sourceType === "pdf" && fileUrl && sourceData) {
         console.log("Creating chapter with file_url:", fileUrl);
-        const { error: chapterError } = await supabase.from("chapters").insert({
-          source_id: sourceData.id,
-          title: "Documento completo",
-          order_index: 0,
-          file_url: fileUrl,
-          processing_status: "pending",
-        });
+        const { data: chapterData, error: chapterError } = await supabase
+          .from("chapters")
+          .insert({
+            source_id: sourceData.id,
+            title: "Documento completo",
+            order_index: 0,
+            file_url: fileUrl,
+            processing_status: "pending",
+          })
+          .select()
+          .single();
 
         if (chapterError) {
           console.error("Chapter insert error:", chapterError);
           throw new Error(`Errore creazione capitolo: ${chapterError.message}`);
         }
-        console.log("Chapter created successfully with file_url");
+        console.log("Chapter created successfully:", chapterData.id);
+
+        setUploadProgress(95);
+
+        // Auto-start PDF processing
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          console.log("Auto-starting PDF processing...");
+
+          // Fire and forget - don't wait for processing to complete
+          fetch(`${apiUrl}/api/process/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              source_id: sourceData.id,
+              chapter_id: chapterData.id,
+              pdf_url: fileUrl,
+            }),
+          }).then(response => {
+            console.log("Processing started, status:", response.status);
+          }).catch(err => {
+            console.error("Processing request failed:", err);
+          });
+        } catch (processError) {
+          console.error("Error starting auto-process:", processError);
+          // Don't throw - we still want to show the source in the library
+        }
       }
 
       setUploadProgress(100);
@@ -136,6 +166,9 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
       setSourceType("pdf");
       setFile(null);
       setUploadProgress(0);
+
+      // Small delay to ensure DB transaction is committed
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       onSuccess();
       onClose();
@@ -152,6 +185,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
     setFile(null);
     setError("");
     setUploadProgress(0);
+    setLoading(false);
     onClose();
   };
 
