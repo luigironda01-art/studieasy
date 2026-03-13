@@ -360,11 +360,25 @@ export default function SourceSummariesPage() {
     }
   };
 
-  const handleDownloadPdf = async (text: string, title: string) => {
+  const handleDownloadPdf = async (text: string, title: string, chapterId?: string) => {
     setPdfGenerating(true);
-    setPdfProgress("Analisi del documento...");
+    setPdfProgress("Caricamento dati aggiornati...");
 
     try {
+      // Re-fetch fresh chapter data to avoid stale cache
+      let freshText = text;
+      if (chapterId) {
+        const { data: freshChapter } = await supabase
+          .from("chapters")
+          .select("processed_text")
+          .eq("id", chapterId)
+          .single();
+        if (freshChapter?.processed_text) {
+          freshText = freshChapter.processed_text;
+        }
+      }
+
+      setPdfProgress("Analisi del documento...");
       const { jsPDF } = await import("jspdf");
 
       const doc = new jsPDF({
@@ -379,7 +393,7 @@ export default function SourceSummariesPage() {
       const maxWidth = pageWidth - margin * 2;
       let y = margin;
 
-      const blocks = parseMarkdownBlocks(text);
+      const blocks = parseMarkdownBlocks(freshText);
 
       // Pre-generate images if any [IMMAGINE:] blocks exist
       const imageBlocks = blocks.filter((b) => b.type === "image");
@@ -747,7 +761,8 @@ export default function SourceSummariesPage() {
               <button
                 onClick={() => handleDownloadPdf(
                   selectedChapter.processed_text || "",
-                  selectedChapter.title
+                  selectedChapter.title,
+                  selectedChapter.id
                 )}
                 disabled={pdfGenerating}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1037,7 +1052,8 @@ export default function SourceSummariesPage() {
                   <button
                     onClick={() => handleDownloadPdf(
                       chapter.processed_text || "",
-                      chapter.title
+                      chapter.title,
+                      chapter.id
                     )}
                     disabled={pdfGenerating}
                     className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
