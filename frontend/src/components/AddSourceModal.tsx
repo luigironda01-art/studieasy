@@ -14,7 +14,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
   const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
-  const [sourceType, setSourceType] = useState<"book" | "pdf" | "notes">("book");
+  const [sourceType, setSourceType] = useState<"pdf" | "notes">("pdf");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -133,7 +133,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
       // Reset form
       setTitle("");
       setAuthor("");
-      setSourceType("book");
+      setSourceType("pdf");
       setFile(null);
       setUploadProgress(0);
 
@@ -148,7 +148,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
   const resetForm = () => {
     setTitle("");
     setAuthor("");
-    setSourceType("book");
+    setSourceType("pdf");
     setFile(null);
     setError("");
     setUploadProgress(0);
@@ -185,13 +185,7 @@ export default function AddSourceModal({ isOpen, onClose, onSuccess }: AddSource
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Tipo di fonte
             </label>
-            <div className="grid grid-cols-3 gap-3">
-              <TypeButton
-                selected={sourceType === "book"}
-                onClick={() => { setSourceType("book"); setFile(null); }}
-                icon="📚"
-                label="Libro"
-              />
+            <div className="grid grid-cols-2 gap-3">
               <TypeButton
                 selected={sourceType === "pdf"}
                 onClick={() => setSourceType("pdf")}

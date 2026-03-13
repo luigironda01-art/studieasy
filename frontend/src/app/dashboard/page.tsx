@@ -132,7 +132,8 @@ function StatCard({
   icon,
   tooltip,
   trend,
-  color = "cyan"
+  color = "cyan",
+  tooltipAlign = "center"
 }: {
   value: number | string;
   label: string;
@@ -140,6 +141,7 @@ function StatCard({
   tooltip: string;
   trend?: number;
   color?: "cyan" | "purple" | "orange" | "green" | "pink";
+  tooltipAlign?: "left" | "center" | "right";
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -151,6 +153,18 @@ function StatCard({
     pink: "from-pink-500 to-pink-600"
   };
 
+  const tooltipPositionClasses = {
+    left: "left-0",
+    center: "left-1/2 -translate-x-1/2",
+    right: "right-0"
+  };
+
+  const arrowPositionClasses = {
+    left: "left-4",
+    center: "left-1/2 -translate-x-1/2",
+    right: "right-4"
+  };
+
   return (
     <div
       className="relative group"
@@ -159,14 +173,14 @@ function StatCard({
     >
       {/* Tooltip */}
       <div
-        className={`absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full z-50 transition-all duration-200 ${
+        className={`absolute -top-2 ${tooltipPositionClasses[tooltipAlign]} -translate-y-full z-50 transition-all duration-200 ${
           showTooltip ? "opacity-100 visible" : "opacity-0 invisible"
         }`}
       >
         <div className="bg-[#1e293b] border border-white/10 rounded-lg px-3 py-2 shadow-xl max-w-[220px]">
           <p className="text-sm text-slate-200 leading-relaxed">{tooltip}</p>
           {/* Arrow */}
-          <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-[#1e293b] border-r border-b border-white/10 rotate-45" />
+          <div className={`absolute ${arrowPositionClasses[tooltipAlign]} -bottom-1.5 w-3 h-3 bg-[#1e293b] border-r border-b border-white/10 rotate-45`} />
         </div>
       </div>
 
@@ -519,6 +533,7 @@ export default function DashboardPage() {
             icon="🔥"
             color="pink"
             tooltip="Giorni consecutivi in cui hai studiato. Mantenere una streak costante migliora drasticamente la memoria a lungo termine!"
+            tooltipAlign="right"
           />
         </div>
 

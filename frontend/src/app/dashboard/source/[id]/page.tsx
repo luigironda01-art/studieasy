@@ -41,6 +41,16 @@ export default function SourceDetailPage() {
   const [newTitle, setNewTitle] = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
 
+  // Generation modal state
+  const [showGenerateModal, setShowGenerateModal] = useState<{
+    chapterId: string;
+    chapterTitle: string;
+    type: "flashcards" | "quiz";
+  } | null>(null);
+  const [generateCount, setGenerateCount] = useState(10);
+  const [generateDifficulty, setGenerateDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const generateModalRef = useRef<HTMLDivElement>(null);
+
   // Set breadcrumb
   useBreadcrumb(
     source
@@ -171,10 +181,17 @@ export default function SourceDetailPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleGenerateFlashcards = async (chapter: Chapter) => {
+  const openGenerateModal = (chapterId: string, chapterTitle: string, type: "flashcards" | "quiz") => {
+    setGenerateCount(10);
+    setGenerateDifficulty("medium");
+    setShowGenerateModal({ chapterId, chapterTitle, type });
+  };
+
+  const handleGenerateFlashcards = async (chapterId: string, count: number, difficulty: string) => {
     if (!user) return;
 
-    setGeneratingFlashcardsId(chapter.id);
+    setShowGenerateModal(null);
+    setGeneratingFlashcardsId(chapterId);
     setError("");
 
     try {
@@ -182,10 +199,10 @@ export default function SourceDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chapterId: chapter.id,
+          chapterId,
           userId: user.id,
-          numCards: 10,
-          difficulty: "medium",
+          numCards: count,
+          difficulty,
           language: "it",
         }),
       });
@@ -205,10 +222,11 @@ export default function SourceDetailPage() {
     }
   };
 
-  const handleGenerateQuiz = async (chapter: Chapter) => {
+  const handleGenerateQuiz = async (chapterId: string, count: number, difficulty: string) => {
     if (!user) return;
 
-    setGeneratingQuizId(chapter.id);
+    setShowGenerateModal(null);
+    setGeneratingQuizId(chapterId);
     setError("");
 
     try {
@@ -216,10 +234,10 @@ export default function SourceDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chapterId: chapter.id,
+          chapterId,
           userId: user.id,
-          numQuestions: 10,
-          difficulty: "medium",
+          numQuestions: count,
+          difficulty,
           language: "it",
         }),
       });
@@ -237,6 +255,17 @@ export default function SourceDetailPage() {
       setError(err instanceof Error ? err.message : "Errore durante la generazione del quiz");
     } finally {
       setGeneratingQuizId(null);
+    }
+  };
+
+  const handleGenerate = () => {
+    if (!showGenerateModal) return;
+    const { chapterId, type } = showGenerateModal;
+
+    if (type === "flashcards") {
+      handleGenerateFlashcards(chapterId, generateCount, generateDifficulty);
+    } else if (type === "quiz") {
+      handleGenerateQuiz(chapterId, generateCount, generateDifficulty);
     }
   };
 
@@ -830,7 +859,7 @@ export default function SourceDetailPage() {
                             </div>
                           )}
                           <button
-                            onClick={() => handleGenerateFlashcards(chapter)}
+                            onClick={() => openGenerateModal(chapter.id, chapter.title, "flashcards")}
                             disabled={generatingFlashcardsId !== null || generatingQuizId !== null}
                             className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white text-sm rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
                           >
@@ -847,7 +876,7 @@ export default function SourceDetailPage() {
                             )}
                           </button>
                           <button
-                            onClick={() => handleGenerateQuiz(chapter)}
+                            onClick={() => openGenerateModal(chapter.id, chapter.title, "quiz")}
                             disabled={generatingFlashcardsId !== null || generatingQuizId !== null}
                             className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
                           >
@@ -917,6 +946,95 @@ export default function SourceDetailPage() {
           </dl>
         </div>
       </div>
+
+      {/* Generation Modal */}
+      {showGenerateModal && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => setShowGenerateModal(null)}
+          />
+          {/* Modal */}
+          <div
+            ref={generateModalRef}
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl z-50 p-6 animate-fadeIn"
+          >
+            <h4 className="text-white font-semibold text-lg mb-2">
+              {showGenerateModal.type === "flashcards" ? "Genera Flashcard" : "Genera Quiz"}
+            </h4>
+            <p className="text-slate-400 text-sm mb-5">
+              {showGenerateModal.chapterTitle}
+            </p>
+
+            {/* Quantity */}
+            <div className="mb-5">
+              <label className="text-slate-400 text-sm mb-2 block">
+                {showGenerateModal.type === "flashcards" ? "Numero flashcard" : "Numero domande"}
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min="1"
+                  max="30"
+                  value={generateCount}
+                  onChange={(e) => setGenerateCount(Number(e.target.value))}
+                  className="flex-1 accent-blue-500 h-2"
+                />
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={generateCount}
+                  onChange={(e) => setGenerateCount(Math.min(30, Math.max(1, Number(e.target.value))))}
+                  className="w-20 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-center text-lg font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Difficulty */}
+            <div className="mb-6">
+              <label className="text-slate-400 text-sm mb-2 block">Difficoltà</label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: "easy", label: "Facile", emoji: "🟢", desc: "Definizioni base" },
+                  { value: "medium", label: "Media", emoji: "🟡", desc: "Comprensione" },
+                  { value: "hard", label: "Difficile", emoji: "🔴", desc: "Analisi critica" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setGenerateDifficulty(opt.value)}
+                    className={`p-3 rounded-xl border-2 transition-all ${
+                      generateDifficulty === opt.value
+                        ? "border-blue-500 bg-blue-500/20"
+                        : "border-slate-600 bg-slate-700/50 hover:border-slate-500"
+                    }`}
+                  >
+                    <div className="text-xl mb-1">{opt.emoji}</div>
+                    <div className="text-white text-sm font-medium">{opt.label}</div>
+                    <div className="text-slate-400 text-xs">{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowGenerateModal(null)}
+                className="flex-1 px-4 py-3 bg-slate-700 text-slate-300 rounded-xl hover:bg-slate-600 transition-colors font-medium"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleGenerate}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl hover:opacity-90 transition-opacity font-semibold"
+              >
+                Genera {generateCount}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (

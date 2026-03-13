@@ -238,3 +238,56 @@
 
 Aggiunto a MEMORY.md per garantire qualità frontend impeccabile in tutte le sessioni future.
 
+---
+
+## SPRINT CORRENTE (2026-03-13)
+
+### Bug Fix & UX Improvements
+
+- [x] Fix 500 error flashcard generation (mancavano env vars su frontend Railway)
+- [x] Aggiungere modal configurazione pre-generazione flashcard (Study page)
+- [x] Aggiungere selezione difficoltà (easy/medium/hard) nel modal
+- [x] Aggiungere modal configurazione pre-generazione flashcard (Source page)
+- [x] Aggiungere selezione difficoltà anche per Quiz
+- [x] Fix tooltip StatCard - allineamento per card a destra dello schermo
+- [x] Rimuovere opzione "Libro" da AddSourceModal (tenere solo PDF e Appunti)
+- [ ] Deploy su Railway (frontend) delle modifiche
+
+### Prossime Feature da Implementare
+
+#### Flashcard & Quiz (Completamento)
+- [ ] Test manuale generazione flashcard con difficoltà
+- [ ] Test manuale generazione quiz con difficoltà
+- [ ] Visualizzare difficoltà della flashcard durante lo studio
+
+#### Riassunti (Phase 2)
+- [ ] API backend `POST /api/summaries/generate`
+- [ ] Frontend UI generazione riassunti
+- [ ] Frontend visualizzazione riassunti (Markdown)
+- [ ] Selezione livello dettaglio (brief/medium/detailed)
+
+#### Mappe Concettuali (Phase 2)
+- [ ] API backend `POST /api/maps/generate`
+- [ ] Frontend UI generazione mappe
+- [ ] Integrazione Mermaid.js per rendering
+- [ ] Export come immagine
+
+#### Infografiche (Phase 2)
+- [ ] API backend `POST /api/infographics/generate`
+- [ ] Frontend UI generazione
+- [ ] Rendering HTML styled
+- [ ] Export PNG con html-to-image
+
+#### Presentazioni (Phase 2)
+- [ ] API backend `POST /api/presentations/generate`
+- [ ] Frontend UI generazione
+- [ ] Preview slides
+- [ ] Export .pptx con pptxgenjs
+
+### Miglioramenti UX Generali
+- [ ] Toast notifications per feedback operazioni
+- [ ] Conferma eliminazione più chiara
+- [ ] Loading skeleton per liste
+- [ ] Animazioni transizione pagine
+- [ ] Dark mode toggle (già dark-first)
+

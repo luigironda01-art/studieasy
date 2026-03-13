@@ -68,6 +68,7 @@ export default function StudyHubPage() {
   // Generation popover state
   const [showGeneratePopover, setShowGeneratePopover] = useState<GeneratePopover | null>(null);
   const [generateCount, setGenerateCount] = useState(10);
+  const [generateDifficulty, setGenerateDifficulty] = useState<"easy" | "medium" | "hard">("medium");
 
   // Delete modal state
   const [showDeleteModal, setShowDeleteModal] = useState<DeleteModal | null>(null);
@@ -211,7 +212,7 @@ export default function StudyHubPage() {
     }
   };
 
-  const handleGenerateFlashcards = async (chapterId: string, count: number) => {
+  const handleGenerateFlashcards = async (chapterId: string, count: number, difficulty: string) => {
     if (!user) return;
 
     setShowGeneratePopover(null);
@@ -226,7 +227,7 @@ export default function StudyHubPage() {
           chapterId,
           userId: user.id,
           numCards: count,
-          difficulty: "medium",
+          difficulty,
           language: "it",
         }),
       });
@@ -282,6 +283,7 @@ export default function StudyHubPage() {
 
   const openGeneratePopover = (chapterId: string, type: TabType) => {
     setGenerateCount(10);
+    setGenerateDifficulty("medium");
     setShowGeneratePopover({ chapterId, type });
   };
 
@@ -290,7 +292,7 @@ export default function StudyHubPage() {
     const { chapterId, type } = showGeneratePopover;
 
     if (type === "flashcards") {
-      handleGenerateFlashcards(chapterId, generateCount);
+      handleGenerateFlashcards(chapterId, generateCount, generateDifficulty);
     } else if (type === "quiz") {
       handleGenerateQuiz(chapterId, generateCount);
     }
@@ -758,26 +760,59 @@ export default function StudyHubPage() {
             className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl z-50 p-6 animate-fadeIn"
           >
             <h4 className="text-white font-semibold text-lg mb-4">
-              Quante {GENERATION_LABELS[showGeneratePopover.type]} vuoi generare?
+              Configura generazione {GENERATION_LABELS[showGeneratePopover.type]}
             </h4>
-            <div className="flex items-center gap-4 mb-6">
-              <input
-                type="range"
-                min="1"
-                max="30"
-                value={generateCount}
-                onChange={(e) => setGenerateCount(Number(e.target.value))}
-                className="flex-1 accent-blue-500 h-2"
-              />
-              <input
-                type="number"
-                min="1"
-                max="30"
-                value={generateCount}
-                onChange={(e) => setGenerateCount(Math.min(30, Math.max(1, Number(e.target.value))))}
-                className="w-20 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-center text-lg font-medium"
-              />
+
+            {/* Quantity */}
+            <div className="mb-5">
+              <label className="text-slate-400 text-sm mb-2 block">Quantità</label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min="1"
+                  max="30"
+                  value={generateCount}
+                  onChange={(e) => setGenerateCount(Number(e.target.value))}
+                  className="flex-1 accent-blue-500 h-2"
+                />
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={generateCount}
+                  onChange={(e) => setGenerateCount(Math.min(30, Math.max(1, Number(e.target.value))))}
+                  className="w-20 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-center text-lg font-medium"
+                />
+              </div>
             </div>
+
+            {/* Difficulty - only for flashcards */}
+            {showGeneratePopover.type === "flashcards" && (
+              <div className="mb-6">
+                <label className="text-slate-400 text-sm mb-2 block">Difficoltà</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: "easy", label: "Facile", emoji: "🟢", desc: "Definizioni base" },
+                    { value: "medium", label: "Media", emoji: "🟡", desc: "Comprensione" },
+                    { value: "hard", label: "Difficile", emoji: "🔴", desc: "Analisi critica" },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setGenerateDifficulty(opt.value)}
+                      className={`p-3 rounded-xl border-2 transition-all ${
+                        generateDifficulty === opt.value
+                          ? "border-blue-500 bg-blue-500/20"
+                          : "border-slate-600 bg-slate-700/50 hover:border-slate-500"
+                      }`}
+                    >
+                      <div className="text-xl mb-1">{opt.emoji}</div>
+                      <div className="text-white text-sm font-medium">{opt.label}</div>
+                      <div className="text-slate-400 text-xs">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={() => setShowGeneratePopover(null)}
