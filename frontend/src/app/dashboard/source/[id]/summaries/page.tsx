@@ -165,39 +165,94 @@ export default function SourceSummariesPage() {
 
   // Parse markdown text into structured blocks for PDF rendering
   const parseMarkdownBlocks = (text: string): PdfBlock[] => {
-    // Step 1: Clean artifacts
-    let cleaned = text
-      // Remove markdown code fences
-      .replace(/```(?:markdown|text)?\s*/gi, "")
-      // Remove horizontal rules (---, ___, ***)
-      .replace(/^[-_*]{3,}\s*$/gm, "")
-      // Fix spaced-out letters: "D I R I T T O" → "DIRITTO"
-      // Matches 3+ single uppercase/accented letters separated by single spaces
-      .replace(/(^|[\s(])((?:[A-ZÀ-ÚÄ-Ü]\s){2,}[A-ZÀ-ÚÄ-Ü])(?=[\s).,;:!?]|$)/gm, (_match, prefix, spaced) => {
-        // Handle double-space as word boundary within spaced text
-        const fixed = spaced.split(/\s{2,}/).map((word: string) => word.replace(/\s/g, "")).join(" ");
-        return prefix + fixed;
-      })
-      // Remove orphan markdown bold/italic markers
-      .replace(/\*{1,3}([^*\n]+)\*{1,3}/g, "$1");
+    // ═══ Step 1: Heavy pre-processing ═══
 
+    // 1a. Join multiline [IMMAGINE: ...] blocks into single lines
+    let cleaned = text.replace(/\[IMMAGINE:\s*([\s\S]*?)\]/gi, (_m, desc: string) => {
+      const single = desc.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+      return `[IMMAGINE: ${single}]`;
+    });
+
+    // 1b. Remove markdown code fences
+    cleaned = cleaned.replace(/```(?:markdown|text)?\s*/gi, "");
+
+    // 1c. Remove horizontal rules
+    cleaned = cleaned.replace(/^[-_*]{3,}\s*$/gm, "");
+
+    // 1d. Fix spaced-out text (BOTH upper and lowercase)
+    // Detects sequences of 6+ single chars separated by single spaces
+    // e.g. "m o n o s a c c a r i d i" or "D I R I T T O"
+    cleaned = cleaned.replace(
+      /((?:[a-zA-ZÀ-ÿ0-9()\-±²] ){5,}[a-zA-ZÀ-ÿ0-9()\-±²])/g,
+      (match) => {
+        // Double-space = word boundary, single-space = letter spacing
+        return match
+          .split(/  +/)
+          .map((w: string) => w.replace(/ /g, ""))
+          .join(" ");
+      }
+    );
+
+    // 1e. Clean %ª bullet markers → bullet
+    cleaned = cleaned.replace(/^%ª\s*/gm, "- ");
+
+    // 1f. Clean [FORMULA: x] → x
+    cleaned = cleaned.replace(/\[FORMULA:\s*(.*?)\]/gi, "$1");
+
+    // 1g. Remove orphan markdown bold/italic
+    cleaned = cleaned.replace(/\*{1,3}([^*\n]+)\*{1,3}/g, "$1");
+
+    // 1h. Remove standalone http URLs on their own line (artifact from PDF)
+    cleaned = cleaned.replace(/^https?:\/\/\S+$/gm, "");
+
+    // ═══ Step 2: Line-by-line parsing ═══
     const lines = cleaned.split("\n");
     const blocks: PdfBlock[] = [];
     let tableRows: string[][] = [];
     let inTable = false;
+    let skipIllustration = false;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
 
-      // Table rows (pipe-delimited)
-      if (line.match(/^\|.*\|$/)) {
-        // Skip separator rows like |---|---|
-        if (!line.match(/^\|[\s\-:|]+\|$/)) {
+      // Skip verbose "Illustrazione:" description blocks from Vision AI
+      if (skipIllustration) {
+        if (
+          !line ||
+          line.startsWith("[") ||
+          line.startsWith("#") ||
+          line.startsWith("-") ||
+          line.startsWith("•")
+        ) {
+          skipIllustration = false;
+          // Fall through to process this line normally
+        } else {
+          continue; // Skip — part of illustration description
+        }
+      }
+
+      // Detect "Illustrazione:" standalone descriptions — skip entirely
+      if (
+        line.startsWith("Illustrazione:") ||
+        line.startsWith("Illustrazione :") ||
+        line.startsWith("Figure modificate da")
+      ) {
+        skipIllustration = true;
+        continue;
+      }
+
+      // Table detection: lines with 2+ pipe chars (with OR without leading |)
+      const pipeCount = (line.match(/\|/g) || []).length;
+      if (pipeCount >= 2) {
+        // Skip separator rows like |---|---|--- or --- | --- | ---
+        if (!line.match(/^[\s|:\-]+$/)) {
           const cells = line
             .split("|")
-            .filter((c) => c.trim() !== "")
-            .map((c) => c.trim());
-          tableRows.push(cells);
+            .map((c) => c.trim())
+            .filter((c) => c !== "");
+          if (cells.length >= 2) {
+            tableRows.push(cells);
+          }
         }
         inTable = true;
         continue;
@@ -218,10 +273,21 @@ export default function SourceSummariesPage() {
         continue;
       }
 
-      // Image tags: [IMMAGINE: description]
+      // [IMMAGINE: description] tags
       const imageMatch = line.match(/\[IMMAGINE:\s*(.*?)\]/i);
       if (imageMatch) {
-        blocks.push({ type: "image", text: imageMatch[1] });
+        // Extract just the first sentence as a brief description
+        const fullDesc = imageMatch[1];
+        const brief =
+          fullDesc.length > 100
+            ? fullDesc.substring(0, 100).replace(/\s\S*$/, "") + "..."
+            : fullDesc;
+        blocks.push({ type: "image", text: brief });
+        continue;
+      }
+
+      // Skip lines that are just "[IMMAGINE:" without closing bracket (multiline start)
+      if (line.match(/^\[IMMAGINE:/i)) {
         continue;
       }
 
@@ -233,35 +299,31 @@ export default function SourceSummariesPage() {
       } else if (line.startsWith("# ")) {
         blocks.push({ type: "h1", text: line.replace(/^#\s+/, "") });
       }
-      // Bullet lists
-      else if (line.match(/^[-*]\s/)) {
-        blocks.push({ type: "list", text: line.replace(/^[-*]\s+/, "") });
+      // Bullet lists (-, *, •)
+      else if (line.match(/^[-*•]\s/)) {
+        blocks.push({ type: "list", text: line.replace(/^[-*•]\s+/, "") });
       }
       // Numbered lists
       else if (line.match(/^\d+[.)]\s/)) {
         blocks.push({ type: "list", text: line });
       }
-      // Plain text heading detection: ALL CAPS, short, no punctuation ending
+      // Plain text heading: ALL CAPS, short, has letters, no ending punctuation
       else if (
         line.length > 3 &&
         line.length < 80 &&
         line === line.toUpperCase() &&
         /[A-ZÀ-Ú]/.test(line) &&
-        !line.endsWith(".") &&
-        !line.endsWith(",") &&
-        !line.endsWith(";")
+        !/[.;,]$/.test(line)
       ) {
         blocks.push({ type: "h1", text: line });
       }
-      // Plain text heading detection: short line after blank, no ending punctuation, followed by longer text
+      // Plain text heading: short line after blank, no ending punctuation, next line longer
       else if (
         line.length > 3 &&
         line.length < 70 &&
-        !line.endsWith(".") &&
-        !line.endsWith(",") &&
-        !line.endsWith(";") &&
-        !line.endsWith(":") &&
-        (blocks.length === 0 || blocks[blocks.length - 1].type === "empty") &&
+        !/[.;,:)']$/.test(line) &&
+        (blocks.length === 0 ||
+          blocks[blocks.length - 1].type === "empty") &&
         i + 1 < lines.length &&
         lines[i + 1].trim().length > line.length
       ) {
@@ -516,10 +578,9 @@ export default function SourceSummariesPage() {
             const imgBase64 = imageMap[block.text];
             if (imgBase64) {
               // Embed generated image
-              const imgWidth = maxWidth * 0.8;
-              const imgHeight = imgWidth * 0.6; // 4:3 aspect ratio
-              ensureSpace(imgHeight + 16);
-
+              const imgWidth = maxWidth * 0.7;
+              const imgHeight = imgWidth * 0.6;
+              ensureSpace(imgHeight + 12);
               const imgX = margin + (maxWidth - imgWidth) / 2;
               try {
                 doc.addImage(
@@ -530,61 +591,34 @@ export default function SourceSummariesPage() {
                   imgWidth,
                   imgHeight
                 );
-                y += imgHeight + 3;
-              } catch {
-                // If image embedding fails, fall through to caption-only
-                doc.setFontSize(9);
+                y += imgHeight + 2;
+                // Brief caption under image
+                doc.setFontSize(8);
                 doc.setFont("helvetica", "italic");
-                doc.setTextColor(100);
-                doc.text(
-                  `[Illustrazione: ${block.text}]`,
-                  margin,
-                  y
-                );
+                doc.setTextColor(120);
+                doc.text(block.text, pageWidth / 2, y, {
+                  align: "center",
+                });
                 y += 6;
+                doc.setTextColor(0);
+              } catch {
+                // Skip if embedding fails
+                y += 2;
               }
             } else {
-              // Placeholder box with description
-              ensureSpace(20);
-              const boxHeight = 16;
-              doc.setDrawColor(150, 150, 180);
-              doc.setLineWidth(0.3);
-              doc.setFillColor(245, 245, 250);
-              doc.roundedRect(
-                margin,
-                y,
-                maxWidth,
-                boxHeight,
-                2,
-                2,
-                "FD"
-              );
-              doc.setFontSize(9);
+              // No image generated — just a brief italic note
+              ensureSpace(8);
+              doc.setFontSize(8.5);
               doc.setFont("helvetica", "italic");
-              doc.setTextColor(80, 80, 100);
-              const captionLines = doc.splitTextToSize(
-                `Illustrazione: ${block.text}`,
-                maxWidth - 10
+              doc.setTextColor(130);
+              doc.text(
+                `[Vedi figura: ${block.text}]`,
+                margin,
+                y
               );
-              doc.text(captionLines[0], margin + 5, y + boxHeight / 2 + 1);
-              y += boxHeight + 5;
+              y += 6;
+              doc.setTextColor(0);
             }
-
-            // Caption text
-            doc.setFontSize(8.5);
-            doc.setFont("helvetica", "italic");
-            doc.setTextColor(100, 100, 120);
-            const captionText = doc.splitTextToSize(
-              block.text,
-              maxWidth - 20
-            );
-            for (const ct of captionText) {
-              ensureSpace(5);
-              doc.text(ct, pageWidth / 2, y, { align: "center" });
-              y += 4.5;
-            }
-            y += 4;
-            doc.setTextColor(0);
             break;
           }
 
