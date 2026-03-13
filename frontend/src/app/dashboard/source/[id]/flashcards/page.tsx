@@ -14,9 +14,19 @@ interface FlashcardWithChapter extends Flashcard {
 interface BatchGroup {
   batchId: string;
   date: string;
-  difficulty: string;
   chapterTitle: string;
   cards: FlashcardWithChapter[];
+}
+
+interface DifficultyGroup {
+  key: string;
+  label: string;
+  icon: string;
+  color: string;
+  borderColor: string;
+  bgColor: string;
+  batches: BatchGroup[];
+  totalCards: number;
 }
 
 export default function SourceFlashcardsPage() {
@@ -33,11 +43,11 @@ export default function SourceFlashcardsPage() {
   const [showAnswer, setShowAnswer] = useState(false);
 
   // Filters
-  const [filterDifficulty, setFilterDifficulty] = useState<string>("all");
   const [filterChapter, setFilterChapter] = useState<string>("all");
   const [filterDate, setFilterDate] = useState<string>("all");
 
-  // Collapsed batches
+  // Collapsed state: difficulty level and individual batches
+  const [collapsedDifficulties, setCollapsedDifficulties] = useState<Set<string>>(new Set());
   const [collapsedBatches, setCollapsedBatches] = useState<Set<string>>(new Set());
 
   // Generate modal
@@ -175,7 +185,6 @@ export default function SourceFlashcardsPage() {
   // Apply filters
   const filteredCards = useMemo(() => {
     return flashcards.filter(card => {
-      if (filterDifficulty !== "all" && card.difficulty !== filterDifficulty) return false;
       if (filterChapter !== "all" && card.chapter_id !== filterChapter) return false;
       if (filterDate !== "all") {
         const cardDate = card.created_at ? new Date(card.created_at).toLocaleDateString("it-IT") : "";
@@ -183,83 +192,98 @@ export default function SourceFlashcardsPage() {
       }
       return true;
     });
-  }, [flashcards, filterDifficulty, filterChapter, filterDate]);
+  }, [flashcards, filterChapter, filterDate]);
 
-  // Group filtered cards by batch
-  const batches = useMemo(() => {
-    const batchMap = new Map<string, FlashcardWithChapter[]>();
+  // Two-level grouping: Difficulty -> Batches
+  const difficultyGroups = useMemo(() => {
+    const diffConfigs = [
+      { key: "easy", label: "Facile", icon: "🟢", color: "green", borderColor: "border-green-500/30", bgColor: "bg-green-500/10" },
+      { key: "medium", label: "Media", icon: "🟡", color: "amber", borderColor: "border-amber-500/30", bgColor: "bg-amber-500/10" },
+      { key: "hard", label: "Difficile", icon: "🔴", color: "red", borderColor: "border-red-500/30", bgColor: "bg-red-500/10" },
+    ];
 
-    filteredCards.forEach(card => {
-      const key = (card as any).batch_id || `single-${card.id}`;
-      if (!batchMap.has(key)) {
-        batchMap.set(key, []);
-      }
-      batchMap.get(key)!.push(card);
-    });
+    const groups: DifficultyGroup[] = [];
 
-    const groups: BatchGroup[] = [];
-    batchMap.forEach((cards, batchId) => {
-      const firstCard = cards[0];
-      const date = firstCard.created_at
-        ? new Date(firstCard.created_at).toLocaleDateString("it-IT", {
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "Data sconosciuta";
+    for (const config of diffConfigs) {
+      const cardsForDifficulty = filteredCards.filter(c => c.difficulty === config.key);
+      if (cardsForDifficulty.length === 0) continue;
 
-      const difficulty = firstCard.difficulty || "medium";
-      const chapterTitle = firstCard.chapter?.title || "Capitolo";
+      // Group by batch_id within this difficulty
+      const batchMap = new Map<string, FlashcardWithChapter[]>();
+      cardsForDifficulty.forEach(card => {
+        const batchKey = (card as any).batch_id || `single-${card.id}`;
+        if (!batchMap.has(batchKey)) {
+          batchMap.set(batchKey, []);
+        }
+        batchMap.get(batchKey)!.push(card);
+      });
 
-      groups.push({ batchId, date, difficulty, chapterTitle, cards });
-    });
+      const batches: BatchGroup[] = [];
+      batchMap.forEach((cards, batchId) => {
+        const firstCard = cards[0];
+        const date = firstCard.created_at
+          ? new Date(firstCard.created_at).toLocaleDateString("it-IT", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "Data sconosciuta";
+        const chapterTitle = firstCard.chapter?.title || "Capitolo";
+        batches.push({ batchId, date, chapterTitle, cards });
+      });
 
-    // Sort by date (newest first)
-    groups.sort((a, b) => {
-      const dateA = a.cards[0]?.created_at || "";
-      const dateB = b.cards[0]?.created_at || "";
-      return dateB.localeCompare(dateA);
-    });
+      // Sort batches by date (newest first)
+      batches.sort((a, b) => {
+        const dateA = a.cards[0]?.created_at || "";
+        const dateB = b.cards[0]?.created_at || "";
+        return dateB.localeCompare(dateA);
+      });
+
+      groups.push({
+        ...config,
+        batches,
+        totalCards: cardsForDifficulty.length,
+      });
+    }
 
     return groups;
   }, [filteredCards]);
 
+  const toggleDifficulty = (key: string) => {
+    setCollapsedDifficulties(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const toggleBatch = (batchId: string) => {
     setCollapsedBatches(prev => {
       const next = new Set(prev);
-      if (next.has(batchId)) {
-        next.delete(batchId);
-      } else {
-        next.add(batchId);
-      }
+      if (next.has(batchId)) next.delete(batchId);
+      else next.add(batchId);
       return next;
     });
   };
 
   const collapseAll = () => {
-    setCollapsedBatches(new Set(batches.map(b => b.batchId)));
+    setCollapsedDifficulties(new Set(difficultyGroups.map(g => g.key)));
+    const allBatchIds = difficultyGroups.flatMap(g => g.batches.map(b => b.batchId));
+    setCollapsedBatches(new Set(allBatchIds));
   };
 
   const expandAll = () => {
+    setCollapsedDifficulties(new Set());
     setCollapsedBatches(new Set());
   };
 
   const difficultyLabel = (d: string) =>
     d === "easy" ? "Facile" : d === "hard" ? "Difficile" : "Media";
 
-  const difficultyStyle = (d: string) =>
-    d === "easy"
-      ? "bg-green-500/20 text-green-400 border-green-500/30"
-      : d === "hard"
-      ? "bg-red-500/20 text-red-400 border-red-500/30"
-      : "bg-amber-500/20 text-amber-400 border-amber-500/30";
-
-  const difficultyIcon = (d: string) =>
-    d === "easy" ? "🟢" : d === "hard" ? "🔴" : "🟡";
-
-  const activeFiltersCount = [filterDifficulty, filterChapter, filterDate].filter(f => f !== "all").length;
+  const activeFiltersCount = [filterChapter, filterDate].filter(f => f !== "all").length;
 
   if (authLoading || loading) {
     return (
@@ -336,10 +360,10 @@ export default function SourceFlashcardsPage() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {activeFiltersCount > 0 && (
               <button
-                onClick={() => { setFilterDifficulty("all"); setFilterChapter("all"); setFilterDate("all"); }}
+                onClick={() => { setFilterChapter("all"); setFilterDate("all"); }}
                 className="text-xs text-slate-400 hover:text-white transition-colors"
               >
                 Resetta filtri
@@ -362,18 +386,6 @@ export default function SourceFlashcardsPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          {/* Difficulty filter */}
-          <select
-            value={filterDifficulty}
-            onChange={(e) => setFilterDifficulty(e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="all">Tutte le difficolta</option>
-            <option value="easy">🟢 Facile ({flashcards.filter(f => f.difficulty === "easy").length})</option>
-            <option value="medium">🟡 Media ({flashcards.filter(f => f.difficulty === "medium").length})</option>
-            <option value="hard">🔴 Difficile ({flashcards.filter(f => f.difficulty === "hard").length})</option>
-          </select>
-
           {/* Chapter filter */}
           <select
             value={filterChapter}
@@ -404,7 +416,6 @@ export default function SourceFlashcardsPage() {
           </select>
         </div>
 
-        {/* Active filter count info */}
         {filteredCards.length !== flashcards.length && (
           <div className="mt-3 text-sm text-slate-400">
             Mostrando {filteredCards.length} di {flashcards.length} flashcard
@@ -412,7 +423,7 @@ export default function SourceFlashcardsPage() {
         )}
       </div>
 
-      {/* Flashcards by Batch */}
+      {/* Two-level: Difficulty -> Batches */}
       {filteredCards.length === 0 ? (
         <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
           <div className="w-20 h-20 bg-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -439,7 +450,7 @@ export default function SourceFlashcardsPage() {
           )}
           {flashcards.length > 0 && activeFiltersCount > 0 && (
             <button
-              onClick={() => { setFilterDifficulty("all"); setFilterChapter("all"); setFilterDate("all"); }}
+              onClick={() => { setFilterChapter("all"); setFilterDate("all"); }}
               className="px-6 py-3 bg-slate-700 text-white rounded-xl font-semibold hover:bg-slate-600 transition-colors"
             >
               Resetta filtri
@@ -448,23 +459,22 @@ export default function SourceFlashcardsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {batches.map((batch) => {
-            const isCollapsed = collapsedBatches.has(batch.batchId);
+          {difficultyGroups.map((group) => {
+            const isDiffCollapsed = collapsedDifficulties.has(group.key);
 
             return (
               <div
-                key={batch.batchId}
-                className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden"
+                key={group.key}
+                className={`bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden`}
               >
-                {/* Batch Header - Clickable */}
+                {/* Level 1: Difficulty Header */}
                 <button
-                  onClick={() => toggleBatch(batch.batchId)}
-                  className="w-full px-5 py-4 flex items-center gap-4 hover:bg-white/5 transition-colors"
+                  onClick={() => toggleDifficulty(group.key)}
+                  className={`w-full px-5 py-4 flex items-center gap-4 hover:bg-white/5 transition-colors`}
                 >
-                  {/* Collapse arrow */}
                   <svg
                     className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                      isCollapsed ? "" : "rotate-90"
+                      isDiffCollapsed ? "" : "rotate-90"
                     }`}
                     fill="none"
                     stroke="currentColor"
@@ -473,53 +483,87 @@ export default function SourceFlashcardsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
 
-                  {/* Difficulty icon */}
-                  <span className="text-lg">{difficultyIcon(batch.difficulty)}</span>
+                  <span className="text-xl">{group.icon}</span>
 
-                  {/* Batch info */}
                   <div className="flex-1 text-left">
-                    <div className="flex items-center gap-3">
-                      <span className="text-white font-medium">
-                        {batch.cards.length} flashcard
-                      </span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${difficultyStyle(batch.difficulty)}`}>
-                        {difficultyLabel(batch.difficulty)}
-                      </span>
-                    </div>
-                    <div className="text-slate-400 text-xs mt-0.5 flex items-center gap-2">
-                      <span>{batch.chapterTitle}</span>
-                      <span className="text-slate-600">·</span>
-                      <span>{batch.date}</span>
-                    </div>
+                    <span className="text-white font-semibold text-lg">{group.label}</span>
+                    <span className="text-slate-400 text-sm ml-3">
+                      {group.totalCards} carte · {group.batches.length} {group.batches.length === 1 ? "generazione" : "generazioni"}
+                    </span>
                   </div>
 
-                  {/* Card count badge */}
-                  <span className="bg-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded-lg font-medium">
-                    {batch.cards.length}
+                  <span className={`text-sm px-3 py-1 rounded-lg font-bold ${group.bgColor} ${group.borderColor} border`}>
+                    {group.totalCards}
                   </span>
                 </button>
 
-                {/* Batch Cards - Collapsible */}
-                {!isCollapsed && (
-                  <div className="px-5 pb-5">
-                    <div className="border-t border-white/10 pt-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {batch.cards.map((card) => (
-                          <div
-                            key={card.id}
-                            onClick={() => { setViewingCard(card); setShowAnswer(false); }}
-                            className="bg-slate-800/80 border border-slate-700 rounded-xl p-4 cursor-pointer hover:border-purple-500/50 hover:bg-slate-800 transition-all group"
+                {/* Level 2: Batches inside difficulty */}
+                {!isDiffCollapsed && (
+                  <div className="px-4 pb-4 space-y-2">
+                    {group.batches.map((batch) => {
+                      const isBatchCollapsed = collapsedBatches.has(batch.batchId);
+
+                      return (
+                        <div
+                          key={batch.batchId}
+                          className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden"
+                        >
+                          {/* Batch Header */}
+                          <button
+                            onClick={() => toggleBatch(batch.batchId)}
+                            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-700/30 transition-colors"
                           >
-                            <p className="text-white font-medium text-sm line-clamp-3 group-hover:text-purple-300 transition-colors">
-                              {card.front}
-                            </p>
-                            <div className="mt-3 pt-2 border-t border-slate-700/50 text-right">
-                              <span className="text-slate-500 text-xs">Clicca per vedere</span>
+                            <svg
+                              className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                                isBatchCollapsed ? "" : "rotate-90"
+                              }`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+
+                            <div className="flex-1 text-left">
+                              <span className="text-white text-sm font-medium">
+                                {batch.cards.length} flashcard
+                              </span>
+                              <span className="text-slate-500 text-xs ml-2">
+                                · {batch.chapterTitle} · {batch.date}
+                              </span>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+
+                            <span className="bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded-md font-medium">
+                              {batch.cards.length}
+                            </span>
+                          </button>
+
+                          {/* Batch Cards */}
+                          {!isBatchCollapsed && (
+                            <div className="px-4 pb-4">
+                              <div className="border-t border-slate-700/50 pt-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {batch.cards.map((card) => (
+                                    <div
+                                      key={card.id}
+                                      onClick={() => { setViewingCard(card); setShowAnswer(false); }}
+                                      className="bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer hover:border-purple-500/50 hover:bg-slate-750 transition-all group"
+                                    >
+                                      <p className="text-white font-medium text-sm line-clamp-3 group-hover:text-purple-300 transition-colors">
+                                        {card.front}
+                                      </p>
+                                      <div className="mt-3 pt-2 border-t border-slate-700/50 text-right">
+                                        <span className="text-slate-500 text-xs">Clicca per vedere</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -538,7 +582,13 @@ export default function SourceFlashcardsPage() {
                 <span className="text-purple-400 text-sm font-medium">
                   {viewingCard.chapter?.title}
                 </span>
-                <span className={`text-xs px-2 py-0.5 rounded-full border ${difficultyStyle(viewingCard.difficulty || "medium")}`}>
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                  viewingCard.difficulty === "easy"
+                    ? "bg-green-500/20 text-green-400 border-green-500/30"
+                    : viewingCard.difficulty === "hard"
+                    ? "bg-red-500/20 text-red-400 border-red-500/30"
+                    : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                }`}>
                   {difficultyLabel(viewingCard.difficulty || "medium")}
                 </span>
               </div>
