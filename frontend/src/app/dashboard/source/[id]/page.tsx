@@ -25,6 +25,7 @@ export default function SourceDetailPage() {
   // Content viewer modal state
   const [viewingChapter, setViewingChapter] = useState<Chapter | null>(null);
   const [processingChapterId, setProcessingChapterId] = useState<string | null>(null);
+  const [processingProgress, setProcessingProgress] = useState<number>(0);
   const [generatingFlashcardsId, setGeneratingFlashcardsId] = useState<string | null>(null);
   const [generatingQuizId, setGeneratingQuizId] = useState<string | null>(null);
   const [flashcardCounts, setFlashcardCounts] = useState<Record<string, number>>({});
@@ -159,6 +160,40 @@ export default function SourceDetailPage() {
       fetchQuizCounts();
     }
   }, [chapters, user]);
+
+  // Poll for processing progress
+  useEffect(() => {
+    if (!processingChapterId) return;
+
+    const pollProgress = async () => {
+      try {
+        const { data: chapter } = await supabase
+          .from("chapters")
+          .select("processing_status, processing_progress")
+          .eq("id", processingChapterId)
+          .single();
+
+        if (chapter) {
+          setProcessingProgress(chapter.processing_progress || 0);
+
+          // Stop polling when completed or errored
+          if (chapter.processing_status === "completed" || chapter.processing_status === "error") {
+            setProcessingChapterId(null);
+            setProcessingProgress(0);
+            await fetchSourceDetails();
+          }
+        }
+      } catch (err) {
+        console.error("Error polling progress:", err);
+      }
+    };
+
+    // Poll every 1 second
+    const interval = setInterval(pollProgress, 1000);
+    pollProgress(); // Initial poll
+
+    return () => clearInterval(interval);
+  }, [processingChapterId]);
 
   // Fetch quizzes for a specific chapter
   const fetchChapterQuizzes = async (chapterId: string) => {
@@ -582,13 +617,21 @@ export default function SourceDetailPage() {
     }
   };
 
-  const getStatusBadge = (status: string, isProcessing: boolean) => {
-    if (isProcessing) {
+  const getStatusBadge = (status: string, isProcessing: boolean, chapterId: string) => {
+    if (isProcessing || (status === "processing" && processingChapterId === chapterId)) {
+      const progress = processingProgress;
       return (
-        <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-full flex items-center gap-1">
-          <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
-          Elaborazione...
-        </span>
+        <div className="flex items-center gap-3 min-w-[200px]">
+          <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-blue-400 text-sm font-medium whitespace-nowrap">
+            {progress}%
+          </span>
+        </div>
       );
     }
     switch (status) {
@@ -784,7 +827,7 @@ export default function SourceDetailPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {getStatusBadge(chapter.processing_status, processingChapterId === chapter.id)}
+                      {getStatusBadge(chapter.processing_status, processingChapterId === chapter.id, chapter.id)}
 
                       {chapter.processing_status === "pending" && (
                         chapter.file_url ? (
@@ -946,16 +989,6 @@ export default function SourceDetailPage() {
               <dd className="text-white capitalize">{source.source_type}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-slate-400">Capitoli</dt>
-              <dd className="text-white">{chapters.length}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-400">Elaborati</dt>
-              <dd className="text-white">
-                {chapters.filter(c => c.processing_status === "completed").length} / {chapters.length}
-              </dd>
-            </div>
-            <div className="flex justify-between">
               <dt className="text-slate-400">Creato</dt>
               <dd className="text-white">
                 {new Date(source.created_at).toLocaleDateString("it-IT", {
@@ -966,6 +999,140 @@ export default function SourceDetailPage() {
               </dd>
             </div>
           </dl>
+
+          {/* Extraction details - only show when processing is completed */}
+          {chapters.some(c => c.processing_status === "completed") && (
+            <>
+              <hr className="border-slate-700 my-4" />
+              <h4 className="text-white font-medium mb-3 flex items-center gap-2">
+                <span className="text-green-400">✓</span>
+                Elaborazione completata
+              </h4>
+              <dl className="space-y-3 text-sm">
+                {/* Total pages */}
+                {(() => {
+                  const totalPages = chapters
+                    .filter(c => c.processing_status === "completed")
+                    .reduce((sum, c) => sum + (c.page_count || 0), 0);
+                  return totalPages > 0 && (
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Pagine rilevate</dt>
+                      <dd className="text-white font-medium">{totalPages}</dd>
+                    </div>
+                  );
+                })()}
+
+                {/* Total characters extracted */}
+                {(() => {
+                  const totalChars = chapters
+                    .filter(c => c.processing_status === "completed")
+                    .reduce((sum, c) => sum + (c.chars_extracted || 0), 0);
+                  return totalChars > 0 && (
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Caratteri estratti</dt>
+                      <dd className="text-white font-medium">
+                        {totalChars > 1000
+                          ? `${(totalChars / 1000).toFixed(1)}k`
+                          : totalChars}
+                      </dd>
+                    </div>
+                  );
+                })()}
+
+                {/* Extraction method breakdown */}
+                {(() => {
+                  const completedChapters = chapters.filter(c => c.processing_status === "completed");
+                  const methods = {
+                    text: completedChapters.filter(c => c.extraction_method === "text").length,
+                    vision: completedChapters.filter(c => c.extraction_method === "vision").length,
+                    hybrid: completedChapters.filter(c => c.extraction_method === "hybrid").length,
+                  };
+
+                  return (
+                    <div className="flex justify-between items-start">
+                      <dt className="text-slate-400">Metodo estrazione</dt>
+                      <dd className="text-right">
+                        {methods.text > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 text-slate-300 rounded text-xs mr-1">
+                            📝 Testo: {methods.text}
+                          </span>
+                        )}
+                        {methods.vision > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs mr-1">
+                            👁 Vision AI: {methods.vision}
+                          </span>
+                        )}
+                        {methods.hybrid > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
+                            🔀 Ibrido: {methods.hybrid}
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  );
+                })()}
+
+                {/* Average extraction quality */}
+                {(() => {
+                  const completedWithQuality = chapters.filter(
+                    c => c.processing_status === "completed" && c.extraction_quality !== null
+                  );
+                  if (completedWithQuality.length === 0) return null;
+
+                  const avgQuality = Math.round(
+                    completedWithQuality.reduce((sum, c) => sum + (c.extraction_quality || 0), 0) /
+                    completedWithQuality.length
+                  );
+
+                  let qualityColor = "text-green-400";
+                  let qualityLabel = "Eccellente";
+                  if (avgQuality < 50) {
+                    qualityColor = "text-red-400";
+                    qualityLabel = "Parziale";
+                  } else if (avgQuality < 80) {
+                    qualityColor = "text-amber-400";
+                    qualityLabel = "Buono";
+                  }
+
+                  return (
+                    <div className="flex justify-between">
+                      <dt className="text-slate-400">Qualità estrazione</dt>
+                      <dd className={`font-medium ${qualityColor}`}>
+                        {avgQuality}% - {qualityLabel}
+                      </dd>
+                    </div>
+                  );
+                })()}
+
+                {/* Extraction notes/warnings */}
+                {(() => {
+                  const notes = chapters
+                    .filter(c => c.processing_status === "completed" && c.extraction_notes)
+                    .map(c => c.extraction_notes);
+
+                  return notes.length > 0 && (
+                    <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <p className="text-amber-400 text-xs font-medium mb-1">⚠️ Note estrazione:</p>
+                      {notes.map((note, i) => (
+                        <p key={i} className="text-amber-300/80 text-xs">{note}</p>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </dl>
+            </>
+          )}
+
+          {/* Processing in progress indicator */}
+          {chapters.some(c => c.processing_status === "processing") && (
+            <>
+              <hr className="border-slate-700 my-4" />
+              <div className="flex items-center gap-2 text-blue-400">
+                <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                <span className="text-sm">Elaborazione in corso...</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

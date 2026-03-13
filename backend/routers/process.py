@@ -65,11 +65,25 @@ async def process_pdf(request: ProcessRequest):
     page_count = 0
     chars_extracted = 0
 
+    def update_progress(progress: int, message: str = ""):
+        """Update processing progress in database"""
+        try:
+            supabase.table("chapters").update({
+                "processing_progress": progress
+            }).eq("id", request.chapter_id).execute()
+            if message:
+                print(f"[{progress}%] {message}")
+        except Exception as e:
+            print(f"Failed to update progress: {e}")
+
     try:
         # Update status to processing
         supabase.table("chapters").update({
-            "processing_status": "processing"
+            "processing_status": "processing",
+            "processing_progress": 5
         }).eq("id", request.chapter_id).execute()
+
+        update_progress(10, "Scaricamento PDF...")
 
         # Fetch PDF from URL
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -77,6 +91,8 @@ async def process_pdf(request: ProcessRequest):
             if response.status_code != 200:
                 raise HTTPException(status_code=400, detail="Failed to fetch PDF")
             pdf_bytes = response.content
+
+        update_progress(20, "PDF scaricato, iniziando estrazione...")
 
         # Initialize OpenRouter service
         openrouter = get_openrouter_service()
@@ -90,10 +106,16 @@ async def process_pdf(request: ProcessRequest):
             page_count = len(pdf_reader.pages)
             print(f"PDF has {page_count} pages")
 
-            for page in pdf_reader.pages:
+            update_progress(25, f"Rilevate {page_count} pagine, estrazione testo...")
+
+            for i, page in enumerate(pdf_reader.pages):
                 page_text = page.extract_text()
                 if page_text:
                     extracted_text += page_text + "\n\n"
+                # Update progress per page (25-50%)
+                page_progress = 25 + int((i + 1) / page_count * 25)
+                if i % 5 == 0 or i == page_count - 1:
+                    update_progress(page_progress, f"Pagina {i+1}/{page_count}")
 
             chars_extracted = len(extracted_text)
 
@@ -112,15 +134,19 @@ async def process_pdf(request: ProcessRequest):
             use_vision = True
             extraction_notes.append(f"Errore estrazione testo: {str(pdf_error)[:100]}")
 
+        update_progress(50, "Estrazione testo completata")
+
         # Fallback to vision processing for image-based PDFs
         if use_vision and PDF2IMAGE_AVAILABLE and page_count <= 20:
             try:
                 print("Using Vision AI for image-based PDF...")
                 extraction_method = "vision"
+                update_progress(55, "Avviando Vision AI...")
 
                 # Convert PDF to images
                 images = convert_from_bytes(pdf_bytes, dpi=150, fmt='png')
                 print(f"Converted {len(images)} pages to images")
+                update_progress(60, f"Convertite {len(images)} pagine in immagini")
 
                 # Convert images to base64
                 images_base64 = []
@@ -130,10 +156,12 @@ async def process_pdf(request: ProcessRequest):
                     img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
                     images_base64.append(img_b64)
 
+                update_progress(65, "Elaborazione con Vision AI...")
                 # Process with vision AI
                 vision_text = await openrouter.process_document_with_vision(images_base64)
                 vision_chars = len(vision_text)
                 print(f"Vision extracted {vision_chars} chars")
+                update_progress(70, f"Vision AI: estratti {vision_chars} caratteri")
 
                 # Use vision text if better than text extraction
                 if vision_chars > chars_extracted:
@@ -178,8 +206,12 @@ async def process_pdf(request: ProcessRequest):
         # Cap quality at 100
         extraction_quality = min(100, max(0, extraction_quality))
 
+        update_progress(75, "Analisi AI del contenuto...")
+
         # Use Claude via OpenRouter to create structured analysis
         processed_text = await openrouter.enhance_processed_text(extracted_text)
+
+        update_progress(90, "Salvataggio risultati...")
 
         # Prepare notes string
         notes_string = " | ".join(extraction_notes) if extraction_notes else None
@@ -190,6 +222,7 @@ async def process_pdf(request: ProcessRequest):
             "raw_text": extracted_text,
             "processed_text": processed_text,
             "processing_status": "completed",
+            "processing_progress": 100,
             "extraction_quality": extraction_quality,
             "extraction_method": extraction_method,
             "extraction_notes": notes_string,
@@ -199,6 +232,7 @@ async def process_pdf(request: ProcessRequest):
         update_result = supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
         print(f"Update result: {update_result}")
         print(f"Extraction quality: {extraction_quality}%, method: {extraction_method}")
+        print(f"[100%] Elaborazione completata!")
 
         return ProcessResponse(
             success=True,
@@ -211,6 +245,7 @@ async def process_pdf(request: ProcessRequest):
         try:
             supabase.table("chapters").update({
                 "processing_status": "error",
+                "processing_progress": 0,
                 "extraction_quality": 0,
                 "extraction_method": "failed",
                 "extraction_notes": f"Errore critico: {str(e)[:200]}",

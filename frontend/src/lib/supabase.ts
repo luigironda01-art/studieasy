@@ -67,6 +67,7 @@ export interface Chapter {
   extraction_method: "text" | "vision" | "hybrid" | "failed" | null;
   extraction_notes: string | null;
   chars_extracted: number | null;
+  processing_progress: number;
   created_at: string;
   updated_at: string;
 }
