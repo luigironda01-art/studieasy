@@ -57,6 +57,14 @@ class ProcessResponse(BaseModel):
 @router.post("/", response_model=ProcessResponse)
 async def process_pdf(request: ProcessRequest):
     """Process a PDF: extract text and analyze with AI"""
+
+    # Quality tracking variables
+    extraction_quality = 0
+    extraction_method = "text"
+    extraction_notes = []
+    page_count = 0
+    chars_extracted = 0
+
     try:
         # Update status to processing
         supabase.table("chapters").update({
@@ -75,7 +83,6 @@ async def process_pdf(request: ProcessRequest):
 
         # Extract text from PDF using PyPDF2 (primary method)
         extracted_text = ""
-        page_count = 0
         use_vision = False
 
         try:
@@ -88,21 +95,29 @@ async def process_pdf(request: ProcessRequest):
                 if page_text:
                     extracted_text += page_text + "\n\n"
 
+            chars_extracted = len(extracted_text)
+
             # Check if text extraction was successful
             # If less than 100 chars per page on average, likely image-based PDF
-            avg_chars_per_page = len(extracted_text) / max(page_count, 1)
+            avg_chars_per_page = chars_extracted / max(page_count, 1)
             if avg_chars_per_page < 100:
                 print(f"Low text density ({avg_chars_per_page:.0f} chars/page) - trying vision")
                 use_vision = True
+                extraction_notes.append(f"Bassa densità testo ({avg_chars_per_page:.0f} char/pagina)")
+            else:
+                extraction_quality = 100
 
         except Exception as pdf_error:
             print(f"PDF extraction error: {pdf_error}")
             use_vision = True
+            extraction_notes.append(f"Errore estrazione testo: {str(pdf_error)[:100]}")
 
         # Fallback to vision processing for image-based PDFs
         if use_vision and PDF2IMAGE_AVAILABLE and page_count <= 20:
             try:
                 print("Using Vision AI for image-based PDF...")
+                extraction_method = "vision"
+
                 # Convert PDF to images
                 images = convert_from_bytes(pdf_bytes, dpi=150, fmt='png')
                 print(f"Converted {len(images)} pages to images")
@@ -116,42 +131,91 @@ async def process_pdf(request: ProcessRequest):
                     images_base64.append(img_b64)
 
                 # Process with vision AI
-                extracted_text = await openrouter.process_document_with_vision(images_base64)
-                print(f"Vision extracted {len(extracted_text)} chars")
+                vision_text = await openrouter.process_document_with_vision(images_base64)
+                vision_chars = len(vision_text)
+                print(f"Vision extracted {vision_chars} chars")
+
+                # Use vision text if better than text extraction
+                if vision_chars > chars_extracted:
+                    extracted_text = vision_text
+                    chars_extracted = vision_chars
+                    extraction_method = "vision"
+                    extraction_quality = min(100, int((vision_chars / (page_count * 500)) * 100))
+                    extraction_notes.append(f"Usato Vision AI per PDF basato su immagini")
+                else:
+                    extraction_method = "hybrid"
+                    extraction_quality = min(100, int((chars_extracted / (page_count * 500)) * 100))
 
             except Exception as vision_error:
                 print(f"Vision processing error: {vision_error}")
+                extraction_notes.append(f"Errore Vision AI: {str(vision_error)[:100]}")
                 if not extracted_text:
                     extracted_text = "[Errore nell'estrazione del testo dal PDF]"
+                    extraction_quality = 0
+                    extraction_method = "failed"
+                else:
+                    # Partial success with text
+                    extraction_quality = min(50, int((chars_extracted / (page_count * 500)) * 100))
+
         elif use_vision and not PDF2IMAGE_AVAILABLE:
             print("Vision processing not available (pdf2image not installed)")
+            extraction_notes.append("Vision AI non disponibile (pdf2image non installato)")
             if not extracted_text:
-                extracted_text = "[PDF basato su immagini - installare pdf2image per il supporto]"
+                extracted_text = "[PDF basato su immagini - Vision AI non disponibile]"
+                extraction_quality = 0
+                extraction_method = "failed"
+            else:
+                extraction_quality = min(30, int((chars_extracted / (page_count * 500)) * 100))
+
+        elif use_vision and page_count > 20:
+            extraction_notes.append(f"PDF troppo lungo per Vision AI ({page_count} pagine, max 20)")
+            extraction_quality = min(30, int((chars_extracted / (page_count * 500)) * 100))
+
+        # Ensure minimum quality if we have meaningful text
+        if chars_extracted > 1000 and extraction_quality < 50:
+            extraction_quality = 50
+
+        # Cap quality at 100
+        extraction_quality = min(100, max(0, extraction_quality))
 
         # Use Claude via OpenRouter to create structured analysis
         processed_text = await openrouter.enhance_processed_text(extracted_text)
 
-        # Save to database
+        # Prepare notes string
+        notes_string = " | ".join(extraction_notes) if extraction_notes else None
+
+        # Save to database with quality metrics
         print(f"Updating chapter {request.chapter_id} with processed text...")
         update_data = {
             "raw_text": extracted_text,
             "processed_text": processed_text,
-            "processing_status": "completed"
+            "processing_status": "completed",
+            "extraction_quality": extraction_quality,
+            "extraction_method": extraction_method,
+            "extraction_notes": notes_string,
+            "page_count": page_count,
+            "chars_extracted": chars_extracted
         }
         update_result = supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
         print(f"Update result: {update_result}")
+        print(f"Extraction quality: {extraction_quality}%, method: {extraction_method}")
 
         return ProcessResponse(
             success=True,
-            message="Documento elaborato con successo"
+            message=f"Documento elaborato ({extraction_quality}% qualità)"
         )
 
     except Exception as e:
         print(f"Processing error: {e}")
-        # Update status to error
+        # Update status to error with quality info
         try:
             supabase.table("chapters").update({
-                "processing_status": "error"
+                "processing_status": "error",
+                "extraction_quality": 0,
+                "extraction_method": "failed",
+                "extraction_notes": f"Errore critico: {str(e)[:200]}",
+                "page_count": page_count,
+                "chars_extracted": chars_extracted
             }).eq("id", request.chapter_id).execute()
         except:
             pass

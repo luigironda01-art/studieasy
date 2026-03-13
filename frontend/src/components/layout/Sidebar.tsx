@@ -10,6 +10,9 @@ import { supabase, Source, Chapter } from "@/lib/supabase";
 interface SourceWithChapters extends Source {
   chapters: Chapter[];
   dueCount: number;
+  flashcardCount: number;
+  quizCount: number;
+  hasCompletedChapters: boolean;
 }
 
 interface DueCountByChapter {
@@ -27,6 +30,8 @@ export function Sidebar() {
   const [totalDueCards, setTotalDueCards] = useState(0);
   const [isResizing, setIsResizing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Fetch sources with chapters and due counts
@@ -86,10 +91,46 @@ export function Sidebar() {
 
         setTotalDueCards(total);
 
+        // Fetch flashcard counts per source
+        const chapterIds = (chaptersData || []).map(c => c.id);
+        let flashcardsByChapter: Record<string, number> = {};
+        let quizzesByChapter: Record<string, number> = {};
+
+        if (chapterIds.length > 0) {
+          // Get flashcard counts
+          const { data: flashcardsData } = await supabase
+            .from("flashcards")
+            .select("chapter_id")
+            .in("chapter_id", chapterIds)
+            .eq("user_id", user.id);
+
+          if (flashcardsData) {
+            flashcardsData.forEach((f: any) => {
+              flashcardsByChapter[f.chapter_id] = (flashcardsByChapter[f.chapter_id] || 0) + 1;
+            });
+          }
+
+          // Get quiz counts
+          const { data: quizzesData } = await supabase
+            .from("quizzes")
+            .select("chapter_id")
+            .in("chapter_id", chapterIds)
+            .eq("user_id", user.id);
+
+          if (quizzesData) {
+            quizzesData.forEach((q: any) => {
+              quizzesByChapter[q.chapter_id] = (quizzesByChapter[q.chapter_id] || 0) + 1;
+            });
+          }
+        }
+
         // Combine data
         const sourcesWithChapters: SourceWithChapters[] = sourcesData.map(source => {
           const sourceChapters = (chaptersData || []).filter(c => c.source_id === source.id);
           const sourceDueCount = sourceChapters.reduce((acc, ch) => acc + (dueByChapter[ch.id] || 0), 0);
+          const sourceFlashcardCount = sourceChapters.reduce((acc, ch) => acc + (flashcardsByChapter[ch.id] || 0), 0);
+          const sourceQuizCount = sourceChapters.reduce((acc, ch) => acc + (quizzesByChapter[ch.id] || 0), 0);
+          const hasCompleted = sourceChapters.some(ch => ch.processing_status === "completed");
 
           return {
             ...source,
@@ -97,6 +138,9 @@ export function Sidebar() {
               ...ch,
             })),
             dueCount: sourceDueCount,
+            flashcardCount: sourceFlashcardCount,
+            quizCount: sourceQuizCount,
+            hasCompletedChapters: hasCompleted,
           };
         });
 
@@ -187,6 +231,74 @@ export function Sidebar() {
       case "pdf": return "📄";
       case "notes": return "📝";
       default: return "📖";
+    }
+  };
+
+  const handleDeleteSource = async (sourceId: string) => {
+    if (!user) return;
+
+    setDeletingSourceId(sourceId);
+    try {
+      // Get chapters
+      const { data: chaptersData } = await supabase
+        .from("chapters")
+        .select("id")
+        .eq("source_id", sourceId);
+
+      const chapterIds = chaptersData?.map(c => c.id) || [];
+
+      if (chapterIds.length > 0) {
+        // Get flashcards
+        const { data: flashcardsData } = await supabase
+          .from("flashcards")
+          .select("id")
+          .in("chapter_id", chapterIds);
+
+        const flashcardIds = flashcardsData?.map(f => f.id) || [];
+
+        // Delete reviews
+        if (flashcardIds.length > 0) {
+          await supabase.from("reviews").delete().in("flashcard_id", flashcardIds);
+        }
+
+        // Delete flashcards
+        await supabase.from("flashcards").delete().in("chapter_id", chapterIds);
+
+        // Delete quiz questions and quizzes
+        const { data: quizzesData } = await supabase
+          .from("quizzes")
+          .select("id")
+          .in("chapter_id", chapterIds);
+
+        const quizIds = quizzesData?.map(q => q.id) || [];
+        if (quizIds.length > 0) {
+          await supabase.from("quiz_questions").delete().in("quiz_id", quizIds);
+          await supabase.from("quizzes").delete().in("id", quizIds);
+        }
+
+        // Delete chapters
+        await supabase.from("chapters").delete().eq("source_id", sourceId);
+      }
+
+      // Delete the source
+      await supabase
+        .from("sources")
+        .delete()
+        .eq("id", sourceId)
+        .eq("user_id", user.id);
+
+      // Update local state
+      setSources(prev => prev.filter(s => s.id !== sourceId));
+      setShowDeleteConfirm(null);
+
+      // Navigate to dashboard if we're on the deleted source's page
+      if (pathname.includes(sourceId)) {
+        router.push("/dashboard");
+      }
+    } catch (error) {
+      console.error("Error deleting source:", error);
+    } finally {
+      setDeletingSourceId(null);
     }
   };
 
@@ -321,31 +433,100 @@ export function Sidebar() {
                       {source.dueCount}
                     </span>
                   )}
+                  {/* Delete button - appears on hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeleteConfirm(source.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:bg-red-500/20 rounded transition-all"
+                    title="Elimina libro"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
 
-                {/* Chapters */}
-                {expandedSources.has(source.id) && source.chapters.length > 0 && (
-                  <div className="ml-6 mt-1 space-y-0.5 border-l border-slate-700 pl-3">
-                    {source.chapters.map((chapter) => (
-                      <Link
-                        key={chapter.id}
-                        href={`/dashboard/source/${source.id}?chapter=${chapter.id}`}
-                        onClick={() => isMobile && setSidebarOpen(false)}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-all duration-200 ${
-                          pathname.includes(chapter.id)
-                            ? "bg-slate-700/50 text-white"
-                            : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-300"
-                        }`}
+                {/* Delete Confirmation Inline */}
+                {showDeleteConfirm === source.id && (
+                  <div className="ml-6 mt-1 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                    <p className="text-red-300 text-xs mb-2">Eliminare "{source.title}" e tutti i contenuti?</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowDeleteConfirm(null)}
+                        className="flex-1 px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded hover:bg-slate-600 transition-colors"
                       >
-                        <span className="truncate flex-1">{chapter.title}</span>
-                        {chapter.processing_status === "completed" && (
-                          <span className="text-green-500 text-xs">✓</span>
+                        Annulla
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSource(source.id)}
+                        disabled={deletingSourceId === source.id}
+                        className="flex-1 px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                      >
+                        {deletingSourceId === source.id ? (
+                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        ) : (
+                          "Elimina"
                         )}
-                        {chapter.processing_status === "processing" && (
-                          <span className="text-amber-500 text-xs animate-pulse">⏳</span>
-                        )}
-                      </Link>
-                    ))}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Study Sections */}
+                {expandedSources.has(source.id) && (
+                  <div className="ml-6 mt-1 space-y-0.5 border-l border-slate-700 pl-3">
+                    {/* Flashcards */}
+                    <Link
+                      href={`/dashboard/source/${source.id}/flashcards`}
+                      onClick={() => isMobile && setSidebarOpen(false)}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-all duration-200 ${
+                        pathname === `/dashboard/source/${source.id}/flashcards`
+                          ? "bg-purple-500/20 text-purple-300"
+                          : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-300"
+                      }`}
+                    >
+                      <span>🎴</span>
+                      <span className="flex-1">Flashcards</span>
+                      {source.flashcardCount > 0 && (
+                        <span className="text-purple-400 text-xs font-medium">{source.flashcardCount}</span>
+                      )}
+                    </Link>
+
+                    {/* Quiz */}
+                    <Link
+                      href={`/dashboard/source/${source.id}/quiz`}
+                      onClick={() => isMobile && setSidebarOpen(false)}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-all duration-200 ${
+                        pathname === `/dashboard/source/${source.id}/quiz`
+                          ? "bg-emerald-500/20 text-emerald-300"
+                          : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-300"
+                      }`}
+                    >
+                      <span>📝</span>
+                      <span className="flex-1">Quiz</span>
+                      {source.quizCount > 0 && (
+                        <span className="text-emerald-400 text-xs font-medium">{source.quizCount}</span>
+                      )}
+                    </Link>
+
+                    {/* Riassunti */}
+                    <Link
+                      href={`/dashboard/source/${source.id}/summaries`}
+                      onClick={() => isMobile && setSidebarOpen(false)}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-all duration-200 ${
+                        pathname === `/dashboard/source/${source.id}/summaries`
+                          ? "bg-blue-500/20 text-blue-300"
+                          : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-300"
+                      }`}
+                    >
+                      <span>📖</span>
+                      <span className="flex-1">Riassunti</span>
+                      {source.hasCompletedChapters && (
+                        <span className="text-green-500 text-xs">✓</span>
+                      )}
+                    </Link>
                   </div>
                 )}
               </div>

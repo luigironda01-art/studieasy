@@ -63,6 +63,10 @@ export interface Chapter {
   processed_text: string | null;
   processing_status: "pending" | "processing" | "completed" | "error";
   page_count: number | null;
+  extraction_quality: number | null;
+  extraction_method: "text" | "vision" | "hybrid" | "failed" | null;
+  extraction_notes: string | null;
+  chars_extracted: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -82,6 +86,7 @@ export interface Flashcard {
   user_id: string;
   front: string;
   back: string;
+  difficulty: "easy" | "medium" | "hard" | null;
   ai_generated: boolean;
   created_at: string;
   updated_at: string;
