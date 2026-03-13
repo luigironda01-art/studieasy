@@ -655,7 +655,7 @@ export default function SourceSummariesPage() {
         doc.setFont("helvetica", "normal");
         doc.setTextColor(150);
         doc.text(
-          `Generato da Backup Buddy — Pagina ${i}/${totalPages}`,
+          `Generato da Backup Buddy v3 — Pagina ${i}/${totalPages}`,
           pageWidth / 2,
           pageHeight - 10,
           { align: "center" }
