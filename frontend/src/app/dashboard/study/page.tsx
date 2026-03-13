@@ -1410,16 +1410,22 @@ export default function StudyHubPage() {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 md:p-8">
-              <div className="max-w-3xl mx-auto prose prose-invert prose-slate">
+              <div className="max-w-3xl mx-auto">
                 <div
-                  className="text-slate-200 leading-relaxed whitespace-pre-wrap"
+                  className="text-slate-200 leading-relaxed summary-content"
                   dangerouslySetInnerHTML={{
                     __html: showSummaryReader.content
-                      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
-                      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                      .replace(/^- (.*)/gm, '<li class="ml-4">$1</li>')
-                      .replace(/^• (.*)/gm, '<li class="ml-4">$1</li>')
-                      .replace(/\n\n/g, '</p><p class="mb-4">')
+                      // Headers - must be processed first
+                      .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-emerald-400 mt-6 mb-3 flex items-center gap-2"><span class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>$1</h3>')
+                      .replace(/^## (.*$)/gm, '<h2 class="text-xl font-bold text-white mt-8 mb-4 pb-2 border-b border-slate-700/50">$1</h2>')
+                      // Bold and italic
+                      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
+                      .replace(/\*(.*?)\*/g, '<em class="text-slate-300">$1</em>')
+                      // Lists
+                      .replace(/^- (.*)/gm, '<li class="ml-6 mb-2 text-slate-300 flex items-start gap-2"><span class="text-emerald-500 mt-1.5">•</span><span>$1</span></li>')
+                      .replace(/^• (.*)/gm, '<li class="ml-6 mb-2 text-slate-300 flex items-start gap-2"><span class="text-emerald-500 mt-1.5">•</span><span>$1</span></li>')
+                      // Paragraphs
+                      .replace(/\n\n/g, '</p><p class="mb-4 text-slate-300">')
                   }}
                 />
               </div>

@@ -81,19 +81,34 @@ ISTRUZIONI:
 1. Scrivi un riassunto di circa ${targetWords} parole (±10%)
 2. Usa un linguaggio chiaro e accessibile
 3. Mantieni tutti i concetti chiave e le informazioni importanti
-4. Organizza il contenuto in modo logico con paragrafi ben definiti
+4. **IMPORTANTE**: Dividi il riassunto in SEZIONI ben definite con titoli
 5. Usa elenchi puntati dove appropriato per migliorare la leggibilità
 6. Lingua: ${langName}
 
-FORMATO OUTPUT:
-- Scrivi il riassunto direttamente, senza intestazioni tipo "Riassunto:" o simili
-- Usa il markdown per la formattazione (grassetto per concetti chiave, elenchi puntati, etc.)
-- Dividi in paragrafi logici
+FORMATO OUTPUT OBBLIGATORIO:
+- Usa ## per i titoli delle sezioni principali (es: ## Introduzione, ## Concetti Chiave)
+- Usa ### per i sotto-titoli se necessario
+- Ogni sezione deve avere un titolo descrittivo che aiuti lo studente a navigare
+- Usa **grassetto** per i concetti chiave all'interno del testo
+- Usa elenchi puntati (- ) per liste di concetti
+- NON iniziare con "Riassunto:" o titoli generici simili
+- Inizia direttamente con la prima sezione
+
+ESEMPIO DI STRUTTURA:
+## Concetto Principale
+Spiegazione del concetto...
+
+## Elementi Fondamentali
+- Primo elemento
+- Secondo elemento
+
+## Applicazioni Pratiche
+Descrizione delle applicazioni...
 
 TESTO DA RIASSUMERE:
 ${chapter.processed_text}
 
-Scrivi il riassunto:`;
+Scrivi il riassunto strutturato:`;
 
     console.log("Generating summary with AI...");
     const response = await openrouter.chat.completions.create({
