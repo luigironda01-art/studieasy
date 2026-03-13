@@ -114,10 +114,13 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
 
     const flashcards = JSON.parse(responseText.trim());
 
+    // Generate batch_id for this generation session
+    const batchId = crypto.randomUUID();
+
     // Save flashcards to database
     let createdCount = 0;
     for (const card of flashcards) {
-      // Insert flashcard
+      // Insert flashcard with difficulty and batch_id
       const { data: flashcardData, error: flashcardError } = await supabase
         .from("flashcards")
         .insert({
@@ -125,7 +128,9 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
           user_id: userId,
           front: card.front,
           back: card.back,
-          ai_generated: true
+          ai_generated: true,
+          difficulty: difficulty,
+          batch_id: batchId
         })
         .select()
         .single();
@@ -157,6 +162,8 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
     return NextResponse.json({
       success: true,
       flashcards_created: createdCount,
+      batch_id: batchId,
+      difficulty: difficulty,
       message: `Generated ${createdCount} flashcards successfully`
     });
   } catch (error) {

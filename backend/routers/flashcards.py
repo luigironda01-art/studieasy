@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 import os
+import uuid
 from supabase import create_client, Client
 from services.openrouter_service import get_openrouter_service
 from services.fsrs_service import get_fsrs_service
@@ -33,6 +34,8 @@ class GenerateFlashcardsResponse(BaseModel):
     success: bool
     flashcards_created: int
     message: str
+    batch_id: Optional[str] = None
+    difficulty: Optional[str] = None
 
 
 @router.post("/generate", response_model=GenerateFlashcardsResponse)
@@ -66,16 +69,21 @@ async def generate_flashcards(request: GenerateFlashcardsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
+    # Generate batch_id for this generation session
+    batch_id = str(uuid.uuid4())
+
     # Save flashcards to database
     created_count = 0
     for card in flashcards:
-        # Insert flashcard
+        # Insert flashcard with difficulty and batch_id
         flashcard_result = supabase.table("flashcards").insert({
             "chapter_id": request.chapter_id,
             "user_id": request.user_id,
             "front": card["front"],
             "back": card["back"],
-            "ai_generated": True
+            "ai_generated": True,
+            "difficulty": request.difficulty,
+            "batch_id": batch_id
         }).execute()
 
         if flashcard_result.data:
@@ -101,7 +109,9 @@ async def generate_flashcards(request: GenerateFlashcardsRequest):
     return GenerateFlashcardsResponse(
         success=True,
         flashcards_created=created_count,
-        message=f"Generated {created_count} flashcards successfully"
+        message=f"Generated {created_count} flashcards successfully",
+        batch_id=batch_id,
+        difficulty=request.difficulty
     )
 
 

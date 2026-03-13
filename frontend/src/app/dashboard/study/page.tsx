@@ -9,8 +9,27 @@ import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { supabase, Source, Chapter, Quiz } from "@/lib/supabase";
 import Link from "next/link";
 
+// Batch of flashcards grouped by difficulty and batch_id
+interface FlashcardBatch {
+  batch_id: string | null;
+  count: number;
+  dueCount: number;
+  created_at: string;
+}
+
+// Flashcards grouped by difficulty
+interface FlashcardsByDifficulty {
+  easy: FlashcardBatch[];
+  medium: FlashcardBatch[];
+  hard: FlashcardBatch[];
+}
+
 interface SourceWithContent extends Source {
   chapters: ChapterWithContent[];
+  // Aggregated flashcard data by difficulty
+  flashcardsByDifficulty: FlashcardsByDifficulty;
+  totalFlashcards: number;
+  totalDue: number;
 }
 
 interface ChapterWithContent extends Chapter {
@@ -59,6 +78,8 @@ export default function StudyHubPage() {
   const [sources, setSources] = useState<SourceWithContent[]>([]);
   const [selectedTool, setSelectedTool] = useState<TabType>("flashcards");
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
+  const [expandedDifficulties, setExpandedDifficulties] = useState<Set<string>>(new Set());
+  const [batchSortBy, setBatchSortBy] = useState<'date' | 'count'>('date');
   const [isLoading, setIsLoading] = useState(true);
   const [totalDue, setTotalDue] = useState(0);
   const [generatingFlashcardsId, setGeneratingFlashcardsId] = useState<string | null>(null);
@@ -124,14 +145,20 @@ export default function StudyHubPage() {
         .in("source_id", sourcesData.map(s => s.id))
         .order("order_index", { ascending: true });
 
-      // Fetch flashcard counts per chapter
-      const { data: flashcardCounts } = await supabase
+      // Fetch flashcards with difficulty and batch_id
+      const { data: flashcardsData } = await supabase
         .from("flashcards")
-        .select("chapter_id")
+        .select("id, chapter_id, difficulty, batch_id, created_at")
         .eq("user_id", user.id);
 
+      // Get source_id for each chapter for grouping
+      const chapterToSource: Record<string, string> = {};
+      chaptersData?.forEach((c: any) => {
+        chapterToSource[c.id] = c.source_id;
+      });
+
       const fcCountByChapter: Record<string, number> = {};
-      flashcardCounts?.forEach((fc: any) => {
+      flashcardsData?.forEach((fc: any) => {
         fcCountByChapter[fc.chapter_id] = (fcCountByChapter[fc.chapter_id] || 0) + 1;
       });
 
@@ -174,6 +201,64 @@ export default function StudyHubPage() {
         quizzesByChapter[quiz.chapter_id].push(quiz);
       });
 
+      // Group flashcards by source -> difficulty -> batch
+      const flashcardsBySource: Record<string, FlashcardsByDifficulty> = {};
+      const dueByFlashcardId: Set<string> = new Set();
+
+      // Build set of due flashcard IDs
+      dueReviews?.forEach((r: any) => {
+        if (r.flashcards?.chapter_id) {
+          // We need flashcard_id, get it from the join
+          const flashcardId = (r as any).flashcard_id;
+          if (flashcardId) dueByFlashcardId.add(flashcardId);
+        }
+      });
+
+      // Group flashcards
+      flashcardsData?.forEach((fc: any) => {
+        const sourceId = chapterToSource[fc.chapter_id];
+        if (!sourceId) return;
+
+        if (!flashcardsBySource[sourceId]) {
+          flashcardsBySource[sourceId] = {
+            easy: [],
+            medium: [],
+            hard: []
+          };
+        }
+
+        const difficulty = (fc.difficulty || 'medium') as 'easy' | 'medium' | 'hard';
+        const batchId = fc.batch_id || 'legacy';
+
+        // Find or create batch
+        let batch = flashcardsBySource[sourceId][difficulty].find(b => b.batch_id === batchId);
+        if (!batch) {
+          batch = {
+            batch_id: batchId,
+            count: 0,
+            dueCount: 0,
+            created_at: fc.created_at
+          };
+          flashcardsBySource[sourceId][difficulty].push(batch);
+        }
+
+        batch.count++;
+        // Check if this flashcard is due (simplified - we track by chapter for now)
+        if (dueByChapter[fc.chapter_id] > 0) {
+          // Approximate due count distribution
+          batch.dueCount++;
+        }
+      });
+
+      // Sort batches by date (newest first)
+      Object.values(flashcardsBySource).forEach(byDiff => {
+        (['easy', 'medium', 'hard'] as const).forEach(diff => {
+          byDiff[diff].sort((a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+        });
+      });
+
       // Combine data
       const sourcesWithContent: SourceWithContent[] = sourcesData.map(source => {
         const sourceChapters = (chaptersData || [])
@@ -185,9 +270,25 @@ export default function StudyHubPage() {
             quizzes: quizzesByChapter[chapter.id] || [],
           }));
 
+        const flashcardsByDifficulty = flashcardsBySource[source.id] || {
+          easy: [],
+          medium: [],
+          hard: []
+        };
+
+        const totalFlashcards =
+          flashcardsByDifficulty.easy.reduce((acc, b) => acc + b.count, 0) +
+          flashcardsByDifficulty.medium.reduce((acc, b) => acc + b.count, 0) +
+          flashcardsByDifficulty.hard.reduce((acc, b) => acc + b.count, 0);
+
+        const totalSourceDue = sourceChapters.reduce((acc, c) => acc + c.dueCount, 0);
+
         return {
           ...source,
           chapters: sourceChapters,
+          flashcardsByDifficulty,
+          totalFlashcards,
+          totalDue: totalSourceDue,
         };
       });
 
@@ -392,6 +493,93 @@ export default function StudyHubPage() {
     });
   };
 
+  const toggleDifficulty = (sourceId: string, difficulty: string) => {
+    const key = `${sourceId}-${difficulty}`;
+    setExpandedDifficulties(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteBatch = async (batchId: string | null) => {
+    if (!user) return;
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      // Get all flashcards in this batch
+      let query = supabase
+        .from("flashcards")
+        .select("id")
+        .eq("user_id", user.id);
+
+      if (batchId === 'legacy' || batchId === null) {
+        query = query.is("batch_id", null);
+      } else {
+        query = query.eq("batch_id", batchId);
+      }
+
+      const { data: flashcards } = await query;
+
+      if (flashcards && flashcards.length > 0) {
+        const flashcardIds = flashcards.map(f => f.id);
+
+        // Delete reviews first
+        await supabase
+          .from("reviews")
+          .delete()
+          .in("flashcard_id", flashcardIds);
+
+        // Delete flashcards
+        await supabase
+          .from("flashcards")
+          .delete()
+          .in("id", flashcardIds);
+      }
+
+      setShowDeleteModal(null);
+      await fetchContent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Errore durante l'eliminazione");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const sortBatches = (batches: FlashcardBatch[]) => {
+    return [...batches].sort((a, b) => {
+      if (batchSortBy === 'count') {
+        return b.count - a.count;
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  };
+
+  const formatBatchDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getDifficultyConfig = (difficulty: 'easy' | 'medium' | 'hard') => {
+    const configs = {
+      easy: { emoji: '🟢', label: 'Facile', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
+      medium: { emoji: '🟡', label: 'Media', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
+      hard: { emoji: '🔴', label: 'Difficile', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30' }
+    };
+    return configs[difficulty];
+  };
+
   const getSourceIcon = (source: SourceWithContent) => {
     // Use topic emoji if available, otherwise fallback to type-based icon
     if (source.topic_emoji) {
@@ -545,7 +733,7 @@ export default function StudyHubPage() {
                 </div>
               </button>
 
-              {/* Chapters */}
+              {/* Expanded Content */}
               {expandedSources.has(source.id) && (
                 <div className="border-t border-slate-700">
                   {source.chapters.length === 0 ? (
@@ -558,159 +746,241 @@ export default function StudyHubPage() {
                         Aggiungi capitoli →
                       </Link>
                     </div>
-                  ) : (
+                  ) : selectedTool === "flashcards" ? (
+                    /* FLASHCARDS: Difficulty-based accordion */
+                    <div className="p-4 space-y-3">
+                      {/* Sort Toggle */}
+                      {source.totalFlashcards > 0 && (
+                        <div className="flex items-center justify-end gap-2 mb-2">
+                          <span className="text-slate-500 text-xs">Ordina per:</span>
+                          <button
+                            onClick={() => setBatchSortBy('date')}
+                            className={`px-2 py-1 text-xs rounded ${
+                              batchSortBy === 'date'
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Data
+                          </button>
+                          <button
+                            onClick={() => setBatchSortBy('count')}
+                            className={`px-2 py-1 text-xs rounded ${
+                              batchSortBy === 'count'
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Quantità
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Difficulty Sections */}
+                      {(['easy', 'medium', 'hard'] as const).map((difficulty) => {
+                        const config = getDifficultyConfig(difficulty);
+                        const batches = sortBatches(source.flashcardsByDifficulty[difficulty]);
+                        const totalCards = batches.reduce((acc, b) => acc + b.count, 0);
+                        const isExpanded = expandedDifficulties.has(`${source.id}-${difficulty}`);
+
+                        return (
+                          <div
+                            key={difficulty}
+                            className={`rounded-xl border ${config.border} ${config.bg} overflow-hidden`}
+                          >
+                            {/* Difficulty Header */}
+                            <button
+                              onClick={() => toggleDifficulty(source.id, difficulty)}
+                              className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{config.emoji}</span>
+                                <span className={`font-medium ${config.color}`}>{config.label}</span>
+                                <span className="text-slate-500 text-sm">
+                                  ({totalCards} {totalCards === 1 ? 'carta' : 'carte'})
+                                </span>
+                              </div>
+                              <svg
+                                className={`w-4 h-4 text-slate-400 transition-transform ${
+                                  isExpanded ? 'rotate-180' : ''
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+
+                            {/* Batches List */}
+                            {isExpanded && (
+                              <div className="border-t border-slate-700/50">
+                                {batches.length === 0 ? (
+                                  <div className="p-4 text-center text-slate-500 text-sm">
+                                    Nessuna carta {config.label.toLowerCase()}
+                                  </div>
+                                ) : (
+                                  <div className="divide-y divide-slate-700/30">
+                                    {batches.map((batch, idx) => (
+                                      <div
+                                        key={batch.batch_id || `legacy-${idx}`}
+                                        className="flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-white font-medium">
+                                            {batch.count} {batch.count === 1 ? 'carta' : 'carte'}
+                                          </span>
+                                          <span className="text-slate-500 text-sm">
+                                            {batch.batch_id === 'legacy' || !batch.batch_id
+                                              ? 'Legacy'
+                                              : formatBatchDate(batch.created_at)}
+                                          </span>
+                                          {batch.dueCount > 0 && (
+                                            <span className="text-orange-400 text-xs bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                              {batch.dueCount} da ripassare
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {batch.dueCount > 0 && (
+                                            <Link
+                                              href={`/dashboard/study/session?batch=${batch.batch_id || 'legacy'}`}
+                                              className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors"
+                                            >
+                                              Ripassa
+                                            </Link>
+                                          )}
+                                          <button
+                                            onClick={() => handleDeleteBatch(batch.batch_id)}
+                                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                                            title="Elimina batch"
+                                          >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Generate Flashcards - Chapter Selection */}
+                      {source.chapters.some(c => c.processing_status === "completed") && (
+                        <div className="mt-4 pt-4 border-t border-slate-700/50">
+                          <p className="text-slate-400 text-sm mb-3">Genera nuove flashcard:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {source.chapters
+                              .filter(c => c.processing_status === "completed")
+                              .map((chapter) => (
+                                <button
+                                  key={chapter.id}
+                                  onClick={() => openGeneratePopover(chapter.id, "flashcards")}
+                                  disabled={generatingFlashcardsId !== null}
+                                  className="px-3 py-1.5 bg-slate-700 text-slate-300 text-sm rounded-lg hover:bg-slate-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                  {generatingFlashcardsId === chapter.id ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                      Generando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span>+</span>
+                                      {chapter.title}
+                                    </>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : selectedTool === "quiz" ? (
+                    /* QUIZ: Chapter-based display */
                     <div className="divide-y divide-slate-700/50">
                       {source.chapters.map((chapter) => (
                         <div key={chapter.id} className="p-4 hover:bg-slate-700/30 transition-colors">
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
                               <h4 className="text-white font-medium">{chapter.title}</h4>
-
-                              {/* Flashcards Content */}
-                              {selectedTool === "flashcards" && (
-                                <div className="flex items-center gap-4 mt-2">
-                                  {chapter.flashcardCount > 0 ? (
-                                    <>
-                                      <span className="text-slate-400 text-sm">
-                                        {chapter.flashcardCount} flashcard
-                                      </span>
-                                      {chapter.dueCount > 0 && (
-                                        <span className="text-orange-400 text-sm">
-                                          {chapter.dueCount} da ripassare
-                                        </span>
-                                      )}
-                                      <button
-                                        onClick={() => setShowDeleteModal({
-                                          type: "flashcards",
-                                          chapterId: chapter.id
-                                        })}
-                                        className="text-red-400 hover:text-red-300 text-sm flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
-                                        title="Elimina tutte le flashcard"
+                              <div className="mt-2">
+                                {chapter.quizzes.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    {chapter.quizzes.map((quiz) => (
+                                      <div
+                                        key={quiz.id}
+                                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-700 rounded-lg text-sm group"
                                       >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                        Elimina
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <span className="text-slate-500 text-sm">
-                                      Nessuna flashcard
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Quiz Content */}
-                              {selectedTool === "quiz" && (
-                                <div className="mt-2">
-                                  {chapter.quizzes.length > 0 ? (
-                                    <div className="flex flex-wrap gap-2">
-                                      {chapter.quizzes.map((quiz) => (
-                                        <div
-                                          key={quiz.id}
-                                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-700 rounded-lg text-sm group"
+                                        <Link
+                                          href={`/dashboard/quiz/${quiz.id}`}
+                                          className="inline-flex items-center gap-2 hover:opacity-80 transition-opacity"
                                         >
-                                          <Link
-                                            href={`/dashboard/quiz/${quiz.id}`}
-                                            className="inline-flex items-center gap-2 hover:opacity-80 transition-opacity"
-                                          >
-                                            <span className="text-purple-400">📝</span>
-                                            <span className="text-slate-300">{quiz.title}</span>
-                                            {quiz.completed_at ? (
-                                              <span className="text-green-400 text-xs">
-                                                {quiz.score}/{quiz.total_questions}
-                                              </span>
-                                            ) : (
-                                              <span className="text-yellow-400 text-xs">In corso</span>
-                                            )}
-                                          </Link>
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setShowDeleteModal({
-                                                type: "quiz",
-                                                quizId: quiz.id,
-                                                quizTitle: quiz.title
-                                              });
-                                            }}
-                                            className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
-                                            title="Elimina quiz"
-                                          >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                          </button>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <span className="text-slate-500 text-sm">Nessun quiz</span>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Coming Soon Content */}
-                              {!["flashcards", "quiz"].includes(selectedTool) && (
-                                <p className="text-slate-500 text-sm mt-2">
-                                  Funzionalità in arrivo...
-                                </p>
-                              )}
+                                          <span className="text-purple-400">📝</span>
+                                          <span className="text-slate-300">{quiz.title}</span>
+                                          {quiz.completed_at ? (
+                                            <span className="text-green-400 text-xs">
+                                              {quiz.score}/{quiz.total_questions}
+                                            </span>
+                                          ) : (
+                                            <span className="text-yellow-400 text-xs">In corso</span>
+                                          )}
+                                        </Link>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowDeleteModal({
+                                              type: "quiz",
+                                              quizId: quiz.id,
+                                              quizTitle: quiz.title
+                                            });
+                                          }}
+                                          className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                                          title="Elimina quiz"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500 text-sm">Nessun quiz</span>
+                                )}
+                              </div>
                             </div>
 
-                            {/* Actions */}
-                            <div className="flex items-center gap-2 ml-4 relative">
-                              {selectedTool === "flashcards" && chapter.processing_status === "completed" && (
-                                <>
-                                  {chapter.dueCount > 0 && (
-                                    <Link
-                                      href={`/dashboard/study/session?chapter=${chapter.id}`}
-                                      className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
-                                    >
-                                      Ripassa ({chapter.dueCount})
-                                    </Link>
-                                  )}
-                                  <button
-                                    onClick={() => openGeneratePopover(chapter.id, "flashcards")}
-                                    disabled={generatingFlashcardsId !== null || generatingQuizId !== null}
-                                    className="px-3 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
-                                  >
-                                    {generatingFlashcardsId === chapter.id ? (
-                                      <>
-                                        <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                        Generando...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span>+</span>
-                                        Genera
-                                      </>
-                                    )}
-                                  </button>
-                                </>
-                              )}
-
-                              {selectedTool === "quiz" && chapter.processing_status === "completed" && (
-                                <button
-                                  onClick={() => openGeneratePopover(chapter.id, "quiz")}
-                                  disabled={generatingFlashcardsId !== null || generatingQuizId !== null}
-                                  className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-600 text-white text-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
-                                >
-                                  {generatingQuizId === chapter.id ? (
-                                    <>
-                                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                      Generando...
-                                    </>
-                                  ) : (
-                                    "+ Nuovo Quiz"
-                                  )}
-                                </button>
-                              )}
-
-                            </div>
+                            {/* Quiz Generate Button */}
+                            {chapter.processing_status === "completed" && (
+                              <button
+                                onClick={() => openGeneratePopover(chapter.id, "quiz")}
+                                disabled={generatingFlashcardsId !== null || generatingQuizId !== null}
+                                className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-600 text-white text-sm rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2 ml-4"
+                              >
+                                {generatingQuizId === chapter.id ? (
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                    Generando...
+                                  </>
+                                ) : (
+                                  "+ Nuovo Quiz"
+                                )}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
+                    </div>
+                  ) : (
+                    /* Coming Soon */
+                    <div className="p-6 text-center text-slate-500">
+                      <p>Funzionalità in arrivo...</p>
                     </div>
                   )}
                 </div>

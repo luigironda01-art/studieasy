@@ -127,7 +127,7 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:`;
     const questions = JSON.parse(responseText.trim());
     console.log(`Generated ${questions.length} questions`);
 
-    // Create quiz record
+    // Create quiz record with difficulty
     const { data: quiz, error: quizError } = await supabase
       .from("quizzes")
       .insert({
@@ -135,7 +135,8 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:`;
         user_id: userId,
         title: `Quiz - ${chapter.title}`,
         total_questions: questions.length,
-        score: 0
+        score: 0,
+        difficulty: difficulty
       })
       .select()
       .single();
@@ -177,6 +178,7 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:`;
       success: true,
       quiz_id: quiz.id,
       questions_created: createdCount,
+      difficulty: difficulty,
       message: `Quiz generato con ${createdCount} domande`
     });
 
