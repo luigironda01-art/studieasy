@@ -180,13 +180,14 @@ export default function SourceSummariesPage() {
     cleaned = cleaned.replace(/^[-_*]{3,}\s*$/gm, "");
 
     // 1d. Fix spaced-out text using line-level heuristic
-    // If >50% of space-separated tokens in a line are single chars, it's spaced text
+    // If >40% of space-separated tokens in a line are single chars, it's spaced text
     // Double-space = word boundary, single-space = letter spacing
     cleaned = cleaned.split("\n").map((line: string) => {
       const tokens = line.split(" ").filter((t: string) => t !== "");
-      if (tokens.length < 6) return line;
+      if (tokens.length < 5) return line;
+      // Count single-char tokens (letters, digits, and common symbols like ±, ², (, ), :, etc.)
       const singleCharCount = tokens.filter((t: string) => t.length === 1).length;
-      if (singleCharCount / tokens.length > 0.5) {
+      if (singleCharCount / tokens.length > 0.4) {
         const parts = line.split(/  +/);
         if (parts.length <= 1) {
           return line.replace(/ /g, "");
@@ -210,6 +211,67 @@ export default function SourceSummariesPage() {
 
     // 1h. Remove standalone http URLs (may contain spaces from broken PDF extraction)
     cleaned = cleaned.replace(/^https?:\/\/.*$/gm, "");
+
+    // 1i. Join broken lines into paragraphs
+    // PDF extraction creates newlines at the end of each page line (~60 chars).
+    // Merge consecutive non-empty lines that are clearly part of the same paragraph.
+    const rawLines = cleaned.split("\n");
+    const joined: string[] = [];
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      const trimmed = line.trim();
+
+      // Keep empty lines, headings, lists, tables, image tags as-is
+      if (
+        !trimmed ||
+        trimmed.startsWith("#") ||
+        trimmed.startsWith("-") ||
+        trimmed.startsWith("•") ||
+        trimmed.startsWith("*") ||
+        trimmed.match(/^\d+[.)]\s/) ||
+        trimmed.match(/\|.*\|/) ||
+        trimmed.startsWith("[IMMAGINE:") ||
+        trimmed.startsWith("[Vedi figura:") ||
+        trimmed.startsWith("Illustrazione")
+      ) {
+        joined.push(line);
+        continue;
+      }
+
+      // Check if this line should merge with the previous non-empty line
+      const prevIdx = joined.length - 1;
+      if (prevIdx >= 0) {
+        const prev = joined[prevIdx].trim();
+        // Merge if: previous line exists, is not empty, is not a heading/list/table/image,
+        // previous line does NOT end with sentence-ending punctuation,
+        // and current line starts with lowercase or continues a sentence
+        if (
+          prev &&
+          !prev.startsWith("#") &&
+          !prev.startsWith("-") &&
+          !prev.startsWith("•") &&
+          !prev.startsWith("*") &&
+          !prev.match(/^\d+[.)]\s/) &&
+          !prev.match(/\|.*\|/) &&
+          !prev.startsWith("[IMMAGINE:") &&
+          !prev.startsWith("[Vedi figura:") &&
+          !prev.endsWith(":") &&
+          prev.length > 15 &&
+          // Previous line doesn't end with clear sentence ending
+          !/[.!?;]\s*$/.test(prev) &&
+          // Current line starts with lowercase or common continuation patterns
+          (/^[a-zà-ÿ(,]/.test(trimmed) ||
+           // Or previous line is short (broken mid-sentence)
+           (prev.length < 80 && trimmed.length > 10 && /^[A-ZÀ-Ÿa-zà-ÿ(]/.test(trimmed) && !trimmed.match(/^[A-ZÀ-Ÿ][a-zà-ÿ]+\s[A-ZÀ-Ÿ]/)))
+        ) {
+          joined[prevIdx] = prev + " " + trimmed;
+          continue;
+        }
+      }
+
+      joined.push(line);
+    }
+    cleaned = joined.join("\n");
 
     // ═══ Step 2: Line-by-line parsing ═══
     const lines = cleaned.split("\n");
