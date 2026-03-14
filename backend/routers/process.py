@@ -287,43 +287,128 @@ async def process_pdf(request: ProcessRequest):
         # Cap quality at 100
         extraction_quality = min(100, max(0, extraction_quality))
 
-        update_progress(75, "Analisi AI del contenuto...")
+        update_progress(72, "Identificazione capitoli...")
 
-        # Use Claude via OpenRouter to create structured analysis
-        processed_text = await openrouter.enhance_processed_text(extracted_text)
+        # Smart Chapter Splitting: AI identifies logical sections
+        chapter_splits = await openrouter.split_into_chapters(extracted_text)
 
-        update_progress(90, "Salvataggio risultati...")
-
-        # Prepare notes string
+        # Prepare common metadata
         notes_string = " | ".join(extraction_notes) if extraction_notes else None
-
-        # Smart model selection based on content analysis
         preferred_model = determine_preferred_model(extracted_text, extraction_method)
         print(f"Smart model selection: {preferred_model}")
 
-        # Save to database with quality metrics
-        print(f"Updating chapter {request.chapter_id} with processed text...")
-        update_data = {
-            "raw_text": extracted_text,
-            "processed_text": processed_text,
-            "processing_status": "completed",
-            "processing_progress": 100,
-            "extraction_quality": extraction_quality,
-            "extraction_method": extraction_method,
-            "extraction_notes": notes_string,
-            "chars_extracted": chars_extracted,
-            "page_count": page_count,
-            "preferred_model": preferred_model,
-        }
-        update_result = supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
-        print(f"Update result: {update_result}")
-        print(f"Extraction quality: {extraction_quality}%, method: {extraction_method}")
-        print(f"[100%] Elaborazione completata!")
+        if len(chapter_splits) >= 2:
+            # --- MULTI-CHAPTER MODE ---
+            print(f"Splitting into {len(chapter_splits)} chapters")
+            update_progress(75, f"Trovati {len(chapter_splits)} capitoli, elaborazione...")
 
-        return ProcessResponse(
-            success=True,
-            message=f"Documento elaborato ({extraction_quality}% qualità)"
-        )
+            # Split the text based on markers
+            chapter_texts = []
+            for idx, split in enumerate(chapter_splits):
+                marker = split["start_marker"]
+                # Find the marker position in text
+                pos = extracted_text.find(marker)
+                if pos == -1:
+                    # Try partial match (first 50 chars of marker)
+                    short_marker = marker[:50]
+                    pos = extracted_text.find(short_marker)
+                if pos == -1 and idx == 0:
+                    pos = 0  # First chapter always starts at beginning
+                chapter_texts.append({"title": split["title"], "pos": pos if pos >= 0 else -1})
+
+            # Filter out chapters where marker wasn't found (except first)
+            chapter_texts = [c for c in chapter_texts if c["pos"] >= 0]
+
+            # Sort by position and calculate text ranges
+            chapter_texts.sort(key=lambda c: c["pos"])
+
+            # Build final chapter data with text slices
+            chapters_data = []
+            for idx, ch in enumerate(chapter_texts):
+                start = ch["pos"]
+                end = chapter_texts[idx + 1]["pos"] if idx + 1 < len(chapter_texts) else len(extracted_text)
+                raw = extracted_text[start:end].strip()
+                if len(raw) > 100:  # Skip tiny chapters
+                    chapters_data.append({"title": ch["title"], "raw_text": raw})
+
+            if len(chapters_data) < 2:
+                # Fallback: splitting failed, use single chapter
+                chapters_data = [{"title": "Documento completo", "raw_text": extracted_text}]
+
+            # Get file_url from original chapter for first chapter
+            orig_chapter = supabase.table("chapters").select("file_url").eq("id", request.chapter_id).single().execute()
+            file_url = orig_chapter.data.get("file_url") if orig_chapter.data else None
+
+            # Update first chapter (reuse the original) and create additional ones
+            for idx, ch_data in enumerate(chapters_data):
+                progress = 75 + int((idx / len(chapters_data)) * 20)
+                update_progress(progress, f"Elaborazione capitolo {idx+1}/{len(chapters_data)}: {ch_data['title'][:40]}...")
+
+                # Enhance chapter text
+                enhanced = await openrouter.enhance_processed_text(ch_data["raw_text"])
+
+                chapter_update = {
+                    "title": ch_data["title"],
+                    "order_index": idx,
+                    "raw_text": ch_data["raw_text"],
+                    "processed_text": enhanced,
+                    "processing_status": "completed",
+                    "processing_progress": 100,
+                    "extraction_quality": extraction_quality,
+                    "extraction_method": extraction_method,
+                    "extraction_notes": notes_string,
+                    "chars_extracted": len(ch_data["raw_text"]),
+                    "page_count": page_count if idx == 0 else None,
+                    "preferred_model": preferred_model,
+                }
+
+                if idx == 0:
+                    # Update the original chapter
+                    chapter_update["file_url"] = file_url
+                    supabase.table("chapters").update(chapter_update).eq("id", request.chapter_id).execute()
+                    print(f"Chapter 1 updated: {ch_data['title']}")
+                else:
+                    # Create new chapter
+                    chapter_update["source_id"] = request.source_id
+                    chapter_update["file_url"] = file_url
+                    supabase.table("chapters").insert(chapter_update).execute()
+                    print(f"Chapter {idx+1} created: {ch_data['title']}")
+
+            update_progress(100, "Elaborazione completata!")
+            print(f"[100%] Elaborazione completata! {len(chapters_data)} capitoli creati")
+
+            return ProcessResponse(
+                success=True,
+                message=f"Documento elaborato in {len(chapters_data)} capitoli ({extraction_quality}% qualità)"
+            )
+
+        else:
+            # --- SINGLE CHAPTER MODE (fallback) ---
+            update_progress(75, "Analisi AI del contenuto...")
+            processed_text = await openrouter.enhance_processed_text(extracted_text)
+
+            update_progress(90, "Salvataggio risultati...")
+            print(f"Updating chapter {request.chapter_id} with processed text...")
+            update_data = {
+                "raw_text": extracted_text,
+                "processed_text": processed_text,
+                "processing_status": "completed",
+                "processing_progress": 100,
+                "extraction_quality": extraction_quality,
+                "extraction_method": extraction_method,
+                "extraction_notes": notes_string,
+                "chars_extracted": chars_extracted,
+                "page_count": page_count,
+                "preferred_model": preferred_model,
+            }
+            supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
+            print(f"Extraction quality: {extraction_quality}%, method: {extraction_method}")
+            print(f"[100%] Elaborazione completata!")
+
+            return ProcessResponse(
+                success=True,
+                message=f"Documento elaborato ({extraction_quality}% qualità)"
+            )
 
     except Exception as e:
         print(f"Processing error: {e}")

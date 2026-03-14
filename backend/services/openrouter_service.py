@@ -483,6 +483,77 @@ Rispondi SOLO con l'emoji, nient'altro:"""
             print(f"Error determining topic emoji: {e}")
             return "📖"  # Default fallback
 
+    async def split_into_chapters(self, text: str) -> list[dict]:
+        """
+        Analyze text content and identify logical chapter/section divisions.
+
+        Args:
+            text: Full extracted text from document
+
+        Returns:
+            List of dicts with 'title' and 'start_marker' for each chapter
+        """
+        # Skip splitting for short documents
+        if len(text) < 2000:
+            return []
+
+        # Use first 15k chars for analysis (enough to identify structure)
+        sample = text[:15000] if len(text) > 15000 else text
+
+        prompt = f"""Analizza questo testo estratto da un documento di studio e identifica i CAPITOLI o SEZIONI principali basandoti sugli ARGOMENTI trattati.
+
+TESTO:
+{sample}
+
+REGOLE:
+1. Identifica le sezioni tematiche principali (NON ogni sotto-paragrafo)
+2. Minimo 2 capitoli, massimo 10
+3. Ogni capitolo deve coprire un argomento coerente e sostanziale
+4. Il titolo deve essere descrittivo dell'argomento trattato
+5. start_marker deve essere una frase ESATTA dal testo (le prime parole della sezione)
+6. Il primo capitolo deve iniziare dall'inizio del documento
+
+Rispondi SOLO con un array JSON valido:
+[
+  {{"title": "Titolo del capitolo", "start_marker": "frase esatta dal testo che segna l'inizio"}}
+]"""
+
+        try:
+            response = await asyncio.wait_for(
+                self.client.chat.completions.create(
+                    model=self.vision_model,  # Gemini Flash - fast and cheap
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": prompt}]
+                ),
+                timeout=60.0
+            )
+
+            response_text = response.choices[0].message.content
+            # Clean markdown code blocks
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+
+            chapters = json.loads(response_text.strip())
+
+            # Validate: must be a list with at least 2 items
+            if not isinstance(chapters, list) or len(chapters) < 2:
+                print(f"Chapter splitting returned {len(chapters) if isinstance(chapters, list) else 0} chapters, skipping")
+                return []
+
+            # Validate each chapter has required fields
+            valid = [c for c in chapters if isinstance(c, dict) and "title" in c and "start_marker" in c]
+            if len(valid) < 2:
+                return []
+
+            print(f"AI identified {len(valid)} chapters")
+            return valid
+
+        except Exception as e:
+            print(f"Chapter splitting error: {e}")
+            return []
+
     def _clean_pdf_text(self, text: str) -> str:
         """
         Programmatic cleanup of PDF-extracted text.

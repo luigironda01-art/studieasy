@@ -37,6 +37,7 @@ export default function SourceSummariesPage() {
   const [summaryWords, setSummaryWords] = useState(500);
   const [generating, setGenerating] = useState(false);
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
+  const [includeImages, setIncludeImages] = useState(true);
 
   useBreadcrumb(
     source
@@ -217,6 +218,10 @@ export default function SourceSummariesPage() {
 
     // 1f2. Clean backslash escapes from markdown (e.g. \*text, \\text, \\\text)
     cleaned = cleaned.replace(/^\\+/gm, "");
+
+    // 1f3. Remove AI prompt artifacts (Vision AI response preamble)
+    cleaned = cleaned.replace(/^Ecco il contenuto (?:testuale )?estratto dai documenti.*$/gim, "");
+    cleaned = cleaned.replace(/^Restituisci il contenuto completo.*$/gim, "");
 
     // 1g. Remove orphan markdown bold/italic
     cleaned = cleaned.replace(/\*{1,3}([^*\n]+)\*{1,3}/g, "$1");
@@ -437,7 +442,7 @@ export default function SourceSummariesPage() {
   };
 
 
-  const handleDownloadPdf = async (text: string, title: string, chapterId?: string) => {
+  const handleDownloadPdf = async (text: string, title: string, chapterId?: string, withImages: boolean = true) => {
     setPdfGenerating(true);
     setPdfProgress("Caricamento dati aggiornati...");
 
@@ -482,7 +487,7 @@ export default function SourceSummariesPage() {
 
       const blocks = parseMarkdownBlocks(freshText);
 
-      // Image generation logic:
+      // Image generation logic (skip if withImages is false):
       // - tags ≤ 5: generate all tags + AI extras to reach 5 total
       // - tags 6-10: generate only the tags (max 10)
       // - tags > 10: generate only the first 10 tags
@@ -507,67 +512,71 @@ export default function SourceSummariesPage() {
         return null;
       };
 
-      try {
-        // Phase 1: Generate image tags (capped at MAX_IMAGES)
-        const allImageBlocks = blocks.filter((b) => b.type === "image");
-        const existingImageBlocks = allImageBlocks.slice(0, MAX_IMAGES);
-        let generated = 0;
+      if (withImages) {
+        try {
+          // Phase 1: Generate image tags (capped at MAX_IMAGES)
+          const allImageBlocks = blocks.filter((b) => b.type === "image");
+          const existingImageBlocks = allImageBlocks.slice(0, MAX_IMAGES);
+          let generated = 0;
 
-        if (existingImageBlocks.length > 0) {
-          const total = existingImageBlocks.length;
-          setPdfProgress(`Generazione ${total} immagini dai tag...`);
-          console.log(`[PDF] Found ${allImageBlocks.length} image tags, generating ${total} (max ${MAX_IMAGES})`);
+          if (existingImageBlocks.length > 0) {
+            const total = existingImageBlocks.length;
+            setPdfProgress(`Generazione ${total} immagini dai tag...`);
+            console.log(`[PDF] Found ${allImageBlocks.length} image tags, generating ${total} (max ${MAX_IMAGES})`);
 
-          // Generate in batches of 3 to avoid overwhelming the API
-          for (let batch = 0; batch < total; batch += 3) {
-            const batchBlocks = existingImageBlocks.slice(batch, batch + 3);
-            const batchPromises = batchBlocks.map(async (block, i) => {
-              setPdfProgress(`Generazione immagine ${batch + i + 1} di ${total}...`);
-              const base64 = await genImage(block.text);
-              if (base64) {
-                imageMap[block.text] = base64;
-                return true;
-              }
-              return false;
-            });
-            const batchResults = await Promise.all(batchPromises);
-            generated += batchResults.filter(Boolean).length;
-          }
-          console.log(`[PDF] Generated ${generated}/${total} images from tags`);
-        }
-
-        // Phase 2: If we have fewer than MIN_IMAGES, ask AI for extras
-        if (generated < MIN_IMAGES) {
-          const remaining = MIN_IMAGES - generated;
-          setPdfProgress("Analisi contenuto per immagini extra...");
-          const analyzeRes = await fetch("/api/images/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: freshText }),
-          });
-
-          if (analyzeRes.ok) {
-            const { suggestions } = await analyzeRes.json();
-            if (suggestions && suggestions.length > 0) {
-              const extraSuggestions = suggestions.slice(0, remaining);
-              console.log(`[PDF] AI suggests ${extraSuggestions.length} extra images (need ${remaining} more)`);
-
-              const extraPromises = extraSuggestions.map(
-                async (s: { anchor: string; description: string }, i: number) => {
-                  setPdfProgress(`Immagine extra ${i + 1} di ${extraSuggestions.length}...`);
-                  const base64 = await genImage(s.description);
-                  if (base64) {
-                    anchorImageMap[s.anchor] = { base64, description: s.description };
-                  }
+            // Generate in batches of 3 to avoid overwhelming the API
+            for (let batch = 0; batch < total; batch += 3) {
+              const batchBlocks = existingImageBlocks.slice(batch, batch + 3);
+              const batchPromises = batchBlocks.map(async (block, i) => {
+                setPdfProgress(`Generazione immagine ${batch + i + 1} di ${total}...`);
+                const base64 = await genImage(block.text);
+                if (base64) {
+                  imageMap[block.text] = base64;
+                  return true;
                 }
-              );
-              await Promise.all(extraPromises);
-              console.log(`[PDF] Generated ${Object.keys(anchorImageMap).length} extra images`);
+                return false;
+              });
+              const batchResults = await Promise.all(batchPromises);
+              generated += batchResults.filter(Boolean).length;
+            }
+            console.log(`[PDF] Generated ${generated}/${total} images from tags`);
+          }
+
+          // Phase 2: If we have fewer than MIN_IMAGES, ask AI for extras
+          if (generated < MIN_IMAGES) {
+            const remaining = MIN_IMAGES - generated;
+            setPdfProgress("Analisi contenuto per immagini extra...");
+            const analyzeRes = await fetch("/api/images/analyze", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: freshText }),
+            });
+
+            if (analyzeRes.ok) {
+              const { suggestions } = await analyzeRes.json();
+              if (suggestions && suggestions.length > 0) {
+                const extraSuggestions = suggestions.slice(0, remaining);
+                console.log(`[PDF] AI suggests ${extraSuggestions.length} extra images (need ${remaining} more)`);
+
+                const extraPromises = extraSuggestions.map(
+                  async (s: { anchor: string; description: string }, i: number) => {
+                    setPdfProgress(`Immagine extra ${i + 1} di ${extraSuggestions.length}...`);
+                    const base64 = await genImage(s.description);
+                    if (base64) {
+                      anchorImageMap[s.anchor] = { base64, description: s.description };
+                    }
+                  }
+                );
+                await Promise.all(extraPromises);
+                console.log(`[PDF] Generated ${Object.keys(anchorImageMap).length} extra images`);
+              }
             }
           }
+        } catch (err) {
+          console.warn("[PDF] Image generation failed:", err);
         }
-      } catch (err) {
-        console.warn("[PDF] Image generation failed:", err);
+      } else {
+        console.log("[PDF] Skipping image generation (user opted out)");
       }
 
       setPdfProgress("Creazione PDF...");
@@ -1103,6 +1112,33 @@ export default function SourceSummariesPage() {
                   </div>
                 </div>
 
+                {/* Image Toggle */}
+                <div className="mb-6">
+                  <button
+                    onClick={() => setIncludeImages(!includeImages)}
+                    className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                      includeImages
+                        ? "border-blue-500 bg-blue-500/20"
+                        : "border-slate-600 bg-slate-700/50 hover:border-slate-500"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{includeImages ? "🖼️" : "📝"}</span>
+                      <div className="text-left">
+                        <div className="text-white text-sm font-medium">
+                          {includeImages ? "Con immagini AI" : "Solo testo"}
+                        </div>
+                        <div className="text-slate-400 text-xs">
+                          {includeImages ? "Genera immagini educative nel PDF" : "PDF più veloce, senza costi extra"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`w-12 h-7 rounded-full transition-colors relative ${includeImages ? "bg-blue-500" : "bg-slate-600"}`}>
+                      <div className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${includeImages ? "right-1" : "left-1"}`} />
+                    </div>
+                  </button>
+                </div>
+
                 <div className="flex gap-3">
                   <button
                     onClick={() => setShowGenerateModal(false)}
@@ -1151,7 +1187,7 @@ export default function SourceSummariesPage() {
                   <button
                     onClick={() => {
                       const chapter = chapters.find(c => c.id === generateChapterId);
-                      handleDownloadPdf(generatedSummary, `Riassunto - ${chapter?.title || "Documento"}`);
+                      handleDownloadPdf(generatedSummary, `Riassunto - ${chapter?.title || "Documento"}`, undefined, includeImages);
                     }}
                     className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
                   >
