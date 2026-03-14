@@ -628,6 +628,59 @@ Rispondi SOLO con un array JSON valido:
         # Fix corrupted H₂O patterns
         text = re.sub(r'H\s*,\s*O', 'H₂O', text)
 
+        # Fix corrupted Greek letters: ± → α, ² → β in biology/chemistry context
+        text = re.sub(r'±-', 'α-', text)
+        text = re.sub(r'²-', 'β-', text)
+        text = re.sub(r'±\s*\(', 'α(', text)
+        text = re.sub(r',\s*²\s*\(', ', β(', text)
+        text = re.sub(r'²\s*\(', 'β(', text)
+        text = re.sub(r'alfa\s*\(±\)', 'alfa (α)', text, flags=re.IGNORECASE)
+        text = re.sub(r'beta\s*\(²\)', 'beta (β)', text, flags=re.IGNORECASE)
+        text = re.sub(r'\(±\)', '(α)', text)
+        text = re.sub(r'\(²\)', '(β)', text)
+
+        # Fix completely glued text lines (entire sentences with no spaces)
+        # Process line by line to detect and fix
+        lines = text.split('\n')
+        fixed_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if len(stripped) < 20 or stripped.startswith('#') or stripped.startswith('['):
+                fixed_lines.append(line)
+                continue
+
+            letter_count = len(re.findall(r'[a-zA-Zà-ÿÀ-Ÿ]', stripped))
+            space_count = stripped.count(' ')
+
+            # Normal text has ~1 space per 5-6 chars; glued text has almost none
+            if letter_count > 15 and space_count / max(len(stripped), 1) < 0.05:
+                fixed = stripped
+                # Split lowercase→uppercase boundaries
+                fixed = re.sub(r'([a-zà-ú])([A-ZÀ-Ú])', r'\1 \2', fixed)
+                # Split after punctuation
+                fixed = re.sub(r'([.!?;:,])([a-zA-Zà-ÿÀ-Ÿ])', r'\1 \2', fixed)
+                # Split number-letter boundaries
+                fixed = re.sub(r'(\d)([a-zA-Zà-ÿ])', r'\1 \2', fixed)
+                fixed = re.sub(r'([a-zà-ÿ])(\d)', r'\1 \2', fixed)
+
+                # If still very dense, split at reliable Italian word boundaries
+                new_spaces = fixed.count(' ')
+                if new_spaces / max(len(fixed), 1) < 0.08 and len(fixed) > 30:
+                    # Split around "è" (almost always a standalone word in Italian)
+                    fixed = re.sub(r'([a-zA-Zà-ÿÀ-Ÿ])(è)([a-zà-ÿ])', r'\1 \2 \3', fixed)
+                    # Only use 4+ letter small words to avoid false positives inside words
+                    # (e.g. "lo" inside "glicerolo", "la" inside "alcoola")
+                    long_words = r'(?<=[a-zà-ÿ])((?:della|delle|dello|degli|alla|alle|allo|dalla|dalle|nella|nelle|nello|sono|come|anche|ogni|questo|questa|questi|queste|hanno|essere|molto|dopo|prima|dove|quando|mentre|senza|verso|sopra|sotto|dentro|fuori|circa|durante|secondo|mediante|attraverso|tipicamente|struttura)(?=[a-zà-ÿ]))'
+                    fixed = re.sub(long_words, r' \1', fixed, flags=re.IGNORECASE)
+
+                # Clean up multiple spaces
+                fixed = re.sub(r'\s{2,}', ' ', fixed)
+                fixed_lines.append(fixed)
+            else:
+                fixed_lines.append(line)
+
+        text = '\n'.join(fixed_lines)
+
         return text.strip()
 
     def _split_into_chunks(self, text: str, chunk_size: int = 12000) -> list[str]:

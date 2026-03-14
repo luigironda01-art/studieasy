@@ -208,17 +208,70 @@ export default function SourceSummariesPage() {
     cleaned = cleaned.replace(/beta\s*\(²\)/gi, "beta (β)");
     cleaned = cleaned.replace(/\(±\)/g, "(α)");
     cleaned = cleaned.replace(/\(²\)/g, "(β)");
+    // Fix standalone ± and ² used as α and β in chemistry/biology context
+    // ±-elica → α-elica, ²-foglietto → β-foglietto, ±(1→4) → α(1→4)
+    cleaned = cleaned.replace(/±-/g, "α-");
+    cleaned = cleaned.replace(/²-/g, "β-");
+    cleaned = cleaned.replace(/±\s*\(/g, "α(");
+    cleaned = cleaned.replace(/,\s*²\s*\(/g, ", β(");
+    cleaned = cleaned.replace(/²\s*\(/g, "β(");
+    // Generic standalone ± → α and ² → β when near biology terms
+    cleaned = cleaned.replace(/\b±\b/g, "α");
+    cleaned = cleaned.replace(/(?<=[,\s])²(?=[,\s(])/g, "β");
 
     // 1c2c. Fix missing space before parenthesis: "Carbonio(C)" → "Carbonio (C)"
     cleaned = cleaned.replace(/([a-zà-ÿA-ZÀ-Ÿ])\(([A-Za-z])/g, "$1 ($2");
-    // Fix compound words without spaces: "Essereumano" → "Essere umano"
-    // Insert space when lowercase letter is followed by a different word starting lowercase
-    // after known patterns from table extraction
+
+    // 1c2d. Fix completely glued text (entire sentences without spaces)
+    // Detect lines where letter-density is very high (few/no spaces relative to length)
+    // and attempt to split them using common Italian patterns
+    cleaned = cleaned.split("\n").map((line: string) => {
+      const trimmed = line.trim();
+      if (trimmed.length < 20) return line; // too short
+      if (trimmed.startsWith("#") || trimmed.startsWith("[")) return line; // skip headings/tags
+
+      const letterCount = (trimmed.match(/[a-zA-Zà-ÿÀ-Ÿ]/g) || []).length;
+      const spaceCount = (trimmed.match(/ /g) || []).length;
+      const ratio = spaceCount / trimmed.length;
+
+      // A normal Italian sentence has ~1 space per 5-6 chars (ratio ~0.17)
+      // Glued text has ratio < 0.03
+      if (ratio > 0.05 || letterCount < 15) return line;
+
+      // This line is likely glued — apply aggressive splitting
+      let fixed = trimmed;
+
+      // Split lowercase followed by uppercase: "carbonioacui" → "carbonio Acui" (then lowercase→uppercase handles rest)
+      fixed = fixed.replace(/([a-zà-ÿ])([A-ZÀ-Ÿ])/g, "$1 $2");
+
+      // Split after punctuation followed by letter: "nucleico).Ogni" → "nucleico). Ogni"
+      fixed = fixed.replace(/([.!?;:,])([a-zA-Zà-ÿÀ-Ÿ])/g, "$1 $2");
+
+      // Split number-letter boundaries: "3atomi" → "3 atomi"
+      fixed = fixed.replace(/(\d)([a-zA-Zà-ÿ])/g, "$1 $2");
+      fixed = fixed.replace(/([a-zà-ÿ])(\d)/g, "$1 $2");
+
+      // If still very few spaces, apply Italian word boundary heuristics
+      const newSpaces = (fixed.match(/ /g) || []).length;
+      if (newSpaces / fixed.length < 0.08 && fixed.length > 30) {
+        // Split around "è" (almost always a standalone word in Italian)
+        fixed = fixed.replace(/([a-zA-Zà-ÿÀ-Ÿ])(è)([a-zà-ÿ])/g, "$1 $2 $3");
+        // Only use 4+ letter small words to avoid false positives inside words
+        // (e.g. "lo" inside "glicerolo", "la" inside "alcoola")
+        const longWords = /(?<=[a-zà-ÿ])((?:della|delle|dello|degli|alla|alle|allo|dalla|dalle|nella|nelle|nello|sono|come|anche|ogni|questo|questa|questi|queste|hanno|essere|molto|dopo|prima|dove|quando|mentre|senza|verso|sopra|sotto|dentro|fuori|circa|durante|secondo|mediante|attraverso|tipicamente|struttura)(?=[a-zà-ÿ]))/gi;
+        fixed = fixed.replace(longWords, " $1");
+      }
+
+      // Clean up multiple spaces
+      fixed = fixed.replace(/\s{2,}/g, " ");
+
+      return line.startsWith(" ") ? " " + fixed : fixed;
+    }).join("\n");
+
+    // Fix known compound words (after glued text fix, these may appear)
     cleaned = cleaned.replace(/Essereumano/g, "Essere umano");
     cleaned = cleaned.replace(/Erbamedica/g, "Erba medica");
     cleaned = cleaned.replace(/Altamenteramificato/g, "Altamente ramificato");
-    cleaned = cleaned.replace(/Lineare\s*\(cellulosa\)/g, "Lineare (cellulosa)");
-    cleaned = cleaned.replace(/Ramificata\s*\(amido\)/g, "Ramificata (amido)");
 
     // 1c3. Fix spaced-out [Vedi figura:] and [IMMAGINE:] tags (e.g. "[ V e d i f i g u r a :")
     cleaned = cleaned.replace(/\[\s*V\s*e\s*d\s*i\s*f\s*i\s*g\s*u\s*r\s*a\s*:/gi, "[Vedi figura:");
@@ -466,6 +519,9 @@ export default function SourceSummariesPage() {
       }
 
       // Markdown headings (with or without space after #)
+      // Strip any leading invisible chars for matching (unicode zero-width, BOM, NBSP)
+      const headingLine = line.replace(/^[\u200B\uFEFF\u00A0]+/, "");
+
       // Fix CamelCase glued words: only when heading has NO spaces (clearly AI-glued)
       const fixHeadingText = (t: string): string => {
         // Check if heading is clearly glued (few/no spaces relative to length)
@@ -480,12 +536,12 @@ export default function SourceSummariesPage() {
         t = t.replace(/:([A-Za-zÀ-ÿ])/g, ": $1");
         return t.trim();
       };
-      if (line.match(/^###\s*/)) {
-        blocks.push({ type: "h3", text: fixHeadingText(line.replace(/^###\s*/, "")) });
-      } else if (line.match(/^##\s*/)) {
-        blocks.push({ type: "h2", text: fixHeadingText(line.replace(/^##\s*/, "")) });
-      } else if (line.match(/^#\s*/)) {
-        blocks.push({ type: "h1", text: fixHeadingText(line.replace(/^#\s*/, "")) });
+      if (headingLine.match(/^###\s*/)) {
+        blocks.push({ type: "h3", text: fixHeadingText(headingLine.replace(/^###\s*/, "")) });
+      } else if (headingLine.match(/^##\s*/)) {
+        blocks.push({ type: "h2", text: fixHeadingText(headingLine.replace(/^##\s*/, "")) });
+      } else if (headingLine.match(/^#\s*/)) {
+        blocks.push({ type: "h1", text: fixHeadingText(headingLine.replace(/^#\s*/, "")) });
       }
       // Bullet lists (-, *, •)
       else if (line.match(/^[-*•]\s/)) {
@@ -554,6 +610,36 @@ export default function SourceSummariesPage() {
       // 3b. Remove orphan fragments (1-3 chars, not a heading or list marker)
       if (block.type === "paragraph" && block.text.length <= 3 && !/^\d+[.)]/.test(block.text)) {
         continue; // Skip orphan like "I:" or "H"
+      }
+
+      // 3c. Demote single-word "headings" that are clearly not headings
+      // (e.g. "zucchero" detected as h2 by short-line heuristic)
+      if (isHeading && block.text.split(/\s+/).length === 1 && block.text.length < 15) {
+        // Single word heading — check if it looks like a real heading (all caps or known)
+        if (block.text !== block.text.toUpperCase()) {
+          block.type = "paragraph"; // Demote to paragraph
+        }
+      }
+
+      // 3d. Collapse excessive consecutive empty blocks (max 2)
+      if (block.type === "empty") {
+        let emptyCount = 0;
+        for (let j = filtered.length - 1; j >= 0 && filtered[j].type === "empty"; j--) {
+          emptyCount++;
+        }
+        if (emptyCount >= 2) continue; // Skip — already have 2 empty lines
+      }
+
+      // 3e. Remove raw text that looks like image labels without context
+      // e.g. "NUCLEOSIDE NUCLEOTIDE base azotata gruppi fosfato"
+      // These are figure labels extracted from images, not useful as text
+      if (block.type === "paragraph" && /^[A-Z]{3,}(\s+[A-Za-zà-ÿ]+){2,}$/.test(block.text) && block.text.length < 80) {
+        // Check if it's ALL-CAPS words mixed with lowercase — likely image label
+        const words = block.text.split(/\s+/);
+        const capsWords = words.filter(w => w === w.toUpperCase() && w.length > 2).length;
+        if (capsWords >= 2 && capsWords < words.length) {
+          continue; // Skip image label text
+        }
       }
 
       filtered.push(block);
