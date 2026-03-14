@@ -179,20 +179,29 @@ export default function SourceSummariesPage() {
     // 1c. Remove horizontal rules
     cleaned = cleaned.replace(/^[-_*]{3,}\s*$/gm, "");
 
+    // 1c2. Normalize all Unicode whitespace to regular spaces (non-breaking space, thin space, etc.)
+    cleaned = cleaned.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, " ");
+
+    // 1c3. Fix spaced-out [Vedi figura:] and [IMMAGINE:] tags (e.g. "[ V e d i f i g u r a :")
+    cleaned = cleaned.replace(/\[\s*V\s*e\s*d\s*i\s*f\s*i\s*g\s*u\s*r\s*a\s*:/gi, "[Vedi figura:");
+    cleaned = cleaned.replace(/\[\s*I\s*M\s*M\s*A\s*G\s*I\s*N\s*E\s*:/gi, "[IMMAGINE:");
+
     // 1d. Fix spaced-out text using line-level heuristic
-    // If >40% of space-separated tokens in a line are single chars, it's spaced text
+    // If >35% of space-separated tokens in a line are single chars, it's spaced text
     // Double-space = word boundary, single-space = letter spacing
     cleaned = cleaned.split("\n").map((line: string) => {
-      const tokens = line.split(" ").filter((t: string) => t !== "");
+      // Normalize multiple spaces to single for token counting, but keep originals for word-boundary detection
+      const tokens = line.split(/\s+/).filter((t: string) => t !== "");
       if (tokens.length < 5) return line;
-      // Count single-char tokens (letters, digits, and common symbols like ±, ², (, ), :, etc.)
       const singleCharCount = tokens.filter((t: string) => t.length === 1).length;
-      if (singleCharCount / tokens.length > 0.4) {
-        const parts = line.split(/  +/);
+      if (singleCharCount / tokens.length > 0.35) {
+        // Use double-space (or more) as word boundaries
+        const parts = line.split(/\s{2,}/);
         if (parts.length <= 1) {
-          return line.replace(/ /g, "");
+          // No word boundaries found — collapse all spaces
+          return line.replace(/\s+/g, "");
         }
-        return parts.map((w: string) => w.replace(/ /g, "")).join(" ");
+        return parts.map((w: string) => w.replace(/\s/g, "")).join(" ");
       }
       return line;
     }).join("\n");
