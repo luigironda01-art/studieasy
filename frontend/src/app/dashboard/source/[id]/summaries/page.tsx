@@ -40,6 +40,27 @@ export default function SourceSummariesPage() {
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
   const [includeImages, setIncludeImages] = useState(true);
 
+  // PDF download confirmation dialog
+  const [showPdfDialog, setShowPdfDialog] = useState(false);
+  const [pendingPdfArgs, setPendingPdfArgs] = useState<{
+    text: string;
+    title: string;
+    chapterId?: string;
+  } | null>(null);
+
+  const requestPdfDownload = (text: string, title: string, chapterId?: string) => {
+    setPendingPdfArgs({ text, title, chapterId });
+    setShowPdfDialog(true);
+  };
+
+  const confirmPdfDownload = (withImages: boolean) => {
+    if (pendingPdfArgs) {
+      handleDownloadPdf(pendingPdfArgs.text, pendingPdfArgs.title, pendingPdfArgs.chapterId, withImages);
+    }
+    setShowPdfDialog(false);
+    setPendingPdfArgs(null);
+  };
+
   useBreadcrumb(
     source
       ? [
@@ -280,16 +301,24 @@ export default function SourceSummariesPage() {
     cleaned = cleaned.replace(/\[\s*I\s*M\s*M\s*A\s*G\s*I\s*N\s*E\s*:/gi, "[IMMAGINE:");
 
     // 1d. Fix spaced-out text using line-level heuristic
-    // If >20% of space-separated tokens in a line are single chars, it's spaced text
-    // Double-space = word boundary, single-space = letter spacing
+    // Spaced-out text looks like "m o l e c o l a  p o l a r e" — nearly ALL tokens are single chars
+    // Italian has many 1-char words (è, e, a, o, i) so we need a HIGH threshold
     cleaned = cleaned.split("\n").map((line: string) => {
       // Skip lines that are headings, tags, or very short
       if (line.trim().startsWith("#") || line.trim().startsWith("[") || line.trim().length < 4) return line;
 
       const tokens = line.split(/\s+/).filter((t: string) => t !== "");
       if (tokens.length < 4) return line;
-      const singleCharCount = tokens.filter((t: string) => t.length === 1).length;
-      if (singleCharCount / tokens.length > 0.20) {
+
+      // Exclude known Italian words and bullets from "single char" count
+      const italianSingleWords = new Set(["è", "e", "a", "o", "i", "-", "*", "•"]);
+      const trueSingleCharCount = tokens.filter(
+        (t: string) => t.length === 1 && !italianSingleWords.has(t)
+      ).length;
+
+      // Only trigger if >50% of tokens are TRULY single chars (not Italian words)
+      // Real spaced-out text has 80-100% single chars
+      if (trueSingleCharCount / tokens.length > 0.50) {
         // Use double-space (or more) as word boundaries
         const parts = line.split(/\s{2,}/);
         if (parts.length <= 1) {
@@ -300,10 +329,13 @@ export default function SourceSummariesPage() {
       }
       // Also detect: sequences of single chars separated by spaces (partial spaced text within a line)
       // e.g. "la rende una m o l e c o l a  p o l a r e. L'atomo..."
-      // Made more permissive: match 3+ single chars in a row
-      return line.replace(/(\b[a-zA-Zà-ÿ]\s){3,}[a-zA-Zà-ÿ]\b/g, (match) => {
+      // Only match 4+ single NON-Italian chars in a row
+      return line.replace(/(\b[a-zA-Zà-ÿ]\s){4,}[a-zA-Zà-ÿ]\b/g, (match) => {
         const chars = match.split(/\s+/);
-        if (chars.filter((c: string) => c.length === 1).length > chars.length * 0.5) {
+        const nonItalianSingles = chars.filter(
+          (c: string) => c.length === 1 && !italianSingleWords.has(c)
+        ).length;
+        if (nonItalianSingles > chars.length * 0.6) {
           const words = match.split(/\s{2,}/);
           if (words.length > 1) {
             return words.map((w: string) => w.replace(/\s/g, "")).join(" ");
@@ -538,7 +570,10 @@ export default function SourceSummariesPage() {
         t = t.replace(/:([A-Za-zÀ-ÿ])/g, ": $1");
         return t.trim();
       };
-      if (headingLine.match(/^###\s*/)) {
+      if (headingLine.match(/^#{4,}\s*/)) {
+        // #### or more → treat as h3
+        blocks.push({ type: "h3", text: fixHeadingText(headingLine.replace(/^#+\s*/, "")) });
+      } else if (headingLine.match(/^###\s*/)) {
         blocks.push({ type: "h3", text: fixHeadingText(headingLine.replace(/^###\s*/, "")) });
       } else if (headingLine.match(/^##\s*/)) {
         blocks.push({ type: "h2", text: fixHeadingText(headingLine.replace(/^##\s*/, "")) });
@@ -827,6 +862,38 @@ export default function SourceSummariesPage() {
 
       setPdfProgress("Creazione PDF...");
 
+      // Helper: sanitize Unicode chars that Helvetica can't render
+      // jsPDF's Helvetica only supports Latin-1 (ISO 8859-1)
+      // Characters above U+00FF get corrupted: α(U+03B1)→±(U+00B1), β(U+03B2)→²(U+00B2)
+      const sanitizeForPdf = (text: string): string => {
+        return text
+          // Greek letters → spelled out or ASCII equivalent
+          .replace(/α/g, "a").replace(/β/g, "b").replace(/γ/g, "g").replace(/δ/g, "d")
+          .replace(/Α/g, "A").replace(/Β/g, "B").replace(/Γ/g, "G").replace(/Δ/g, "D")
+          // Subscript digits → normal digits (used in formulas like H₂O)
+          .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
+          .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
+          .replace(/₈/g, "8").replace(/₉/g, "9")
+          // Superscript digits → normal digits with context
+          .replace(/⁰/g, "0").replace(/¹/g, "1").replace(/²/g, "2").replace(/³/g, "3")
+          .replace(/⁴/g, "4").replace(/⁵/g, "5").replace(/⁶/g, "6").replace(/⁷/g, "7")
+          .replace(/⁸/g, "8").replace(/⁹/g, "9")
+          // Superscript +/- → normal +/-
+          .replace(/⁺/g, "+").replace(/⁻/g, "-")
+          // Arrows
+          .replace(/→/g, "->").replace(/←/g, "<-").replace(/↔/g, "<->")
+          // Special dashes
+          .replace(/—/g, "-").replace(/–/g, "-")
+          // Bullet (already handled by list rendering, but just in case)
+          .replace(/•/g, "-")
+          // Ellipsis
+          .replace(/…/g, "...")
+          // Quotes
+          .replace(/[""]/g, '"').replace(/['']/g, "'")
+          // Non-breaking space
+          .replace(/\u00A0/g, " ");
+      };
+
       // Helper: check page break and add new page if needed
       const ensureSpace = (needed: number) => {
         if (y + needed > pageHeight - margin) {
@@ -835,10 +902,18 @@ export default function SourceSummariesPage() {
         }
       };
 
+      // ── Sanitize all block text for PDF font compatibility ──
+      for (const block of blocks) {
+        block.text = sanitizeForPdf(block.text);
+        if (block.rows) {
+          block.rows = block.rows.map(row => row.map(cell => sanitizeForPdf(cell)));
+        }
+      }
+
       // ── Document Title ──
       doc.setFontSize(22);
       doc.setFont("helvetica", "bold");
-      const titleLines = doc.splitTextToSize(title, maxWidth);
+      const titleLines = doc.splitTextToSize(sanitizeForPdf(title), maxWidth);
       for (const tl of titleLines) {
         ensureSpace(10);
         doc.text(tl, margin, y);
@@ -880,7 +955,7 @@ export default function SourceSummariesPage() {
               doc.setFontSize(8);
               doc.setFont("helvetica", "italic");
               doc.setTextColor(120);
-              const captionLines = doc.splitTextToSize(imgData.description, maxWidth * 0.8);
+              const captionLines = doc.splitTextToSize(sanitizeForPdf(imgData.description), maxWidth * 0.8);
               for (const cl of captionLines.slice(0, 2)) {
                 doc.text(cl, pageWidth / 2, y, { align: "center" });
                 y += 4;
@@ -1138,7 +1213,7 @@ export default function SourceSummariesPage() {
         doc.setFont("helvetica", "normal");
         doc.setTextColor(150);
         doc.text(
-          `Generato da Backup Buddy v3 — Pagina ${i}/${totalPages}`,
+          `Generato da Backup Buddy v3 - Pagina ${i}/${totalPages}`,
           pageWidth / 2,
           pageHeight - 10,
           { align: "center" }
@@ -1228,7 +1303,7 @@ export default function SourceSummariesPage() {
             </button>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => handleDownloadPdf(
+                onClick={() => requestPdfDownload(
                   selectedChapter.processed_text || "",
                   selectedChapter.title,
                   selectedChapter.id
@@ -1564,7 +1639,7 @@ export default function SourceSummariesPage() {
                   const fullText = completedChapters
                     .map(c => `## ${c.title}\n\n${c.processed_text || ""}`)
                     .join("\n\n---\n\n");
-                  handleDownloadPdf(fullText, source?.title || "Libro Completo");
+                  requestPdfDownload(fullText, source?.title || "Libro Completo");
                 }}
                 disabled={pdfGenerating}
                 className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1635,7 +1710,7 @@ export default function SourceSummariesPage() {
                     Genera Riassunto
                   </button>
                   <button
-                    onClick={() => handleDownloadPdf(
+                    onClick={() => requestPdfDownload(
                       chapter.processed_text || "",
                       chapter.title,
                       chapter.id
@@ -1658,6 +1733,50 @@ export default function SourceSummariesPage() {
 
       {/* Generate Summary Modal */}
       {renderGenerateModal()}
+
+      {/* PDF Download Options Dialog */}
+      {showPdfDialog && (
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setShowPdfDialog(false)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-2xl min-w-[360px]">
+              <h3 className="text-white font-semibold text-lg mb-1">Scarica PDF</h3>
+              <p className="text-slate-400 text-sm mb-5">Scegli il formato di download</p>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => confirmPdfDownload(true)}
+                  className="w-full flex items-center gap-4 p-4 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl transition-colors text-left"
+                >
+                  <span className="text-3xl">🖼️</span>
+                  <div>
+                    <div className="text-white font-medium">Con immagini AI</div>
+                    <div className="text-slate-400 text-xs">Genera immagini educative nel PDF (più lento, usa crediti)</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => confirmPdfDownload(false)}
+                  className="w-full flex items-center gap-4 p-4 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl transition-colors text-left"
+                >
+                  <span className="text-3xl">📝</span>
+                  <div>
+                    <div className="text-white font-medium">Solo testo</div>
+                    <div className="text-slate-400 text-xs">PDF veloce, senza costi extra per le immagini</div>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowPdfDialog(false)}
+                className="w-full mt-4 py-2.5 text-slate-400 hover:text-white text-sm transition-colors"
+              >
+                Annulla
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* PDF Generation Progress Overlay */}
       {pdfGenerating && (
