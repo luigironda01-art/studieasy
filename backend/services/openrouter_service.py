@@ -591,6 +591,13 @@ Rispondi SOLO con un array JSON valido:
         # Remove standalone URLs on their own line
         text = re.sub(r'^\s*https?://\S+\s*$', '', text, flags=re.MULTILINE)
 
+        # Remove Vision AI [IMMAGINE: ...] tags — convert description to parenthetical
+        text = re.sub(r'\[IMMAGINE:\s*(.*?)\]', r'(\1)', text, flags=re.DOTALL)
+        # Remove [FORMULA: ...] tags — keep formula content inline
+        text = re.sub(r'\[FORMULA:\s*(.*?)\]', r'\1', text, flags=re.DOTALL)
+        # Remove [Vedi figura: ...] tags
+        text = re.sub(r'\[Vedi figura:\s*(.*?)\]', r'(\1)', text, flags=re.DOTALL)
+
         # Fix bullet points
         text = re.sub(r'^❖\s*', '- ', text, flags=re.MULTILINE)
         text = re.sub(r'^➢\s*', '- ', text, flags=re.MULTILINE)
@@ -598,30 +605,9 @@ Rispondi SOLO con un array JSON valido:
 
         return text.strip()
 
-    async def enhance_processed_text(self, raw_text: str, language: str = "it") -> str:
-        """
-        Enhance and structure raw extracted text for better studying.
-        Step 1: Programmatic cleanup (fix spacing, formatting - no content loss)
-        Step 2: AI adds section headings and bold keywords (preserving all content)
-
-        Args:
-            raw_text: Raw text extracted from document
-            language: 'it' or 'en'
-
-        Returns:
-            Enhanced text in Markdown
-        """
-        # Step 1: Programmatic cleanup - zero content loss
-        cleaned = self._clean_pdf_text(raw_text)
-        print(f"Enhancement Step 1 (cleanup): {len(raw_text)} → {len(cleaned)} chars")
-
-        # Step 2: Use Vision model (Gemini Flash) for formatting
-        # Gemini follows instructions more literally than Claude for reformatting
-        # Process in chunks
-        chunk_size = 12000
+    def _split_into_chunks(self, text: str, chunk_size: int = 12000) -> list[str]:
+        """Split text into chunks at natural paragraph boundaries."""
         chunks = []
-        text = cleaned
-
         while len(text) > chunk_size:
             split_at = text.rfind("\n\n", 0, chunk_size)
             if split_at == -1:
@@ -632,55 +618,97 @@ Rispondi SOLO con un array JSON valido:
             text = text[split_at:].lstrip()
         if text:
             chunks.append(text)
+        return chunks
 
-        print(f"Enhancement Step 2 (AI structure): {len(chunks)} chunks")
+    async def _ai_pass(self, text: str, prompt_template: str, pass_name: str, min_ratio: float = 0.7) -> str:
+        """Run an AI pass on text, processing in chunks if needed."""
+        chunks = self._split_into_chunks(text)
+        print(f"{pass_name}: {len(chunks)} chunk(s), {len(text)} chars totali")
 
-        enhanced_parts = []
+        processed_parts = []
         for i, chunk in enumerate(chunks):
-            prompt = f"""Aggiungi SOLO formattazione Markdown al seguente testo. NON modificare, rimuovere o riassumere il contenuto.
-
-TESTO:
-{chunk}
-
-REGOLE TASSATIVE:
-1. Aggiungi ## per i titoli di sezione e ### per i sotto-titoli
-2. Metti in **grassetto** i termini chiave e le definizioni importanti
-3. NON eliminare NESSUNA frase o informazione
-4. NON riscrivere le frasi - mantieni il testo originale
-5. NON aggiungere introduzioni, conclusioni o commenti tuoi
-6. Restituisci SOLO il testo formattato"""
-
+            prompt = prompt_template.replace("{CHUNK}", chunk)
             try:
                 response = await asyncio.wait_for(
                     self.client.chat.completions.create(
-                        model=self.vision_model,  # Gemini Flash - follows formatting instructions better
+                        model=self.vision_model,
                         max_tokens=16000,
-                        messages=[
-                            {"role": "user", "content": prompt}
-                        ]
+                        messages=[{"role": "user", "content": prompt}]
                     ),
-                    timeout=120.0
+                    timeout=180.0
                 )
                 part = response.choices[0].message.content
-                # Safety check: if AI compressed too much, use cleaned text instead
-                if len(part) < len(chunk) * 0.7:
-                    print(f"Chunk {i+1}: AI compressed too much ({len(chunk)} → {len(part)}), using cleaned text")
-                    enhanced_parts.append(chunk)
+                if len(part) < len(chunk) * min_ratio:
+                    print(f"  Chunk {i+1}: AI compressed too much ({len(chunk)} → {len(part)}), keeping original")
+                    processed_parts.append(chunk)
                 else:
-                    enhanced_parts.append(part)
-                    print(f"Chunk {i+1}/{len(chunks)}: {len(chunk)} → {len(part)} chars")
+                    processed_parts.append(part)
+                    print(f"  Chunk {i+1}/{len(chunks)}: {len(chunk)} → {len(part)} chars")
             except Exception as e:
-                print(f"Chunk {i+1} error: {e}, using cleaned text")
-                enhanced_parts.append(chunk)
+                print(f"  Chunk {i+1} error: {e}, keeping original")
+                processed_parts.append(chunk)
 
-        result = "\n\n".join(enhanced_parts)
-        # Final safety: if result is too short, return cleaned text
-        if len(result) < len(cleaned) * 0.7:
-            print(f"Enhancement too aggressive ({len(result)} vs {len(cleaned)}), returning cleaned text")
+        return "\n\n".join(processed_parts)
+
+    async def enhance_processed_text(self, raw_text: str) -> str:
+        """
+        Enhance raw extracted text into high-quality study content.
+
+        Pipeline:
+        1. Programmatic cleanup (fix spacing, remove Vision AI tags)
+        2. AI Pass 1 — Riscrittura: transform raw notes into rich study content
+        3. AI Pass 2 — Formattazione: add Markdown structure (headings, bold, lists)
+        """
+        # Step 1: Programmatic cleanup
+        cleaned = self._clean_pdf_text(raw_text)
+        print(f"Enhancement Step 1 (cleanup): {len(raw_text)} → {len(cleaned)} chars")
+
+        # Step 2: AI Pass 1 — Riscrittura contenuto
+        rewrite_prompt = """Sei un esperto di didattica universitaria. Riscrivi il seguente testo estratto da un libro di studio, trasformandolo in contenuto chiaro, completo e adatto allo studio.
+
+TESTO ORIGINALE:
+{CHUNK}
+
+ISTRUZIONI:
+1. RISCRIVI il testo in modo chiaro e scorrevole, come un buon libro di testo
+2. MANTIENI tutte le informazioni, i concetti, i dati e le definizioni presenti
+3. ESPANDI le parti telegrafiche o frammentarie in frasi complete e comprensibili
+4. Le descrizioni di immagini tra parentesi (es. "Due grafici a torta...") vanno integrate come descrizioni testuali del contenuto che rappresentano
+5. Le formule vanno mantenute e spiegate brevemente se il contesto lo richiede
+6. ORGANIZZA il contenuto in paragrafi logici e coerenti
+7. USA un tono accademico ma accessibile, adatto a studenti universitari
+8. NON aggiungere informazioni inventate — usa SOLO ciò che è nel testo originale
+9. NON aggiungere formattazione markdown (niente #, **, ecc.) — solo testo piano ben scritto
+10. Restituisci SOLO il testo riscritto, nient'altro"""
+
+        rewritten = await self._ai_pass(cleaned, rewrite_prompt, "Pass 1 (riscrittura)", min_ratio=0.5)
+        print(f"Enhancement Step 2 (rewrite): {len(cleaned)} → {len(rewritten)} chars")
+
+        # Step 3: AI Pass 2 — Formattazione Markdown
+        format_prompt = """Formatta il seguente testo di studio in Markdown strutturato per facilitare lo studio e la lettura.
+
+TESTO:
+{CHUNK}
+
+REGOLE DI FORMATTAZIONE:
+1. Aggiungi ## per i titoli di sezione e ### per i sotto-titoli
+2. Metti in **grassetto** i termini chiave, le definizioni e i concetti importanti
+3. Usa elenchi puntati (-) dove appropriato per liste di elementi
+4. Separa i paragrafi con righe vuote per leggibilità
+5. NON modificare il contenuto del testo — cambia SOLO la formattazione
+6. NON aggiungere introduzioni, conclusioni o commenti
+7. Restituisci SOLO il testo formattato in Markdown"""
+
+        formatted = await self._ai_pass(rewritten, format_prompt, "Pass 2 (formattazione)", min_ratio=0.8)
+        print(f"Enhancement Step 3 (format): {len(rewritten)} → {len(formatted)} chars")
+
+        # Final safety: if everything failed, return cleaned text
+        if len(formatted) < len(cleaned) * 0.3:
+            print(f"Enhancement failed ({len(formatted)} vs {len(cleaned)}), returning cleaned text")
             return cleaned
 
-        print(f"Enhancement complete: {len(raw_text)} → {len(result)} chars ({len(result)/max(len(raw_text),1)*100:.0f}%)")
-        return result
+        print(f"Enhancement complete: {len(raw_text)} → {len(formatted)} chars ({len(formatted)/max(len(raw_text),1)*100:.0f}%)")
+        return formatted
 
 
 # Singleton instance
