@@ -26,11 +26,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = `Genera un'illustrazione chiara ed educativa per un documento di studio universitario.
-L'immagine deve rappresentare: ${description}
-Stile: Pulito, accademico, informativo. Adatto per un libro di testo o materiale di studio.
-IMPORTANTE: Tutte le etichette, i testi e le scritte nell'immagine DEVONO essere nella STESSA LINGUA del testo qui sopra. Se il testo è in italiano, le etichette devono essere in italiano. MAI usare spagnolo o altre lingue diverse da quella del documento.
-Qualità professionale.`;
+    // Detect language from description to enforce in image labels
+    const italianWords = /\b(della|delle|degli|nella|nelle|con|che|una|sono|tra|per|più|questo|questa)\b/i;
+    const isItalian = italianWords.test(description);
+    const langLabel = isItalian ? "ITALIANO" : "the same language as the description";
+    const langInstruction = isItalian
+      ? "TUTTE le etichette, scritte, testi e label nell'immagine DEVONO essere in ITALIANO. NON usare spagnolo, inglese o altre lingue. Ogni parola visibile deve essere in italiano."
+      : "All labels, text and captions in the image MUST be in the SAME LANGUAGE as the description above. Never use a different language.";
+
+    const prompt = `Create an educational illustration for a university study document.
+
+Subject: ${description}
+
+Style: Clean, academic, informative. Suitable for a textbook.
+Professional quality, clear diagram/illustration.
+
+CRITICAL LANGUAGE REQUIREMENT: ${langInstruction}
+Language for ALL text in the image: ${langLabel}`;
 
     // Try each model via raw fetch to OpenRouter (not OpenAI SDK)
     // because OpenRouter returns images in non-standard fields
@@ -44,7 +56,10 @@ Qualità professionale.`;
           },
           body: JSON.stringify({
             model,
-            messages: [{ role: "user", content: prompt }],
+            messages: [
+              { role: "system", content: `You are an educational illustrator. You create clear, professional diagrams and illustrations for university textbooks. CRITICAL: All text, labels, and captions in your images MUST be in ${langLabel}. NEVER use Spanish or any other language.` },
+              { role: "user", content: prompt },
+            ],
             modalities: ["image", "text"],
           }),
         });

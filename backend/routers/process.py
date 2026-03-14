@@ -151,140 +151,198 @@ async def process_pdf(request: ProcessRequest):
         # Initialize OpenRouter service
         openrouter = get_openrouter_service()
 
-        # Extract text from PDF using PyPDF2 (primary method)
+        # ═══ SMART PAGE ANALYSIS & EXTRACTION ═══
+        # Analyze each page to determine: TEXT_ONLY, IMAGE_ONLY, or MIXED
+        # Then extract using the best method for each page type
+
         extracted_text = ""
-        use_vision = False
+        page_count = 0
 
         try:
             pdf_reader = PdfReader(BytesIO(pdf_bytes))
             page_count = len(pdf_reader.pages)
             print(f"PDF has {page_count} pages")
+            update_progress(20, f"Rilevate {page_count} pagine, analisi contenuto...")
 
-            update_progress(25, f"Rilevate {page_count} pagine, estrazione testo...")
+            # Step 1: Classify each page
+            page_analysis = []
+            text_only_pages = []
+            vision_needed_pages = []
 
             for i, page in enumerate(pdf_reader.pages):
-                page_text = page.extract_text()
-                if page_text:
-                    extracted_text += page_text + "\n\n"
-                # Update progress per page (25-50%)
-                page_progress = 25 + int((i + 1) / page_count * 25)
-                if i % 5 == 0 or i == page_count - 1:
-                    update_progress(page_progress, f"Pagina {i+1}/{page_count}")
+                page_text = page.extract_text() or ""
+                text_chars = len(page_text.strip())
 
+                # Detect embedded images
+                try:
+                    has_images = len(page.images) > 0
+                except Exception:
+                    has_images = False
+
+                # Classify page
+                if text_chars > 200 and not has_images:
+                    page_type = "TEXT_ONLY"
+                    text_only_pages.append(i)
+                elif text_chars < 50 and (has_images or text_chars == 0):
+                    page_type = "IMAGE_ONLY"
+                    vision_needed_pages.append(i)
+                else:
+                    page_type = "MIXED"
+                    vision_needed_pages.append(i)
+
+                page_analysis.append({
+                    "index": i,
+                    "type": page_type,
+                    "text": page_text,
+                    "text_chars": text_chars,
+                    "has_images": has_images,
+                })
+
+            text_count = len(text_only_pages)
+            vision_count = len(vision_needed_pages)
+            print(f"Page analysis: {text_count} text-only, {vision_count} need vision (image/mixed)")
+            extraction_notes.append(f"Analisi: {text_count} pagine testo, {vision_count} pagine con immagini")
+
+            update_progress(30, f"Analisi completata: {text_count} testo, {vision_count} immagini")
+
+            # Step 2: Extract text from TEXT_ONLY pages directly (PyPDF2 = highest quality)
+            page_texts = {}
+            for pa in page_analysis:
+                if pa["type"] == "TEXT_ONLY":
+                    page_texts[pa["index"]] = pa["text"]
+
+            # Step 3: Send vision-needed pages to Vision AI
+            if vision_needed_pages and PDF2IMAGE_AVAILABLE and len(vision_needed_pages) <= max_vision_pages:
+                try:
+                    update_progress(35, f"Vision AI per {len(vision_needed_pages)} pagine...")
+                    extraction_method = "hybrid"
+
+                    # Convert only vision-needed pages to images
+                    all_images = convert_from_bytes(pdf_bytes, dpi=200, fmt='png')
+                    print(f"Converted PDF to {len(all_images)} images")
+
+                    # Build batches of vision-needed pages (max 10 per batch for quality)
+                    vision_batch_size = 10
+                    vision_pages_data = []
+                    for page_idx in vision_needed_pages:
+                        if page_idx < len(all_images):
+                            buffer = BytesIO()
+                            all_images[page_idx].save(buffer, format='PNG')
+                            img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                            vision_pages_data.append({"index": page_idx, "image": img_b64})
+
+                    total_vision_batches = (len(vision_pages_data) + vision_batch_size - 1) // vision_batch_size
+
+                    for batch_idx in range(total_vision_batches):
+                        start = batch_idx * vision_batch_size
+                        end = min(start + vision_batch_size, len(vision_pages_data))
+                        batch = vision_pages_data[start:end]
+                        batch_images = [p["image"] for p in batch]
+                        batch_page_nums = [p["index"] + 1 for p in batch]
+
+                        progress = 40 + int((batch_idx / max(total_vision_batches, 1)) * 25)
+                        update_progress(progress, f"Vision AI: pagine {batch_page_nums[0]}-{batch_page_nums[-1]}...")
+
+                        try:
+                            batch_text = await openrouter.process_document_with_vision(batch_images)
+                            # Store vision text for these pages as a group
+                            for p in batch:
+                                page_texts[p["index"]] = None  # Mark as vision-processed
+                            # Split vision output by page separator and assign
+                            vision_sections = batch_text.split("---")
+                            for sec_idx, section in enumerate(vision_sections):
+                                section = section.strip()
+                                if section and sec_idx < len(batch):
+                                    actual_page = batch[sec_idx]["index"]
+                                    # For MIXED pages: combine PyPDF2 text + Vision AI images
+                                    pa = page_analysis[actual_page]
+                                    if pa["type"] == "MIXED" and pa["text_chars"] > 200:
+                                        # Keep PyPDF2 text, add only [IMMAGINE:] tags from vision
+                                        import re
+                                        image_tags = re.findall(r'\[IMMAGINE:.*?\]', section, re.DOTALL)
+                                        formula_tags = re.findall(r'\[FORMULA:.*?\]', section, re.DOTALL)
+                                        combined = pa["text"] + "\n\n"
+                                        if image_tags:
+                                            combined += "\n".join(image_tags) + "\n\n"
+                                        if formula_tags:
+                                            combined += "\n".join(formula_tags) + "\n\n"
+                                        page_texts[actual_page] = combined
+                                    else:
+                                        page_texts[actual_page] = section
+                            # Fallback: if split didn't work, assign entire batch output to first page
+                            if len(vision_sections) < len(batch):
+                                for p in batch:
+                                    if page_texts.get(p["index"]) is None:
+                                        page_texts[p["index"]] = batch_text if p == batch[0] else ""
+
+                            print(f"Vision batch {batch_idx+1}/{total_vision_batches}: {len(batch_text)} chars for pages {batch_page_nums}")
+                        except Exception as batch_error:
+                            print(f"Vision batch {batch_idx+1} failed: {batch_error}")
+                            extraction_notes.append(f"Vision fallito per pagine {batch_page_nums}")
+                            # Fallback to PyPDF2 text for these pages
+                            for p in batch:
+                                pa = page_analysis[p["index"]]
+                                page_texts[p["index"]] = pa["text"] if pa["text_chars"] > 0 else ""
+
+                except Exception as vision_error:
+                    print(f"Vision processing error: {vision_error}")
+                    extraction_notes.append(f"Errore Vision AI: {str(vision_error)[:100]}")
+                    # Fallback: use PyPDF2 text for all pages
+                    for pa in page_analysis:
+                        if pa["index"] not in page_texts:
+                            page_texts[pa["index"]] = pa["text"]
+
+            elif vision_needed_pages and not PDF2IMAGE_AVAILABLE:
+                extraction_notes.append("Vision AI non disponibile (pdf2image non installato)")
+                # Use PyPDF2 text as fallback
+                for pa in page_analysis:
+                    if pa["index"] not in page_texts:
+                        page_texts[pa["index"]] = pa["text"]
+
+            elif vision_needed_pages and len(vision_needed_pages) > max_vision_pages:
+                extraction_notes.append(f"Troppe pagine per Vision ({len(vision_needed_pages)}, max {max_vision_pages})")
+                for pa in page_analysis:
+                    if pa["index"] not in page_texts:
+                        page_texts[pa["index"]] = pa["text"]
+            else:
+                # All pages are text-only
+                extraction_method = "text"
+
+            # Step 4: Assemble final text in page order
+            assembled_parts = []
+            for i in range(page_count):
+                text = page_texts.get(i, "")
+                if text and text.strip():
+                    assembled_parts.append(text.strip())
+            extracted_text = "\n\n".join(assembled_parts)
             chars_extracted = len(extracted_text)
 
-            # Check if text extraction was successful
-            avg_chars_per_page = chars_extracted / max(page_count, 1)
-
-            # For admin users: always use vision to capture images/diagrams (hybrid mode)
-            if is_admin:
-                print(f"Admin user: forcing hybrid mode (text + vision)")
-                use_vision = True
-                extraction_notes.append("Modalità ibrida (testo + vision) per massima qualità")
-            elif avg_chars_per_page < 100:
-                # Low text density - likely image-based PDF
-                print(f"Low text density ({avg_chars_per_page:.0f} chars/page) - trying vision")
-                use_vision = True
-                extraction_notes.append(f"Bassa densità testo ({avg_chars_per_page:.0f} char/pagina)")
+            # Set extraction method
+            if vision_needed_pages and PDF2IMAGE_AVAILABLE:
+                if text_only_pages:
+                    extraction_method = "hybrid"
+                    extraction_notes.append(f"Ibrido: PyPDF2 ({text_count} pag) + Vision AI ({vision_count} pag)")
+                else:
+                    extraction_method = "vision"
             else:
-                extraction_quality = 100
+                extraction_method = "text"
+
+            # Calculate quality
+            extraction_quality = min(100, int((chars_extracted / max(page_count * 300, 1)) * 100))
 
         except Exception as pdf_error:
             print(f"PDF extraction error: {pdf_error}")
-            use_vision = True
-            extraction_notes.append(f"Errore estrazione testo: {str(pdf_error)[:100]}")
-
-        update_progress(50, "Estrazione testo completata")
-
-        # Fallback to vision processing for image-based PDFs
-        if use_vision and PDF2IMAGE_AVAILABLE and page_count <= max_vision_pages:
-            try:
-                print(f"Using Vision AI for image-based PDF ({page_count} pages, limit={max_vision_pages})...")
-                extraction_method = "vision"
-                update_progress(55, "Avviando Vision AI...")
-
-                # Convert PDF to images
-                images = convert_from_bytes(pdf_bytes, dpi=150, fmt='png')
-                print(f"Converted {len(images)} pages to images")
-                update_progress(60, f"Convertite {len(images)} pagine in immagini")
-
-                # Convert images to base64
-                images_base64 = []
-                for img in images[:max_vision_pages]:
-                    buffer = BytesIO()
-                    img.save(buffer, format='PNG')
-                    img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-                    images_base64.append(img_b64)
-
-                # Process in batches of 20 pages for API limits
-                vision_text = ""
-                batch_size = 20
-                total_batches = (len(images_base64) + batch_size - 1) // batch_size
-
-                for batch_idx in range(total_batches):
-                    start = batch_idx * batch_size
-                    end = min(start + batch_size, len(images_base64))
-                    batch = images_base64[start:end]
-
-                    batch_progress = 65 + int((batch_idx / total_batches) * 5)
-                    update_progress(batch_progress, f"Vision AI: batch {batch_idx+1}/{total_batches} (pagine {start+1}-{end})...")
-
-                    try:
-                        batch_text = await openrouter.process_document_with_vision(batch)
-                        vision_text += batch_text + "\n\n"
-                        print(f"Batch {batch_idx+1}/{total_batches}: extracted {len(batch_text)} chars")
-                    except Exception as batch_error:
-                        print(f"Batch {batch_idx+1}/{total_batches} failed: {batch_error}")
-                        extraction_notes.append(f"Batch {batch_idx+1} fallito (pagine {start+1}-{end})")
-                        # Continue with other batches instead of failing entirely
-
-                vision_chars = len(vision_text)
-                print(f"Vision total: {vision_chars} chars")
-                update_progress(70, f"Vision AI: estratti {vision_chars} caratteri")
-
-                # Choose best extraction (don't combine - causes duplication)
-                if vision_chars > 0:
-                    extracted_text = vision_text
-                    chars_extracted = vision_chars
-                    extraction_method = "vision"
-                    extraction_quality = min(100, int((vision_chars / (page_count * 500)) * 100))
-                    extraction_notes.append(f"Vision AI: {vision_chars} chars da {page_count} pagine")
-                else:
-                    # Vision failed but we have PyPDF2 text
-                    extraction_method = "text"
-                    extraction_quality = min(100, int((chars_extracted / (page_count * 500)) * 100))
-                    extraction_notes.append("Vision AI senza risultati, usato solo testo")
-
-            except Exception as vision_error:
-                print(f"Vision processing error: {vision_error}")
-                extraction_notes.append(f"Errore Vision AI: {str(vision_error)[:100]}")
-                if not extracted_text:
-                    extracted_text = "[Errore nell'estrazione del testo dal PDF]"
-                    extraction_quality = 0
-                    extraction_method = "failed"
-                else:
-                    # Partial success with text
-                    extraction_quality = min(50, int((chars_extracted / (page_count * 500)) * 100))
-
-        elif use_vision and not PDF2IMAGE_AVAILABLE:
-            print("Vision processing not available (pdf2image not installed)")
-            extraction_notes.append("Vision AI non disponibile (pdf2image non installato)")
+            extraction_notes.append(f"Errore estrazione: {str(pdf_error)[:100]}")
             if not extracted_text:
-                extracted_text = "[PDF basato su immagini - Vision AI non disponibile]"
+                extracted_text = "[Errore nell'estrazione del testo dal PDF]"
                 extraction_quality = 0
                 extraction_method = "failed"
-            else:
-                extraction_quality = min(30, int((chars_extracted / (page_count * 500)) * 100))
 
-        elif use_vision and page_count > max_vision_pages:
-            extraction_notes.append(f"PDF troppo lungo per Vision AI ({page_count} pagine, max {max_vision_pages})")
-            extraction_quality = min(30, int((chars_extracted / (page_count * 500)) * 100))
+        update_progress(65, "Estrazione completata")
 
         # Ensure minimum quality if we have meaningful text
         if chars_extracted > 1000 and extraction_quality < 50:
             extraction_quality = 50
-
-        # Cap quality at 100
         extraction_quality = min(100, max(0, extraction_quality))
 
         # Prepare common metadata

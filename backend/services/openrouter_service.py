@@ -36,17 +36,32 @@ class OpenRouterService:
         Returns:
             Extracted text content
         """
-        prompt = """Analizza queste pagine di documento e estrai TUTTO il contenuto testuale.
+        prompt = """Sei un assistente accademico esperto. Analizza queste pagine di un documento di studio e produci una trascrizione COMPLETA e FEDELE del contenuto.
 
-ISTRUZIONI:
-1. Estrai il testo esattamente come appare in ogni pagina
-2. Per immagini, grafici, diagrammi: descrivi dettagliatamente cosa rappresentano tra tag [IMMAGINE: descrizione]. LIMITE: inserisci al MASSIMO 5 tag [IMMAGINE:], preferibilmente meno. Scegli solo le immagini più importanti e didatticamente utili (formule complesse, strutture molecolari, diagrammi chiave). Se ci sono più di 5 immagini nel documento, seleziona le 5 più rilevanti e per le altre trascrivi semplicemente il contenuto come testo. Il massimo assoluto è 10 tag [IMMAGINE:].
-3. Per formule matematiche/chimiche: trascrivi in formato leggibile tra tag [FORMULA: formula]
-4. Per tabelle: converti in formato markdown
-5. Mantieni la struttura logica: titoli, paragrafi, elenchi
-6. Separa chiaramente le pagine con "---" tra una e l'altra
+LINGUA: Rispondi ESCLUSIVAMENTE nella stessa lingua del documento. Se il documento è in italiano, TUTTO il tuo output (incluse le descrizioni delle immagini) deve essere in italiano. Se è in inglese, in inglese. MAI mescolare lingue.
 
-Restituisci il contenuto completo in formato Markdown."""
+REGOLE DI ESTRAZIONE:
+
+1. TESTO: Trascrivi fedelmente tutto il testo visibile. Mantieni la struttura originale: titoli, sottotitoli, paragrafi, elenchi puntati/numerati. Non parafrasare, non riassumere — trascrivi esattamente.
+
+2. IMMAGINI, GRAFICI, DIAGRAMMI, SCHEMI:
+   - Per ogni elemento visivo significativo, inserisci un tag: [IMMAGINE: descrizione dettagliata ed educativa]
+   - La descrizione deve spiegare COSA rappresenta l'immagine in modo utile per lo studio (non come un prompt per generare immagini)
+   - Esempio BUONO: [IMMAGINE: Struttura della molecola di acqua H2O con angolo di legame di 104.5°, che mostra i due atomi di idrogeno legati all'ossigeno tramite legami covalenti polari]
+   - Esempio CATTIVO: [IMMAGINE: Un'immagine che mostra una molecola]
+   - LIMITE: Massimo 5 tag [IMMAGINE:] per batch di pagine. Scegli le immagini più importanti didatticamente. Massimo assoluto: 10.
+
+3. FORMULE MATEMATICHE/CHIMICHE:
+   - Trascrivi tra tag: [FORMULA: formula leggibile]
+   - Esempio: [FORMULA: E = mc²] oppure [FORMULA: H₂O → H⁺ + OH⁻]
+
+4. TABELLE: Converti in formato Markdown con | colonne | allineate |
+
+5. STRUTTURA: Separa le pagine con "---" su riga singola.
+
+6. COMPLETEZZA: Non omettere contenuto. Ogni paragrafo, ogni punto elenco, ogni nota a piè di pagina deve essere incluso.
+
+Restituisci SOLO il contenuto estratto, senza commenti o meta-testo."""
 
         # Build message content with images
         content = [{"type": "text", "text": prompt}]
@@ -63,7 +78,7 @@ Restituisci il contenuto completo in formato Markdown."""
             response = await asyncio.wait_for(
                 self.client.chat.completions.create(
                     model=self.vision_model,
-                    max_tokens=8000,
+                    max_tokens=16000,
                     messages=[
                         {
                             "role": "user",
@@ -591,12 +606,12 @@ Rispondi SOLO con un array JSON valido:
         # Remove standalone URLs on their own line
         text = re.sub(r'^\s*https?://\S+\s*$', '', text, flags=re.MULTILINE)
 
-        # Remove Vision AI [IMMAGINE: ...] tags — convert description to parenthetical
-        text = re.sub(r'\[IMMAGINE:\s*(.*?)\]', r'(\1)', text, flags=re.DOTALL)
-        # Remove [FORMULA: ...] tags — keep formula content inline
-        text = re.sub(r'\[FORMULA:\s*(.*?)\]', r'\1', text, flags=re.DOTALL)
-        # Remove [Vedi figura: ...] tags
-        text = re.sub(r'\[Vedi figura:\s*(.*?)\]', r'(\1)', text, flags=re.DOTALL)
+        # PRESERVE [IMMAGINE:], [FORMULA:], [Vedi figura:] tags — they flow to frontend for rendering
+        # Normalize variant tags to standard [IMMAGINE:] format
+        text = re.sub(r'\[Vedi figura:\s*(.*?)\]', r'[IMMAGINE: \1]', text, flags=re.DOTALL)
+        # Clean up tag content (remove extra whitespace inside tags)
+        text = re.sub(r'\[IMMAGINE:\s+', '[IMMAGINE: ', text)
+        text = re.sub(r'\[FORMULA:\s+', '[FORMULA: ', text)
 
         # Fix bullet points
         text = re.sub(r'^❖\s*', '- ', text, flags=re.MULTILINE)
@@ -678,13 +693,20 @@ ISTRUZIONI:
 1. RISCRIVI il testo in modo chiaro e scorrevole, come un buon libro di testo
 2. MANTIENI tutte le informazioni, i concetti, i dati e le definizioni presenti
 3. ESPANDI le parti telegrafiche o frammentarie in frasi complete e comprensibili
-4. Le descrizioni di immagini tra parentesi (es. "Due grafici a torta...") vanno integrate come descrizioni testuali del contenuto che rappresentano
-5. Le formule vanno mantenute e spiegate brevemente se il contesto lo richiede
-6. ORGANIZZA il contenuto in paragrafi logici e coerenti
-7. USA un tono accademico ma accessibile, adatto a studenti universitari
-8. NON aggiungere informazioni inventate — usa SOLO ciò che è nel testo originale
-9. NON aggiungere formattazione markdown (niente #, **, ecc.) — solo testo piano ben scritto
-10. Restituisci SOLO il testo riscritto, nient'altro"""
+4. Le formule vanno mantenute e spiegate brevemente se il contesto lo richiede
+5. ORGANIZZA il contenuto in paragrafi logici e coerenti
+6. USA un tono accademico ma accessibile, adatto a studenti universitari
+7. NON aggiungere informazioni inventate — usa SOLO ciò che è nel testo originale
+8. NON aggiungere formattazione markdown (niente #, **, ecc.) — solo testo piano ben scritto
+
+REGOLA CRITICA SUI TAG:
+- I tag [IMMAGINE: ...] e [FORMULA: ...] DEVONO essere mantenuti ESATTAMENTE come sono, senza modificarli
+- NON riscrivere, parafrasare o integrare il contenuto dei tag nel testo
+- NON rimuovere i tag — sono marcatori essenziali per il rendering frontend
+- Posiziona i tag nel punto logicamente più appropriato del testo riscritto
+- Esempio: se trovi [IMMAGINE: Struttura della molecola H2O], lascialo così com'è
+
+Restituisci SOLO il testo riscritto, nient'altro"""
 
         rewritten = await self._ai_pass(cleaned, rewrite_prompt, "Pass 1 (riscrittura)", min_ratio=0.5)
         print(f"Enhancement Step 2 (rewrite): {len(cleaned)} → {len(rewritten)} chars")
@@ -702,7 +724,14 @@ REGOLE DI FORMATTAZIONE:
 4. Separa i paragrafi con righe vuote per leggibilità
 5. NON modificare il contenuto del testo — cambia SOLO la formattazione
 6. NON aggiungere introduzioni, conclusioni o commenti
-7. Restituisci SOLO il testo formattato in Markdown"""
+
+REGOLA CRITICA SUI TAG:
+- I tag [IMMAGINE: ...] e [FORMULA: ...] DEVONO restare INTATTI e INALTERATI
+- NON formattarli, NON metterli in grassetto, NON inserirli in blocchi di codice
+- Lasciali esattamente come sono: [IMMAGINE: descrizione] e [FORMULA: formula]
+- Sono marcatori per il rendering frontend e devono attraversare il pipeline senza modifiche
+
+Restituisci SOLO il testo formattato in Markdown"""
 
         formatted = await self._ai_pass(rewritten, format_prompt, "Pass 2 (formattazione)", min_ratio=0.8)
         print(f"Enhancement Step 3 (format): {len(rewritten)} → {len(formatted)} chars")
