@@ -466,10 +466,11 @@ export default function SourceSummariesPage() {
       const blocks = parseMarkdownBlocks(freshText);
 
       // Image generation logic:
-      // - tags < 5: generate ALL tags + AI extra to reach 5 total
-      // - tags = 5: generate exactly 5 from tags
-      // - tags > 5: generate ALL tags (no limit)
+      // - tags ≤ 5: generate all tags + AI extras to reach 5 total
+      // - tags 6-10: generate only the tags (max 10)
+      // - tags > 10: generate only the first 10 tags
       const MIN_IMAGES = 5;
+      const MAX_IMAGES = 10;
       const imageMap: Record<string, string> = {};
       const anchorImageMap: Record<string, { base64: string; description: string }> = {};
 
@@ -490,14 +491,15 @@ export default function SourceSummariesPage() {
       };
 
       try {
-        // Phase 1: Generate ALL existing image tags (no limit)
-        const existingImageBlocks = blocks.filter((b) => b.type === "image");
+        // Phase 1: Generate image tags (capped at MAX_IMAGES)
+        const allImageBlocks = blocks.filter((b) => b.type === "image");
+        const existingImageBlocks = allImageBlocks.slice(0, MAX_IMAGES);
         let generated = 0;
 
         if (existingImageBlocks.length > 0) {
           const total = existingImageBlocks.length;
           setPdfProgress(`Generazione ${total} immagini dai tag...`);
-          console.log(`[PDF] Found ${total} image tags, generating all`);
+          console.log(`[PDF] Found ${allImageBlocks.length} image tags, generating ${total} (max ${MAX_IMAGES})`);
 
           // Generate in batches of 3 to avoid overwhelming the API
           for (let batch = 0; batch < total; batch += 3) {
@@ -809,20 +811,8 @@ export default function SourceSummariesPage() {
                 // Skip if embedding fails
                 y += 2;
               }
-            } else {
-              // No image generated — just a brief italic note
-              ensureSpace(8);
-              doc.setFontSize(8.5);
-              doc.setFont("helvetica", "italic");
-              doc.setTextColor(130);
-              doc.text(
-                `[Vedi figura: ${block.text}]`,
-                margin,
-                y
-              );
-              y += 6;
-              doc.setTextColor(0);
             }
+            // If no image was generated, skip silently (no ugly tag in PDF)
             break;
           }
 
