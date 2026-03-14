@@ -627,6 +627,8 @@ Rispondi SOLO con un array JSON valido:
 
         # Fix corrupted H₂O patterns
         text = re.sub(r'H\s*,\s*O', 'H₂O', text)
+        # Fix corrupted CO₂ patterns ("CO ," → "CO₂")
+        text = re.sub(r'\bCO\s*,(?=[\s).\]])', 'CO₂', text)
 
         # Fix corrupted Greek letters: ± → α, ² → β in biology/chemistry context
         text = re.sub(r'±-', 'α-', text)
@@ -670,7 +672,7 @@ Rispondi SOLO con un array JSON valido:
                     fixed = re.sub(r'([a-zA-Zà-ÿÀ-Ÿ])(è)([a-zà-ÿ])', r'\1 \2 \3', fixed)
                     # Only use 4+ letter small words to avoid false positives inside words
                     # (e.g. "lo" inside "glicerolo", "la" inside "alcoola")
-                    long_words = r'(?<=[a-zà-ÿ])((?:della|delle|dello|degli|alla|alle|allo|dalla|dalle|nella|nelle|nello|sono|come|anche|ogni|questo|questa|questi|queste|hanno|essere|molto|dopo|prima|dove|quando|mentre|senza|verso|sopra|sotto|dentro|fuori|circa|durante|secondo|mediante|attraverso|tipicamente|struttura)(?=[a-zà-ÿ]))'
+                    long_words = r'(?<=[a-zà-ÿ])((?:della|delle|dello|degli|alla|alle|allo|dalla|dalle|nella|nelle|nello|sono|come|anche|ogni|questo|questa|questi|queste|hanno|essere|molto|dopo|prima|dove|quando|mentre|senza|verso|sopra|sotto|dentro|fuori|circa|durante|secondo|mediante|attraverso|tipicamente|struttur[ae]|present[ai]|livello|molecol[ae]|formano|support[oi]|forma|process[oi]|funzion[ie]|organic[aoi]|divers[aei]|chimich[ei]|important[ei]|fondamental[ei]|cellul[ae]|regolan[oi]|ormoni|biologici|fisiologic[oi])(?=[a-zà-ÿ]))'
                     fixed = re.sub(long_words, r' \1', fixed, flags=re.IGNORECASE)
 
                 # Clean up multiple spaces

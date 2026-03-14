@@ -200,6 +200,8 @@ export default function SourceSummariesPage() {
     }
     // Fix "H ,O" pattern (corrupted subscript)
     cleaned = cleaned.replace(/H\s*,\s*O/g, "H₂O");
+    // Fix "CO ," pattern (corrupted CO₂ subscript)
+    cleaned = cleaned.replace(/\bCO\s*,(?=\s|[).\]])/g, "CO₂");
     // Fix corrupted delta symbols: (´-) → δ⁻, (´+) → δ⁺
     cleaned = cleaned.replace(/\(?\s*´\s*-\s*\)?/g, "δ⁻");
     cleaned = cleaned.replace(/\(?\s*´\s*\+\s*\)?/g, "δ⁺");
@@ -258,7 +260,7 @@ export default function SourceSummariesPage() {
         fixed = fixed.replace(/([a-zA-Zà-ÿÀ-Ÿ])(è)([a-zà-ÿ])/g, "$1 $2 $3");
         // Only use 4+ letter small words to avoid false positives inside words
         // (e.g. "lo" inside "glicerolo", "la" inside "alcoola")
-        const longWords = /(?<=[a-zà-ÿ])((?:della|delle|dello|degli|alla|alle|allo|dalla|dalle|nella|nelle|nello|sono|come|anche|ogni|questo|questa|questi|queste|hanno|essere|molto|dopo|prima|dove|quando|mentre|senza|verso|sopra|sotto|dentro|fuori|circa|durante|secondo|mediante|attraverso|tipicamente|struttura)(?=[a-zà-ÿ]))/gi;
+        const longWords = /(?<=[a-zà-ÿ])((?:della|delle|dello|degli|alla|alle|allo|dalla|dalle|nella|nelle|nello|sono|come|anche|ogni|questo|questa|questi|queste|hanno|essere|molto|dopo|prima|dove|quando|mentre|senza|verso|sopra|sotto|dentro|fuori|circa|durante|secondo|mediante|attraverso|tipicamente|struttur[ae]|present[ai]|livello|molecol[ae]|formano|support[oi]|forma|process[oi]|funzion[ie]|organic[aoi]|divers[aei]|chimich[ei]|important[ei]|fondamental[ei]|cellul[ae]|regolan[oi]|ormoni|biologici|fisiologic[oi])(?=[a-zà-ÿ]))/gi;
         fixed = fixed.replace(longWords, " $1");
       }
 
