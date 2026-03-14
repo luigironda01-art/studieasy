@@ -350,21 +350,20 @@ export default function SourceSummariesPage() {
         continue;
       }
 
-      // [IMMAGINE: description] tags
-      const imageMatch = line.match(/\[IMMAGINE:\s*(.*?)\]/i);
+      // [IMMAGINE: description] or [Vedi figura: description] tags
+      const imageMatch = line.match(/\[(?:IMMAGINE|Vedi figura):\s*(.*?)\]/i);
       if (imageMatch) {
-        // Extract just the first sentence as a brief description
         const fullDesc = imageMatch[1];
         const brief =
-          fullDesc.length > 100
-            ? fullDesc.substring(0, 100).replace(/\s\S*$/, "") + "..."
+          fullDesc.length > 150
+            ? fullDesc.substring(0, 150).replace(/\s\S*$/, "") + "..."
             : fullDesc;
         blocks.push({ type: "image", text: brief });
         continue;
       }
 
-      // Skip lines that are just "[IMMAGINE:" without closing bracket (multiline start)
-      if (line.match(/^\[IMMAGINE:/i)) {
+      // Skip lines that are just "[IMMAGINE:" or "[Vedi figura:" without closing bracket
+      if (line.match(/^\[(?:IMMAGINE|Vedi figura):/i)) {
         continue;
       }
 
