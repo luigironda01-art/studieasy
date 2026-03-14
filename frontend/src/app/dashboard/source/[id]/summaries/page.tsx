@@ -215,6 +215,9 @@ export default function SourceSummariesPage() {
     // 1f. Clean [FORMULA: x] → x
     cleaned = cleaned.replace(/\[FORMULA:\s*(.*?)\]/gi, "$1");
 
+    // 1f2. Clean backslash escapes from markdown (e.g. \*text, \\text, \\\text)
+    cleaned = cleaned.replace(/^\\+/gm, "");
+
     // 1g. Remove orphan markdown bold/italic
     cleaned = cleaned.replace(/\*{1,3}([^*\n]+)\*{1,3}/g, "$1");
 
@@ -230,14 +233,10 @@ export default function SourceSummariesPage() {
       const line = rawLines[i];
       const trimmed = line.trim();
 
-      // Keep empty lines, headings, lists, tables, image tags as-is
+      // Keep empty lines, headings, tables, image tags as-is (start new line)
       if (
         !trimmed ||
         trimmed.startsWith("#") ||
-        trimmed.startsWith("-") ||
-        trimmed.startsWith("•") ||
-        trimmed.startsWith("*") ||
-        trimmed.match(/^\d+[.)]\s/) ||
         trimmed.match(/\|.*\|/) ||
         trimmed.startsWith("[IMMAGINE:") ||
         trimmed.startsWith("[Vedi figura:") ||
@@ -247,30 +246,48 @@ export default function SourceSummariesPage() {
         continue;
       }
 
+      // NEW bullet/list item: starts new line
+      if (
+        trimmed.startsWith("-") ||
+        trimmed.startsWith("•") ||
+        trimmed.startsWith("*") ||
+        trimmed.match(/^\d+[.)]\s/)
+      ) {
+        joined.push(line);
+        continue;
+      }
+
       // Check if this line should merge with the previous non-empty line
       const prevIdx = joined.length - 1;
       if (prevIdx >= 0) {
         const prev = joined[prevIdx].trim();
-        // Merge if: previous line exists, is not empty, is not a heading/list/table/image,
-        // previous line does NOT end with sentence-ending punctuation,
-        // and current line starts with lowercase or continues a sentence
+
+        // Can't merge with empty, headings, tables, images
         if (
-          prev &&
-          !prev.startsWith("#") &&
-          !prev.startsWith("-") &&
-          !prev.startsWith("•") &&
-          !prev.startsWith("*") &&
-          !prev.match(/^\d+[.)]\s/) &&
-          !prev.match(/\|.*\|/) &&
-          !prev.startsWith("[IMMAGINE:") &&
-          !prev.startsWith("[Vedi figura:") &&
+          !prev ||
+          prev.startsWith("#") ||
+          prev.match(/\|.*\|/) ||
+          prev.startsWith("[IMMAGINE:") ||
+          prev.startsWith("[Vedi figura:")
+        ) {
+          joined.push(line);
+          continue;
+        }
+
+        // Continuation of a bullet point: prev is a bullet that doesn't end with sentence punctuation,
+        // and current line starts with lowercase (clearly continuation)
+        const prevIsBullet = /^[-*•]\s/.test(prev) || /^\d+[.)]\s/.test(prev);
+        if (prevIsBullet && !/[.!?;:]\s*$/.test(prev) && /^[a-zà-ÿ(,]/.test(trimmed)) {
+          joined[prevIdx] = prev + " " + trimmed;
+          continue;
+        }
+
+        // Regular paragraph continuation
+        if (
+          !prevIsBullet &&
           !prev.endsWith(":") &&
-          prev.length > 15 &&
-          // Previous line doesn't end with clear sentence ending
           !/[.!?;]\s*$/.test(prev) &&
-          // Current line starts with lowercase or common continuation patterns
           (/^[a-zà-ÿ(,]/.test(trimmed) ||
-           // Or previous line is short (broken mid-sentence)
            (prev.length < 80 && trimmed.length > 10 && /^[A-ZÀ-Ÿa-zà-ÿ(]/.test(trimmed) && !trimmed.match(/^[A-ZÀ-Ÿ][a-zà-ÿ]+\s[A-ZÀ-Ÿ]/)))
         ) {
           joined[prevIdx] = prev + " " + trimmed;

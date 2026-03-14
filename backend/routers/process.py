@@ -242,23 +242,18 @@ async def process_pdf(request: ProcessRequest):
                 print(f"Vision total: {vision_chars} chars")
                 update_progress(70, f"Vision AI: estratti {vision_chars} caratteri")
 
-                # Combine or choose best extraction
-                if is_admin and chars_extracted > 0 and vision_chars > 0:
-                    # Admin: combine both for maximum content
-                    extracted_text = extracted_text + "\n\n--- CONTENUTO VISIVO (immagini, diagrammi, formule) ---\n\n" + vision_text
-                    chars_extracted = len(extracted_text)
-                    extraction_method = "hybrid"
-                    extraction_quality = min(100, int((chars_extracted / (page_count * 500)) * 100))
-                    extraction_notes.append(f"Combinato testo ({chars_extracted} chars) + Vision AI ({vision_chars} chars)")
-                elif vision_chars > chars_extracted:
+                # Choose best extraction (don't combine - causes duplication)
+                if vision_chars > 0:
                     extracted_text = vision_text
                     chars_extracted = vision_chars
                     extraction_method = "vision"
                     extraction_quality = min(100, int((vision_chars / (page_count * 500)) * 100))
-                    extraction_notes.append(f"Usato Vision AI per PDF basato su immagini")
+                    extraction_notes.append(f"Vision AI: {vision_chars} chars da {page_count} pagine")
                 else:
-                    extraction_method = "hybrid"
+                    # Vision failed but we have PyPDF2 text
+                    extraction_method = "text"
                     extraction_quality = min(100, int((chars_extracted / (page_count * 500)) * 100))
+                    extraction_notes.append("Vision AI senza risultati, usato solo testo")
 
             except Exception as vision_error:
                 print(f"Vision processing error: {vision_error}")
