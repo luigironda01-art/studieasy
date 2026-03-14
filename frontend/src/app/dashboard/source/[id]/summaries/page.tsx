@@ -466,60 +466,88 @@ export default function SourceSummariesPage() {
 
       const blocks = parseMarkdownBlocks(freshText);
 
-      // Smart image generation: AI analyzes text and picks max 5 spots
+      // Smart image generation with priority system:
+      // 1. First: generate images for existing [Vedi figura:] and [IMMAGINE:] tags (from Vision AI)
+      // 2. If slots remain (max 5 total): AI suggests extra images based on context
+      const MAX_IMAGES = 5;
       const imageMap: Record<string, string> = {};
-      // anchorImageMap maps anchor text → base64 for insertion near matching blocks
       const anchorImageMap: Record<string, { base64: string; description: string }> = {};
 
+      // Helper to generate a single image
+      const genImage = async (description: string): Promise<string | null> => {
+        try {
+          const res = await fetch("/api/images/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ description }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.image) return data.image;
+          }
+        } catch { /* skip */ }
+        return null;
+      };
+
       try {
-        setPdfProgress("Analisi contenuto per immagini...");
-        const analyzeRes = await fetch("/api/images/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: freshText }),
-        });
+        // Phase 1: Collect existing image tags from parsed blocks
+        const existingImageBlocks = blocks.filter((b) => b.type === "image");
+        const tagImages = existingImageBlocks.slice(0, MAX_IMAGES);
+        let generated = 0;
 
-        if (analyzeRes.ok) {
-          const { suggestions } = await analyzeRes.json();
-          if (suggestions && suggestions.length > 0) {
-            console.log(`[PDF] AI suggests ${suggestions.length} images`);
+        if (tagImages.length > 0) {
+          setPdfProgress(`Generazione ${tagImages.length} immagini dai tag...`);
+          console.log(`[PDF] Found ${existingImageBlocks.length} image tags, generating ${tagImages.length}`);
 
-            // Generate all images in parallel
-            const genPromises = suggestions.map(
-              async (s: { anchor: string; description: string }, i: number) => {
-                setPdfProgress(
-                  `Generazione immagine ${i + 1} di ${suggestions.length}...`
-                );
-                try {
-                  const genRes = await fetch("/api/images/generate", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ description: s.description }),
-                  });
-                  if (genRes.ok) {
-                    const data = await genRes.json();
-                    if (data.image) {
-                      return { anchor: s.anchor, base64: data.image, description: s.description };
-                    }
-                  }
-                } catch {
-                  console.warn(`[PDF] Image gen failed for: ${s.description.substring(0, 50)}`);
-                }
-                return null;
-              }
-            );
-
-            const results = await Promise.all(genPromises);
-            for (const r of results) {
-              if (r) {
-                anchorImageMap[r.anchor] = { base64: r.base64, description: r.description };
-              }
+          const tagPromises = tagImages.map(async (block, i) => {
+            setPdfProgress(`Generazione immagine ${i + 1} di ${tagImages.length}...`);
+            const base64 = await genImage(block.text);
+            if (base64) {
+              imageMap[block.text] = base64;
+              return true;
             }
-            console.log(`[PDF] Generated ${Object.keys(anchorImageMap).length} images`);
+            return false;
+          });
+
+          const tagResults = await Promise.all(tagPromises);
+          generated = tagResults.filter(Boolean).length;
+          console.log(`[PDF] Generated ${generated} images from tags`);
+        }
+
+        // Phase 2: If slots remain, ask AI for extra context-based images
+        const remaining = MAX_IMAGES - generated;
+        if (remaining > 0) {
+          setPdfProgress("Analisi contenuto per immagini extra...");
+          const analyzeRes = await fetch("/api/images/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: freshText }),
+          });
+
+          if (analyzeRes.ok) {
+            const { suggestions } = await analyzeRes.json();
+            if (suggestions && suggestions.length > 0) {
+              const extraSuggestions = suggestions.slice(0, remaining);
+              console.log(`[PDF] AI suggests ${extraSuggestions.length} extra images`);
+
+              const extraPromises = extraSuggestions.map(
+                async (s: { anchor: string; description: string }, i: number) => {
+                  setPdfProgress(
+                    `Immagine extra ${i + 1} di ${extraSuggestions.length}...`
+                  );
+                  const base64 = await genImage(s.description);
+                  if (base64) {
+                    anchorImageMap[s.anchor] = { base64, description: s.description };
+                  }
+                }
+              );
+              await Promise.all(extraPromises);
+              console.log(`[PDF] Generated ${Object.keys(anchorImageMap).length} extra images`);
+            }
           }
         }
       } catch (err) {
-        console.warn("[PDF] Smart image analysis failed:", err);
+        console.warn("[PDF] Image generation failed:", err);
       }
 
       setPdfProgress("Creazione PDF...");
