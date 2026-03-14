@@ -700,10 +700,11 @@ Rispondi SOLO con un array JSON valido:
             chunks.append(text)
         return chunks
 
-    async def _ai_pass(self, text: str, prompt_template: str, pass_name: str, min_ratio: float = 0.7) -> str:
+    async def _ai_pass(self, text: str, prompt_template: str, pass_name: str, min_ratio: float = 0.7, use_content_model: bool = False) -> str:
         """Run an AI pass on text, processing in chunks if needed."""
         chunks = self._split_into_chunks(text, chunk_size=10000)  # Smaller chunks = less truncation risk
-        print(f"{pass_name}: {len(chunks)} chunk(s), {len(text)} chars totali")
+        model = self.content_model if use_content_model else self.vision_model
+        print(f"{pass_name}: {len(chunks)} chunk(s), {len(text)} chars totali, model={model}")
 
         processed_parts = []
         for i, chunk in enumerate(chunks):
@@ -711,7 +712,7 @@ Rispondi SOLO con un array JSON valido:
             try:
                 response = await asyncio.wait_for(
                     self.client.chat.completions.create(
-                        model=self.vision_model,
+                        model=model,
                         max_tokens=20000,
                         messages=[{"role": "user", "content": prompt}]
                     ),
@@ -721,11 +722,23 @@ Rispondi SOLO con un array JSON valido:
                 # Check for truncation: if output ends mid-sentence, try to detect
                 finish_reason = getattr(response.choices[0], 'finish_reason', None)
                 if finish_reason == 'length':
-                    print(f"  Chunk {i+1}: AI output truncated (max_tokens hit), using original")
-                    processed_parts.append(chunk)
+                    # Truncated output — still use it if it's substantial, since original is likely corrupted
+                    if len(part) > len(chunk) * 0.3:
+                        print(f"  Chunk {i+1}: AI output truncated but substantial ({len(part)} chars), using AI output")
+                        processed_parts.append(part)
+                    else:
+                        print(f"  Chunk {i+1}: AI output truncated and too short ({len(part)} chars), using original")
+                        processed_parts.append(chunk)
+                    continue
                 elif len(part) < len(chunk) * min_ratio:
-                    print(f"  Chunk {i+1}: AI compressed too much ({len(chunk)} → {len(part)}), keeping original")
-                    processed_parts.append(chunk)
+                    # AI compressed too much — but for Pass 1 (rewrite), the AI output is likely
+                    # BETTER than the corrupted original, so use it if it's not trivially short
+                    if len(part) > 200:
+                        print(f"  Chunk {i+1}: AI compressed ({len(chunk)} → {len(part)}) but output looks valid, using AI output")
+                        processed_parts.append(part)
+                    else:
+                        print(f"  Chunk {i+1}: AI output too short ({len(part)} chars), keeping original")
+                        processed_parts.append(chunk)
                 else:
                     processed_parts.append(part)
                     print(f"  Chunk {i+1}/{len(chunks)}: {len(chunk)} → {len(part)} chars")
@@ -754,26 +767,35 @@ Rispondi SOLO con un array JSON valido:
 TESTO ORIGINALE:
 {CHUNK}
 
+PROBLEMA CRITICO — TESTO CORROTTO:
+Il testo sopra è stato estratto automaticamente da un PDF e contiene ERRORI DI ESTRAZIONE che DEVI correggere:
+- PAROLE ATTACCATE SENZA SPAZI: es. "Ilgliceroloèunalcool" → "Il glicerolo è un alcol"
+- SIMBOLI CORROTTI: "±" deve diventare "α" (alfa), "²" deve diventare "β" (beta)
+- FORMULE CORROTTE: "H ,O" deve diventare "H₂O", "CO ," deve diventare "CO₂"
+- FRASI INCOMPLETE: ricostruisci il senso dove il testo è frammentario
+QUESTA È LA TUA PRIORITÀ NUMERO 1: ogni frase deve avere gli spazi corretti tra le parole.
+
 ISTRUZIONI:
-1. RISCRIVI il testo in modo chiaro e scorrevole, come un buon libro di testo
-2. MANTIENI tutte le informazioni, i concetti, i dati e le definizioni presenti
-3. ESPANDI le parti telegrafiche o frammentarie in frasi complete e comprensibili
-4. Le formule vanno mantenute e spiegate brevemente se il contesto lo richiede
-5. ORGANIZZA il contenuto in paragrafi logici e coerenti
-6. USA un tono accademico ma accessibile, adatto a studenti universitari
-7. NON aggiungere informazioni inventate — usa SOLO ciò che è nel testo originale
-8. NON aggiungere formattazione markdown (niente #, **, ecc.) — solo testo piano ben scritto
+1. CORREGGI TUTTI gli errori di estrazione (parole attaccate, simboli, formule)
+2. RISCRIVI il testo in modo chiaro e scorrevole, come un buon libro di testo
+3. MANTIENI tutte le informazioni, i concetti, i dati e le definizioni presenti
+4. ESPANDI le parti telegrafiche o frammentarie in frasi complete e comprensibili
+5. Le formule chimiche vanno scritte con pedici Unicode: H₂O, CO₂, C₆H₁₂O₆, ecc.
+6. Le lettere greche vanno scritte come: α, β, γ, δ (NON come ±, ², ³, ´)
+7. ORGANIZZA il contenuto in paragrafi logici e coerenti
+8. USA un tono accademico ma accessibile, adatto a studenti universitari
+9. NON aggiungere informazioni inventate — usa SOLO ciò che è nel testo originale
+10. NON aggiungere formattazione markdown (niente #, **, ecc.) — solo testo piano ben scritto
 
 REGOLA CRITICA SUI TAG:
 - I tag [IMMAGINE: ...] e [FORMULA: ...] DEVONO essere mantenuti ESATTAMENTE come sono, senza modificarli
 - NON riscrivere, parafrasare o integrare il contenuto dei tag nel testo
 - NON rimuovere i tag — sono marcatori essenziali per il rendering frontend
 - Posiziona i tag nel punto logicamente più appropriato del testo riscritto
-- Esempio: se trovi [IMMAGINE: Struttura della molecola H2O], lascialo così com'è
 
 Restituisci SOLO il testo riscritto, nient'altro"""
 
-        rewritten = await self._ai_pass(cleaned, rewrite_prompt, "Pass 1 (riscrittura)", min_ratio=0.5)
+        rewritten = await self._ai_pass(cleaned, rewrite_prompt, "Pass 1 (riscrittura)", min_ratio=0.5, use_content_model=True)
         print(f"Enhancement Step 2 (rewrite): {len(cleaned)} → {len(rewritten)} chars")
 
         # Step 3: AI Pass 2 — Formattazione Markdown
@@ -789,12 +811,14 @@ REGOLE DI FORMATTAZIONE:
 4. Separa i paragrafi con righe vuote per leggibilità
 5. NON modificare il contenuto del testo — cambia SOLO la formattazione
 6. NON aggiungere introduzioni, conclusioni o commenti
+7. Mantieni TUTTI gli spazi tra le parole — NON unire mai parole insieme
+8. Le formule chimiche devono restare in Unicode: H₂O, CO₂, C₆H₁₂O₆
+9. Le lettere greche devono restare come: α, β, γ, δ (mai ±, ², ³)
 
 REGOLA CRITICA SUI TAG:
 - I tag [IMMAGINE: ...] e [FORMULA: ...] DEVONO restare INTATTI e INALTERATI
 - NON formattarli, NON metterli in grassetto, NON inserirli in blocchi di codice
 - Lasciali esattamente come sono: [IMMAGINE: descrizione] e [FORMULA: formula]
-- Sono marcatori per il rendering frontend e devono attraversare il pipeline senza modifiche
 
 REGOLA TITOLI:
 - I titoli ## e ### DEVONO avere UNO SPAZIO dopo il cancelletto: "## Titolo" NON "##Titolo"
