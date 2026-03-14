@@ -184,18 +184,57 @@ export default function SourceSummariesPage() {
     // 1c2. Normalize all Unicode whitespace to regular spaces (non-breaking space, thin space, etc.)
     cleaned = cleaned.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, " ");
 
+    // 1c2b. Fix common chemical formulas: H2O → H₂O, CO2 → CO₂, etc.
+    const formulaMap: Record<string, string> = {
+      "H2O": "H₂O", "CO2": "CO₂", "O2": "O₂", "N2": "N₂", "H2": "H₂",
+      "SO4": "SO₄", "NO3": "NO₃", "NH3": "NH₃", "CH4": "CH₄",
+      "C6H12O6": "C₆H₁₂O₆", "Na+": "Na⁺", "Cl-": "Cl⁻",
+      "Ca2+": "Ca²⁺", "Mg2+": "Mg²⁺", "Fe2+": "Fe²⁺", "Fe3+": "Fe³⁺",
+      "OH-": "OH⁻", "H+": "H⁺", "H3O+": "H₃O⁺",
+      "NaCl": "NaCl", "H2SO4": "H₂SO₄", "HCl": "HCl",
+    };
+    for (const [plain, unicode] of Object.entries(formulaMap)) {
+      // Only replace when it's a standalone formula (not part of a longer word)
+      const escaped = plain.replace(/[+\-]/g, "\\$&");
+      cleaned = cleaned.replace(new RegExp(`\\b${escaped}\\b`, "g"), unicode);
+    }
+    // Fix "H ,O" pattern (corrupted subscript)
+    cleaned = cleaned.replace(/H\s*,\s*O/g, "H₂O");
+    // Fix corrupted delta symbols: (´-) → δ⁻, (´+) → δ⁺
+    cleaned = cleaned.replace(/\(?\s*´\s*-\s*\)?/g, "δ⁻");
+    cleaned = cleaned.replace(/\(?\s*´\s*\+\s*\)?/g, "δ⁺");
+    // Fix alfa/beta with wrong symbols
+    cleaned = cleaned.replace(/alfa\s*\(±\)/gi, "alfa (α)");
+    cleaned = cleaned.replace(/beta\s*\(²\)/gi, "beta (β)");
+    cleaned = cleaned.replace(/\(±\)/g, "(α)");
+    cleaned = cleaned.replace(/\(²\)/g, "(β)");
+
+    // 1c2c. Fix missing space before parenthesis: "Carbonio(C)" → "Carbonio (C)"
+    cleaned = cleaned.replace(/([a-zà-ÿA-ZÀ-Ÿ])\(([A-Za-z])/g, "$1 ($2");
+    // Fix compound words without spaces: "Essereumano" → "Essere umano"
+    // Insert space when lowercase letter is followed by a different word starting lowercase
+    // after known patterns from table extraction
+    cleaned = cleaned.replace(/Essereumano/g, "Essere umano");
+    cleaned = cleaned.replace(/Erbamedica/g, "Erba medica");
+    cleaned = cleaned.replace(/Altamenteramificato/g, "Altamente ramificato");
+    cleaned = cleaned.replace(/Lineare\s*\(cellulosa\)/g, "Lineare (cellulosa)");
+    cleaned = cleaned.replace(/Ramificata\s*\(amido\)/g, "Ramificata (amido)");
+
     // 1c3. Fix spaced-out [Vedi figura:] and [IMMAGINE:] tags (e.g. "[ V e d i f i g u r a :")
     cleaned = cleaned.replace(/\[\s*V\s*e\s*d\s*i\s*f\s*i\s*g\s*u\s*r\s*a\s*:/gi, "[Vedi figura:");
     cleaned = cleaned.replace(/\[\s*I\s*M\s*M\s*A\s*G\s*I\s*N\s*E\s*:/gi, "[IMMAGINE:");
 
     // 1d. Fix spaced-out text using line-level heuristic
-    // If >25% of space-separated tokens in a line are single chars, it's spaced text
+    // If >20% of space-separated tokens in a line are single chars, it's spaced text
     // Double-space = word boundary, single-space = letter spacing
     cleaned = cleaned.split("\n").map((line: string) => {
+      // Skip lines that are headings, tags, or very short
+      if (line.trim().startsWith("#") || line.trim().startsWith("[") || line.trim().length < 4) return line;
+
       const tokens = line.split(/\s+/).filter((t: string) => t !== "");
-      if (tokens.length < 5) return line;
+      if (tokens.length < 4) return line;
       const singleCharCount = tokens.filter((t: string) => t.length === 1).length;
-      if (singleCharCount / tokens.length > 0.25) {
+      if (singleCharCount / tokens.length > 0.20) {
         // Use double-space (or more) as word boundaries
         const parts = line.split(/\s{2,}/);
         if (parts.length <= 1) {
@@ -204,13 +243,12 @@ export default function SourceSummariesPage() {
         }
         return parts.map((w: string) => w.replace(/\s/g, "")).join(" ");
       }
-      // Also detect: sequences of "X Y Z" where X,Y,Z are single chars (partial spaced text within a line)
+      // Also detect: sequences of single chars separated by spaces (partial spaced text within a line)
       // e.g. "la rende una m o l e c o l a  p o l a r e. L'atomo..."
-      return line.replace(/(?<=[a-zA-Zà-ÿ]\s)([a-zA-Zà-ÿ]\s){3,}[a-zA-Zà-ÿ](?=[\s.,;:!?)]|$)/g, (match) => {
-        // Check if it's really spaced text (most tokens are single chars)
+      // Made more permissive: match 3+ single chars in a row
+      return line.replace(/(\b[a-zA-Zà-ÿ]\s){3,}[a-zA-Zà-ÿ]\b/g, (match) => {
         const chars = match.split(/\s+/);
-        if (chars.filter((c: string) => c.length === 1).length > chars.length * 0.6) {
-          // Try to find double-space word boundaries within the match
+        if (chars.filter((c: string) => c.length === 1).length > chars.length * 0.5) {
           const words = match.split(/\s{2,}/);
           if (words.length > 1) {
             return words.map((w: string) => w.replace(/\s/g, "")).join(" ");
@@ -427,13 +465,27 @@ export default function SourceSummariesPage() {
         continue;
       }
 
-      // Markdown headings
-      if (line.startsWith("### ")) {
-        blocks.push({ type: "h3", text: line.replace(/^###\s+/, "") });
-      } else if (line.startsWith("## ")) {
-        blocks.push({ type: "h2", text: line.replace(/^##\s+/, "") });
-      } else if (line.startsWith("# ")) {
-        blocks.push({ type: "h1", text: line.replace(/^#\s+/, "") });
+      // Markdown headings (with or without space after #)
+      // Fix CamelCase glued words: only when heading has NO spaces (clearly AI-glued)
+      const fixHeadingText = (t: string): string => {
+        // Check if heading is clearly glued (few/no spaces relative to length)
+        const spaceCount = (t.match(/ /g) || []).length;
+        const isGlued = t.length > 15 && spaceCount < t.length / 15;
+        if (isGlued) {
+          // Split before ASCII uppercase letters preceded by lowercase
+          // Uses [A-Z] only (not accented) to avoid false positives like "Proprietà" → "Propriet à"
+          t = t.replace(/([a-zà-ÿ])([A-Z])/g, "$1 $2");
+        }
+        // Fix colon without space
+        t = t.replace(/:([A-Za-zÀ-ÿ])/g, ": $1");
+        return t.trim();
+      };
+      if (line.match(/^###\s*/)) {
+        blocks.push({ type: "h3", text: fixHeadingText(line.replace(/^###\s*/, "")) });
+      } else if (line.match(/^##\s*/)) {
+        blocks.push({ type: "h2", text: fixHeadingText(line.replace(/^##\s*/, "")) });
+      } else if (line.match(/^#\s*/)) {
+        blocks.push({ type: "h1", text: fixHeadingText(line.replace(/^#\s*/, "")) });
       }
       // Bullet lists (-, *, •)
       else if (line.match(/^[-*•]\s/)) {
@@ -476,7 +528,38 @@ export default function SourceSummariesPage() {
       blocks.push({ type: "table", text: "", rows: [...tableRows] });
     }
 
-    return blocks;
+    // ═══ Step 3: Post-processing on blocks ═══
+
+    // 3a. Remove duplicate consecutive headings (same or very similar text)
+    const filtered: PdfBlock[] = [];
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      const isHeading = block.type === "h1" || block.type === "h2" || block.type === "h3";
+      if (isHeading && filtered.length > 0) {
+        // Look back for the previous non-empty block
+        let prevIdx = filtered.length - 1;
+        while (prevIdx >= 0 && filtered[prevIdx].type === "empty") prevIdx--;
+        if (prevIdx >= 0) {
+          const prev = filtered[prevIdx];
+          const prevIsHeading = prev.type === "h1" || prev.type === "h2" || prev.type === "h3";
+          if (prevIsHeading) {
+            const normalize = (s: string) => s.toLowerCase().replace(/[^a-zà-ÿ0-9]/g, "");
+            if (normalize(prev.text) === normalize(block.text)) {
+              continue; // Skip duplicate
+            }
+          }
+        }
+      }
+
+      // 3b. Remove orphan fragments (1-3 chars, not a heading or list marker)
+      if (block.type === "paragraph" && block.text.length <= 3 && !/^\d+[.)]/.test(block.text)) {
+        continue; // Skip orphan like "I:" or "H"
+      }
+
+      filtered.push(block);
+    }
+
+    return filtered;
   };
 
 
@@ -862,14 +945,17 @@ export default function SourceSummariesPage() {
                   imgHeight
                 );
                 y += imgHeight + 2;
-                // Brief caption under image
+                // Brief caption under image (word-wrapped)
                 doc.setFontSize(8);
                 doc.setFont("helvetica", "italic");
                 doc.setTextColor(120);
-                doc.text(block.text, pageWidth / 2, y, {
-                  align: "center",
-                });
-                y += 6;
+                const captionMaxWidth = maxWidth * 0.85;
+                const captionLines = doc.splitTextToSize(block.text, captionMaxWidth);
+                for (const capLine of captionLines) {
+                  doc.text(capLine, pageWidth / 2, y, { align: "center" });
+                  y += 3.5;
+                }
+                y += 2;
                 doc.setTextColor(0);
               } catch {
                 // Skip if embedding fails
@@ -907,6 +993,16 @@ export default function SourceSummariesPage() {
         // After rendering each block, check if an AI-selected image should be inserted here
         tryInsertAnchorImage();
         currentBlockIdx++;
+      }
+
+      // ── Remove near-empty last page ──
+      const lastPageNum = doc.getNumberOfPages();
+      if (lastPageNum > 1) {
+        // If the last page has very little content (y is near top), remove it
+        // y tracks the current position on the last page; if < margin + 60, page is nearly empty
+        if (y < margin + 60) {
+          doc.deletePage(lastPageNum);
+        }
       }
 
       // ── Footer on each page ──

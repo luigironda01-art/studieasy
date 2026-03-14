@@ -618,6 +618,16 @@ Rispondi SOLO con un array JSON valido:
         text = re.sub(r'^➢\s*', '- ', text, flags=re.MULTILINE)
         text = re.sub(r'^•\s*', '- ', text, flags=re.MULTILINE)
 
+        # Fix missing space before parenthesis: "Carbonio(C)" → "Carbonio (C)"
+        text = re.sub(r'([a-zà-úA-ZÀ-Ú])\(([A-Za-z])', r'\1 (\2', text)
+
+        # Fix corrupted delta symbols from PDF extraction
+        text = re.sub(r'´\s*-', 'δ⁻', text)
+        text = re.sub(r'´\s*\+', 'δ⁺', text)
+
+        # Fix corrupted H₂O patterns
+        text = re.sub(r'H\s*,\s*O', 'H₂O', text)
+
         return text.strip()
 
     def _split_into_chunks(self, text: str, chunk_size: int = 12000) -> list[str]:
@@ -730,6 +740,11 @@ REGOLA CRITICA SUI TAG:
 - NON formattarli, NON metterli in grassetto, NON inserirli in blocchi di codice
 - Lasciali esattamente come sono: [IMMAGINE: descrizione] e [FORMULA: formula]
 - Sono marcatori per il rendering frontend e devono attraversare il pipeline senza modifiche
+
+REGOLA TITOLI:
+- I titoli ## e ### DEVONO avere UNO SPAZIO dopo il cancelletto: "## Titolo" NON "##Titolo"
+- I titoli DEVONO avere spazi tra le parole: "## L'Acqua e i Legami" NON "##L'AcquaeiLegami"
+- NON ripetere lo stesso titolo due volte di seguito con livelli diversi
 
 Restituisci SOLO il testo formattato in Markdown"""
 
