@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
     const prompt = `Genera un'illustrazione chiara ed educativa per un documento di studio universitario.
 L'immagine deve rappresentare: ${description}
 Stile: Pulito, accademico, informativo. Adatto per un libro di testo o materiale di studio.
-Usa etichette chiare se necessario. Qualità professionale.`;
+IMPORTANTE: Tutte le etichette, i testi e le scritte nell'immagine DEVONO essere nella STESSA LINGUA del testo qui sopra. Se il testo è in italiano, le etichette devono essere in italiano. MAI usare spagnolo o altre lingue diverse da quella del documento.
+Qualità professionale.`;
 
     // Try each model via raw fetch to OpenRouter (not OpenAI SDK)
     // because OpenRouter returns images in non-standard fields
