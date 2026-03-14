@@ -25,6 +25,7 @@ export default function SourceSummariesPage() {
   const [loading, setLoading] = useState(true);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "read">("list");
+  const [summaryView, setSummaryView] = useState<"full" | "chapters">("chapters");
 
   // PDF generation progress
   const [pdfGenerating, setPdfGenerating] = useState(false);
@@ -1232,7 +1233,35 @@ export default function SourceSummariesPage() {
         <p className="text-slate-400 mt-1">{source?.title}</p>
       </div>
 
-      {/* Chapters List */}
+      {/* Segmented Control */}
+      {completedChapters.length > 1 && (
+        <div className="mb-6">
+          <div className="inline-flex bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-1">
+            <button
+              onClick={() => setSummaryView("full")}
+              className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                summaryView === "full"
+                  ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Libro Intero
+            </button>
+            <button
+              onClick={() => setSummaryView("chapters")}
+              className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                summaryView === "chapters"
+                  ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Per Capitoli
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
       {completedChapters.length === 0 ? (
         <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
           <div className="w-20 h-20 bg-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -1243,7 +1272,68 @@ export default function SourceSummariesPage() {
             Elabora un PDF per poter generare riassunti
           </p>
         </div>
+      ) : summaryView === "full" ? (
+        /* ── FULL BOOK VIEW ── */
+        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl flex items-center justify-center">
+                <span className="text-3xl">📚</span>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-xl">{source?.title}</h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  {completedChapters.length} capitoli &middot; Contenuto completo
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const fullText = completedChapters
+                    .map(c => c.processed_text || "")
+                    .join("\n\n---\n\n");
+                  const fakeChapter = { ...completedChapters[0], title: source?.title || "Libro", processed_text: fullText };
+                  openReadMode(fakeChapter as Chapter);
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"
+              >
+                <span>📖</span>
+                Leggi Tutto
+              </button>
+              <button
+                onClick={() => {
+                  const fullText = completedChapters
+                    .map(c => `## ${c.title}\n\n${c.processed_text || ""}`)
+                    .join("\n\n---\n\n");
+                  handleDownloadPdf(fullText, source?.title || "Libro Completo");
+                }}
+                disabled={pdfGenerating}
+                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Scarica PDF Completo
+              </button>
+            </div>
+          </div>
+
+          {/* Chapter index */}
+          <div className="border-t border-white/10 pt-4">
+            <h4 className="text-slate-400 text-sm font-medium mb-3">Indice dei capitoli</h4>
+            <div className="space-y-2">
+              {completedChapters.map((chapter, idx) => (
+                <div key={chapter.id} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/5 transition-colors">
+                  <span className="text-slate-500 text-sm font-mono w-6">{idx + 1}.</span>
+                  <span className="text-slate-300 text-sm">{chapter.title}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       ) : (
+        /* ── CHAPTERS VIEW ── */
         <div className="space-y-4">
           {completedChapters.map((chapter) => (
             <div
