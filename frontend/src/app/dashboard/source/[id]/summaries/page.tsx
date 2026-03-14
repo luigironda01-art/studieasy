@@ -635,9 +635,42 @@ export default function SourceSummariesPage() {
 
       if (withImages) {
         try {
-          // Phase 1: Generate image tags (capped at MAX_IMAGES)
+          // Phase 1: Generate image tags — distributed evenly across sections
           const allImageBlocks = blocks.filter((b) => b.type === "image");
-          const existingImageBlocks = allImageBlocks.slice(0, MAX_IMAGES);
+
+          // Group images by section (between h1/h2 headings)
+          const sections: { heading: string; images: PdfBlock[] }[] = [];
+          let currentSection: { heading: string; images: PdfBlock[] } = { heading: "intro", images: [] };
+          for (const block of blocks) {
+            if (block.type === "h1" || block.type === "h2") {
+              if (currentSection.images.length > 0) sections.push(currentSection);
+              currentSection = { heading: block.text, images: [] };
+            } else if (block.type === "image") {
+              currentSection.images.push(block);
+            }
+          }
+          if (currentSection.images.length > 0) sections.push(currentSection);
+
+          // Distribute MAX_IMAGES budget across sections proportionally
+          let existingImageBlocks: PdfBlock[] = [];
+          if (sections.length > 0 && allImageBlocks.length > MAX_IMAGES) {
+            const totalTags = sections.reduce((sum, s) => sum + s.images.length, 0);
+            let budget = MAX_IMAGES;
+            for (const section of sections) {
+              // Each section gets at least 1, proportional to its share of tags
+              const share = Math.max(1, Math.round((section.images.length / totalTags) * MAX_IMAGES));
+              const allowed = Math.min(share, budget, section.images.length);
+              // Pick evenly spaced images from the section
+              const step = section.images.length / allowed;
+              for (let i = 0; i < allowed && budget > 0; i++) {
+                existingImageBlocks.push(section.images[Math.floor(i * step)]);
+                budget--;
+              }
+            }
+            console.log(`[PDF] Distributed ${existingImageBlocks.length} images across ${sections.length} sections`);
+          } else {
+            existingImageBlocks = allImageBlocks.slice(0, MAX_IMAGES);
+          }
           let generated = 0;
 
           if (existingImageBlocks.length > 0) {
