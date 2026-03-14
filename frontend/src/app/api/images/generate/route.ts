@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
 
 export const dynamic = "force-dynamic";
 
-// Try multiple Gemini model names for image generation
+// Models to try in order (via OpenRouter)
 const IMAGE_MODELS = [
-  "gemini-2.0-flash-preview-image-generation",
-  "gemini-2.0-flash-exp",
-  "imagen-3.0-generate-001",
+  "google/gemini-2.5-flash-image",
+  "google/gemini-3-pro-image-preview",
+  "google/gemini-3.1-flash-image-preview",
 ];
 
 export async function POST(request: NextRequest) {
@@ -20,80 +21,126 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "No Google AI API key configured" },
+        { error: "No OpenRouter API key configured" },
         { status: 500 }
       );
     }
 
-    const prompt = `Generate a clear, educational illustration or diagram for a study document.
-The image should depict: ${description}
-Style: Clean, academic, informative. Suitable for a textbook or study material.
-Use clear labels if needed. Professional quality.`;
+    const openrouter = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey,
+    });
+
+    const prompt = `Genera un'illustrazione chiara ed educativa per un documento di studio universitario.
+L'immagine deve rappresentare: ${description}
+Stile: Pulito, accademico, informativo. Adatto per un libro di testo o materiale di studio.
+Usa etichette chiare se necessario. Qualità professionale.`;
 
     // Try each model until one works
     for (const model of IMAGE_MODELS) {
       try {
-        const isImagen = model.startsWith("imagen");
-
-        const body = isImagen
-          ? {
-              instances: [{ prompt }],
-              parameters: { sampleCount: 1 },
-            }
-          : {
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                responseModalities: ["IMAGE", "TEXT"],
-              },
-            };
-
-        const endpoint = isImagen ? "predict" : "generateContent";
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${endpoint}?key=${apiKey}`;
-
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+        const response = await openrouter.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          // @ts-expect-error OpenRouter supports responseModalities for image gen
+          modalities: ["image", "text"],
         });
 
-        if (!response.ok) {
-          const errText = await response.text();
-          console.warn(`Model ${model} failed:`, errText.substring(0, 200));
-          continue; // Try next model
+        // Extract image from response — cast to any since OpenRouter
+        // returns extended format beyond OpenAI SDK types
+        const choice = response.choices?.[0];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rawMessage = choice?.message as any;
+        if (!rawMessage?.content) continue;
+
+        const content = rawMessage.content;
+
+        // If content is a string, no image was generated
+        if (typeof content === "string") {
+          console.warn(`Model ${model}: text-only response`);
+          continue;
         }
 
-        const data = await response.json();
-
-        // Extract image from Gemini response
-        const parts = data.candidates?.[0]?.content?.parts || [];
-        const imagePart = parts.find(
-          (p: { inlineData?: { data: string; mimeType: string } }) =>
-            p.inlineData
-        );
-
-        if (imagePart?.inlineData) {
-          return NextResponse.json({
-            image: imagePart.inlineData.data,
-            mimeType: imagePart.inlineData.mimeType || "image/png",
-          });
+        // Content is array of parts (OpenRouter multimodal format)
+        if (Array.isArray(content)) {
+          for (const part of content) {
+            // Check for inline image data
+            if (
+              part.type === "image_url" &&
+              part.image_url?.url?.startsWith("data:")
+            ) {
+              const dataUrl = part.image_url.url;
+              const base64Match = dataUrl.match(
+                /^data:([^;]+);base64,(.+)$/
+              );
+              if (base64Match) {
+                return NextResponse.json({
+                  image: base64Match[2],
+                  mimeType: base64Match[1],
+                });
+              }
+            }
+            // Some models return base64 directly in content
+            if (
+              part.type === "image" &&
+              part.source?.type === "base64"
+            ) {
+              return NextResponse.json({
+                image: part.source.data,
+                mimeType: part.source.media_type || "image/png",
+              });
+            }
+          }
         }
 
-        // Imagen response format
-        if (data.predictions?.[0]?.bytesBase64Encoded) {
-          return NextResponse.json({
-            image: data.predictions[0].bytesBase64Encoded,
-            mimeType: "image/png",
-          });
-        }
-
-        console.warn(`Model ${model}: no image in response`);
+        console.warn(`Model ${model}: no image extracted from response`);
       } catch (err) {
-        console.warn(`Model ${model} error:`, err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.warn(`Model ${model} error:`, errMsg.substring(0, 200));
         continue;
       }
+    }
+
+    // All models failed — try raw fetch as fallback (Gemini native format)
+    try {
+      const googleKey = process.env.GOOGLE_AI_API_KEY;
+      if (googleKey) {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${googleKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+            }),
+          }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const parts = data.candidates?.[0]?.content?.parts || [];
+          const imagePart = parts.find(
+            (p: { inlineData?: { data: string; mimeType: string } }) =>
+              p.inlineData
+          );
+          if (imagePart?.inlineData) {
+            return NextResponse.json({
+              image: imagePart.inlineData.data,
+              mimeType: imagePart.inlineData.mimeType || "image/png",
+            });
+          }
+        }
+      }
+    } catch {
+      // Google API fallback also failed
     }
 
     return NextResponse.json(
