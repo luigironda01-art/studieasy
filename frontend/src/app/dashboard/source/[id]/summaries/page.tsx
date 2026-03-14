@@ -695,11 +695,15 @@ export default function SourceSummariesPage() {
       const blocks = parseMarkdownBlocks(freshText);
 
       // Image generation logic (skip if withImages is false):
-      // - tags ≤ 5: generate all tags + AI extras to reach 5 total
-      // - tags 6-10: generate only the tags (max 10)
-      // - tags > 10: generate only the first 10 tags
-      const MIN_IMAGES = 5;
-      const MAX_IMAGES = 10;
+      // Dynamic limits based on text length:
+      // - Short text (<3000 chars, single chapter): max 3 images
+      // - Medium text (3000-8000 chars): max 5 images
+      // - Long text (8000-20000 chars): max 7 images
+      // - Very long text (>20000 chars, full summary): max 10 images
+      const textLen = freshText.length;
+      const MIN_IMAGES = textLen > 8000 ? 5 : textLen > 3000 ? 3 : 2;
+      const MAX_IMAGES = textLen > 20000 ? 10 : textLen > 8000 ? 7 : textLen > 3000 ? 5 : 3;
+      console.log(`[PDF] Text length: ${textLen}, image limits: min=${MIN_IMAGES}, max=${MAX_IMAGES}`);
       const imageMap: Record<string, string> = {};
       const anchorImageMap: Record<string, { base64: string; description: string }> = {};
 
