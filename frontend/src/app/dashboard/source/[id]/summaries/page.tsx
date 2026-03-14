@@ -371,22 +371,26 @@ export default function SourceSummariesPage() {
     setPdfProgress("Caricamento dati aggiornati...");
 
     try {
-      // Re-fetch fresh chapter data via server-side API to bypass client cache and RLS
+      // Re-fetch fresh chapter data via server-side POST API (service role key, no RLS)
       let freshText = text;
       if (chapterId) {
         try {
-          const res = await fetch(`/api/chapters/${chapterId}/text`);
+          const res = await fetch("/api/chapters/fresh-text", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chapterId }),
+          });
           if (res.ok) {
             const json = await res.json();
             if (json.processed_text) {
               freshText = json.processed_text;
-              console.log("Fresh text fetched successfully, length:", freshText.length);
+              console.log("[PDF] Fresh text OK, length:", freshText.length);
             }
           } else {
-            console.error("Fresh fetch API error:", res.status, await res.text());
+            console.warn("[PDF] Fresh fetch failed:", res.status);
           }
         } catch (fetchErr) {
-          console.error("Fresh fetch failed:", fetchErr);
+          console.warn("[PDF] Fresh fetch error:", fetchErr);
         }
       }
 
