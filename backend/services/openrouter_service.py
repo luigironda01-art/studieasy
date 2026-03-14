@@ -622,7 +622,7 @@ Rispondi SOLO con un array JSON valido:
 
     async def _ai_pass(self, text: str, prompt_template: str, pass_name: str, min_ratio: float = 0.7) -> str:
         """Run an AI pass on text, processing in chunks if needed."""
-        chunks = self._split_into_chunks(text)
+        chunks = self._split_into_chunks(text, chunk_size=10000)  # Smaller chunks = less truncation risk
         print(f"{pass_name}: {len(chunks)} chunk(s), {len(text)} chars totali")
 
         processed_parts = []
@@ -632,13 +632,18 @@ Rispondi SOLO con un array JSON valido:
                 response = await asyncio.wait_for(
                     self.client.chat.completions.create(
                         model=self.vision_model,
-                        max_tokens=16000,
+                        max_tokens=20000,
                         messages=[{"role": "user", "content": prompt}]
                     ),
                     timeout=180.0
                 )
                 part = response.choices[0].message.content
-                if len(part) < len(chunk) * min_ratio:
+                # Check for truncation: if output ends mid-sentence, try to detect
+                finish_reason = getattr(response.choices[0], 'finish_reason', None)
+                if finish_reason == 'length':
+                    print(f"  Chunk {i+1}: AI output truncated (max_tokens hit), using original")
+                    processed_parts.append(chunk)
+                elif len(part) < len(chunk) * min_ratio:
                     print(f"  Chunk {i+1}: AI compressed too much ({len(chunk)} → {len(part)}), keeping original")
                     processed_parts.append(chunk)
                 else:

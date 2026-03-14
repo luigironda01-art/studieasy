@@ -189,14 +189,13 @@ export default function SourceSummariesPage() {
     cleaned = cleaned.replace(/\[\s*I\s*M\s*M\s*A\s*G\s*I\s*N\s*E\s*:/gi, "[IMMAGINE:");
 
     // 1d. Fix spaced-out text using line-level heuristic
-    // If >35% of space-separated tokens in a line are single chars, it's spaced text
+    // If >25% of space-separated tokens in a line are single chars, it's spaced text
     // Double-space = word boundary, single-space = letter spacing
     cleaned = cleaned.split("\n").map((line: string) => {
-      // Normalize multiple spaces to single for token counting, but keep originals for word-boundary detection
       const tokens = line.split(/\s+/).filter((t: string) => t !== "");
       if (tokens.length < 5) return line;
       const singleCharCount = tokens.filter((t: string) => t.length === 1).length;
-      if (singleCharCount / tokens.length > 0.35) {
+      if (singleCharCount / tokens.length > 0.25) {
         // Use double-space (or more) as word boundaries
         const parts = line.split(/\s{2,}/);
         if (parts.length <= 1) {
@@ -205,7 +204,21 @@ export default function SourceSummariesPage() {
         }
         return parts.map((w: string) => w.replace(/\s/g, "")).join(" ");
       }
-      return line;
+      // Also detect: sequences of "X Y Z" where X,Y,Z are single chars (partial spaced text within a line)
+      // e.g. "la rende una m o l e c o l a  p o l a r e. L'atomo..."
+      return line.replace(/(?<=[a-zA-Zà-ÿ]\s)([a-zA-Zà-ÿ]\s){3,}[a-zA-Zà-ÿ](?=[\s.,;:!?)]|$)/g, (match) => {
+        // Check if it's really spaced text (most tokens are single chars)
+        const chars = match.split(/\s+/);
+        if (chars.filter((c: string) => c.length === 1).length > chars.length * 0.6) {
+          // Try to find double-space word boundaries within the match
+          const words = match.split(/\s{2,}/);
+          if (words.length > 1) {
+            return words.map((w: string) => w.replace(/\s/g, "")).join(" ");
+          }
+          return match.replace(/\s/g, "");
+        }
+        return match;
+      });
     }).join("\n");
 
     // 1e. Clean %ª bullet markers → bullet (with optional leading whitespace)
@@ -377,11 +390,35 @@ export default function SourceSummariesPage() {
       const imageMatch = line.match(/\[(?:IMMAGINE|Vedi figura):\s*(.*?)\]/i);
       if (imageMatch) {
         const fullDesc = imageMatch[1];
-        const brief =
-          fullDesc.length > 150
-            ? fullDesc.substring(0, 150).replace(/\s\S*$/, "") + "..."
-            : fullDesc;
-        blocks.push({ type: "image", text: brief });
+        // Clean prompt-style language into educational caption
+        let caption = fullDesc
+          .replace(/^Un[a']?\s*(?:immagine|diagramma|schema|illustrazione|figura|grafico)\s*(?:che\s*(?:mostra|illustra|rappresenta|descrive))\s*/i, "")
+          .replace(/\.\s*(?:L['']immagine|Il diagramma|Lo schema|La figura|Il grafico)\s*dovrebbe\s*(?:mostrare|includere|illustrare|rappresentare)[^.]*\.?/gi, "")
+          .replace(/\.\s*Dovrebbe(?:ro)?\s*essere\s*(?:indicate|mostrate|evidenziate|visibili)[^.]*\.?/gi, "")
+          .trim();
+        // Capitalize first letter
+        if (caption) caption = caption.charAt(0).toUpperCase() + caption.slice(1);
+        // Truncate if too long
+        if (caption.length > 200) {
+          caption = caption.substring(0, 200).replace(/\s\S*$/, "") + "...";
+        }
+        blocks.push({ type: "image", text: caption || fullDesc });
+        continue;
+      }
+
+      // Detect prompt-style image descriptions as standalone paragraphs
+      // (these appear when [IMMAGINE:] tags were cleaned to parenthetical text by AI)
+      const promptImageMatch = line.match(/^Un[a']?\s*(?:immagine|diagramma|schema|illustrazione|figura|grafico)\s*(?:che\s*(?:mostra|illustra|rappresenta|descrive))\s*(.*)/i);
+      if (promptImageMatch) {
+        let caption = promptImageMatch[1]
+          .replace(/\.\s*(?:L['']immagine|Il diagramma|Lo schema)\s*dovrebbe\s*[^.]*\.?/gi, "")
+          .replace(/\.\s*Dovrebbe(?:ro)?\s*essere\s*[^.]*\.?/gi, "")
+          .trim();
+        if (caption) caption = caption.charAt(0).toUpperCase() + caption.slice(1);
+        if (caption.length > 200) {
+          caption = caption.substring(0, 200).replace(/\s\S*$/, "") + "...";
+        }
+        blocks.push({ type: "image", text: caption || line });
         continue;
       }
 
