@@ -343,6 +343,13 @@ async def process_pdf(request: ProcessRequest):
             orig_chapter = supabase.table("chapters").select("file_url").eq("id", request.chapter_id).single().execute()
             file_url = orig_chapter.data.get("file_url") if orig_chapter.data else None
 
+            # Clean up old chapters from previous processing (except the original one)
+            try:
+                supabase.table("chapters").delete().eq("source_id", request.source_id).neq("id", request.chapter_id).execute()
+                print(f"Cleaned up old chapters for source {request.source_id}")
+            except Exception as cleanup_err:
+                print(f"Warning: cleanup of old chapters failed: {cleanup_err}")
+
             # Save chapters (text is already enhanced, no per-chapter AI calls needed)
             for idx, ch_data in enumerate(chapters_data):
                 progress = 88 + int((idx / len(chapters_data)) * 10)
