@@ -465,10 +465,11 @@ export default function SourceSummariesPage() {
 
       const blocks = parseMarkdownBlocks(freshText);
 
-      // Smart image generation with priority system:
-      // 1. First: generate images for existing [Vedi figura:] and [IMMAGINE:] tags (from Vision AI)
-      // 2. If slots remain (max 5 total): AI suggests extra images based on context
-      const MAX_IMAGES = 5;
+      // Image generation logic:
+      // - tags < 5: generate ALL tags + AI extra to reach 5 total
+      // - tags = 5: generate exactly 5 from tags
+      // - tags > 5: generate ALL tags (no limit)
+      const MIN_IMAGES = 5;
       const imageMap: Record<string, string> = {};
       const anchorImageMap: Record<string, { base64: string; description: string }> = {};
 
@@ -489,33 +490,36 @@ export default function SourceSummariesPage() {
       };
 
       try {
-        // Phase 1: Collect existing image tags from parsed blocks
+        // Phase 1: Generate ALL existing image tags (no limit)
         const existingImageBlocks = blocks.filter((b) => b.type === "image");
-        const tagImages = existingImageBlocks.slice(0, MAX_IMAGES);
         let generated = 0;
 
-        if (tagImages.length > 0) {
-          setPdfProgress(`Generazione ${tagImages.length} immagini dai tag...`);
-          console.log(`[PDF] Found ${existingImageBlocks.length} image tags, generating ${tagImages.length}`);
+        if (existingImageBlocks.length > 0) {
+          const total = existingImageBlocks.length;
+          setPdfProgress(`Generazione ${total} immagini dai tag...`);
+          console.log(`[PDF] Found ${total} image tags, generating all`);
 
-          const tagPromises = tagImages.map(async (block, i) => {
-            setPdfProgress(`Generazione immagine ${i + 1} di ${tagImages.length}...`);
-            const base64 = await genImage(block.text);
-            if (base64) {
-              imageMap[block.text] = base64;
-              return true;
-            }
-            return false;
-          });
-
-          const tagResults = await Promise.all(tagPromises);
-          generated = tagResults.filter(Boolean).length;
-          console.log(`[PDF] Generated ${generated} images from tags`);
+          // Generate in batches of 3 to avoid overwhelming the API
+          for (let batch = 0; batch < total; batch += 3) {
+            const batchBlocks = existingImageBlocks.slice(batch, batch + 3);
+            const batchPromises = batchBlocks.map(async (block, i) => {
+              setPdfProgress(`Generazione immagine ${batch + i + 1} di ${total}...`);
+              const base64 = await genImage(block.text);
+              if (base64) {
+                imageMap[block.text] = base64;
+                return true;
+              }
+              return false;
+            });
+            const batchResults = await Promise.all(batchPromises);
+            generated += batchResults.filter(Boolean).length;
+          }
+          console.log(`[PDF] Generated ${generated}/${total} images from tags`);
         }
 
-        // Phase 2: If slots remain, ask AI for extra context-based images
-        const remaining = MAX_IMAGES - generated;
-        if (remaining > 0) {
+        // Phase 2: If we have fewer than MIN_IMAGES, ask AI for extras
+        if (generated < MIN_IMAGES) {
+          const remaining = MIN_IMAGES - generated;
           setPdfProgress("Analisi contenuto per immagini extra...");
           const analyzeRes = await fetch("/api/images/analyze", {
             method: "POST",
@@ -527,13 +531,11 @@ export default function SourceSummariesPage() {
             const { suggestions } = await analyzeRes.json();
             if (suggestions && suggestions.length > 0) {
               const extraSuggestions = suggestions.slice(0, remaining);
-              console.log(`[PDF] AI suggests ${extraSuggestions.length} extra images`);
+              console.log(`[PDF] AI suggests ${extraSuggestions.length} extra images (need ${remaining} more)`);
 
               const extraPromises = extraSuggestions.map(
                 async (s: { anchor: string; description: string }, i: number) => {
-                  setPdfProgress(
-                    `Immagine extra ${i + 1} di ${extraSuggestions.length}...`
-                  );
+                  setPdfProgress(`Immagine extra ${i + 1} di ${extraSuggestions.length}...`);
                   const base64 = await genImage(s.description);
                   if (base64) {
                     anchorImageMap[s.anchor] = { base64, description: s.description };
@@ -704,6 +706,13 @@ export default function SourceSummariesPage() {
 
           case "table": {
             if (block.rows && block.rows.length > 0) {
+              const tableRowH = 7;
+              const totalTableHeight = block.rows.length * tableRowH + 7;
+              const spaceLeft = pageHeight - margin - y;
+              if (totalTableHeight < pageHeight - margin * 2 && totalTableHeight > spaceLeft) {
+                doc.addPage();
+                y = margin;
+              }
               ensureSpace(14);
               y += 2;
               const colCount = Math.max(
