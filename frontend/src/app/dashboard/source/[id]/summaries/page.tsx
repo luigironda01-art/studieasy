@@ -395,8 +395,61 @@ export default function SourceSummariesPage() {
 
       const blocks = parseMarkdownBlocks(freshText);
 
-      // Image generation disabled — too expensive per PDF
+      // Smart image generation: AI analyzes text and picks max 5 spots
       const imageMap: Record<string, string> = {};
+      // anchorImageMap maps anchor text → base64 for insertion near matching blocks
+      const anchorImageMap: Record<string, { base64: string; description: string }> = {};
+
+      try {
+        setPdfProgress("Analisi contenuto per immagini...");
+        const analyzeRes = await fetch("/api/images/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: freshText }),
+        });
+
+        if (analyzeRes.ok) {
+          const { suggestions } = await analyzeRes.json();
+          if (suggestions && suggestions.length > 0) {
+            console.log(`[PDF] AI suggests ${suggestions.length} images`);
+
+            // Generate all images in parallel
+            const genPromises = suggestions.map(
+              async (s: { anchor: string; description: string }, i: number) => {
+                setPdfProgress(
+                  `Generazione immagine ${i + 1} di ${suggestions.length}...`
+                );
+                try {
+                  const genRes = await fetch("/api/images/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ description: s.description }),
+                  });
+                  if (genRes.ok) {
+                    const data = await genRes.json();
+                    if (data.image) {
+                      return { anchor: s.anchor, base64: data.image, description: s.description };
+                    }
+                  }
+                } catch {
+                  console.warn(`[PDF] Image gen failed for: ${s.description.substring(0, 50)}`);
+                }
+                return null;
+              }
+            );
+
+            const results = await Promise.all(genPromises);
+            for (const r of results) {
+              if (r) {
+                anchorImageMap[r.anchor] = { base64: r.base64, description: r.description };
+              }
+            }
+            console.log(`[PDF] Generated ${Object.keys(anchorImageMap).length} images`);
+          }
+        }
+      } catch (err) {
+        console.warn("[PDF] Smart image analysis failed:", err);
+      }
 
       setPdfProgress("Creazione PDF...");
 
@@ -425,7 +478,50 @@ export default function SourceSummariesPage() {
       doc.line(margin, y, pageWidth - margin, y);
       y += 12;
 
+      // Helper: insert AI-generated image if this block's text matches an anchor
+      const usedAnchors = new Set<string>();
+      const tryInsertAnchorImage = () => {
+        // Check the last rendered block text against anchors
+        for (const [anchor, imgData] of Object.entries(anchorImageMap)) {
+          if (usedAnchors.has(anchor)) continue;
+          // Check if any recent block text contains the anchor
+          const lastBlocksText = blocks
+            .slice(Math.max(0, currentBlockIdx - 1), currentBlockIdx + 1)
+            .map((b) => b.text)
+            .join(" ");
+          if (lastBlocksText.includes(anchor) || anchor.split(" ").slice(0, 5).join(" ").length > 0 &&
+              lastBlocksText.toLowerCase().includes(anchor.toLowerCase().split(" ").slice(0, 5).join(" "))) {
+            usedAnchors.add(anchor);
+            const imgWidth = maxWidth * 0.65;
+            const imgHeight = imgWidth * 0.55;
+            ensureSpace(imgHeight + 14);
+            const imgX = margin + (maxWidth - imgWidth) / 2;
+            try {
+              doc.addImage(
+                `data:image/png;base64,${imgData.base64}`,
+                "PNG",
+                imgX, y, imgWidth, imgHeight
+              );
+              y += imgHeight + 2;
+              doc.setFontSize(8);
+              doc.setFont("helvetica", "italic");
+              doc.setTextColor(120);
+              const captionLines = doc.splitTextToSize(imgData.description, maxWidth * 0.8);
+              for (const cl of captionLines.slice(0, 2)) {
+                doc.text(cl, pageWidth / 2, y, { align: "center" });
+                y += 4;
+              }
+              y += 4;
+              doc.setTextColor(0);
+            } catch {
+              // Image embedding failed, skip
+            }
+          }
+        }
+      };
+
       // ── Render blocks ──
+      let currentBlockIdx = 0;
       for (const block of blocks) {
         switch (block.type) {
           case "h1": {
@@ -646,6 +742,10 @@ export default function SourceSummariesPage() {
             y += 2;
             break;
         }
+
+        // After rendering each block, check if an AI-selected image should be inserted here
+        tryInsertAnchorImage();
+        currentBlockIdx++;
       }
 
       // ── Footer on each page ──

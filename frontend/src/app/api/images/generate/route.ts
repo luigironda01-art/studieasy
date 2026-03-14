@@ -90,7 +90,9 @@ Usa etichette chiare se necessario. Qualità professionale.`;
           }
         }
 
-        console.warn(`Model ${model}: no image in response. Keys:`, Object.keys(msg));
+        // Log full response structure for debugging
+        const contentType = Array.isArray(msg.content) ? "array" : typeof msg.content;
+        console.warn(`Model ${model}: no image found. content type: ${contentType}, has images: ${!!msg.images}, keys:`, Object.keys(msg));
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         console.warn(`Model ${model} error:`, errMsg.substring(0, 200));
