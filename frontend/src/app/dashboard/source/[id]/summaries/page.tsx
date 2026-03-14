@@ -179,22 +179,28 @@ export default function SourceSummariesPage() {
     // 1c. Remove horizontal rules
     cleaned = cleaned.replace(/^[-_*]{3,}\s*$/gm, "");
 
-    // 1d. Fix spaced-out text (BOTH upper and lowercase)
-    // Detects sequences of 6+ single chars separated by single spaces
-    // e.g. "m o n o s a c c a r i d i" or "D I R I T T O"
-    cleaned = cleaned.replace(
-      /((?:[a-zA-ZÀ-ÿ0-9()\-±²] ){5,}[a-zA-ZÀ-ÿ0-9()\-±²])/g,
-      (match) => {
-        // Double-space = word boundary, single-space = letter spacing
-        return match
-          .split(/  +/)
-          .map((w: string) => w.replace(/ /g, ""))
-          .join(" ");
+    // 1d. Fix spaced-out text using line-level heuristic
+    // If >50% of space-separated tokens in a line are single chars, it's spaced text
+    // Double-space = word boundary, single-space = letter spacing
+    cleaned = cleaned.split("\n").map((line: string) => {
+      const tokens = line.split(" ").filter((t: string) => t !== "");
+      if (tokens.length < 6) return line;
+      const singleCharCount = tokens.filter((t: string) => t.length === 1).length;
+      if (singleCharCount / tokens.length > 0.5) {
+        const parts = line.split(/  +/);
+        if (parts.length <= 1) {
+          return line.replace(/ /g, "");
+        }
+        return parts.map((w: string) => w.replace(/ /g, "")).join(" ");
       }
-    );
+      return line;
+    }).join("\n");
 
-    // 1e. Clean %ª bullet markers → bullet
-    cleaned = cleaned.replace(/^%ª\s*/gm, "- ");
+    // 1e. Clean %ª bullet markers → bullet (with optional leading whitespace)
+    cleaned = cleaned.replace(/^\s*%ª\s*/gm, "- ");
+
+    // 1e2. Clean ▪ (U+25AA) bullet markers → bullet
+    cleaned = cleaned.replace(/^\s*▪\s*/gm, "- ");
 
     // 1f. Clean [FORMULA: x] → x
     cleaned = cleaned.replace(/\[FORMULA:\s*(.*?)\]/gi, "$1");
@@ -202,8 +208,8 @@ export default function SourceSummariesPage() {
     // 1g. Remove orphan markdown bold/italic
     cleaned = cleaned.replace(/\*{1,3}([^*\n]+)\*{1,3}/g, "$1");
 
-    // 1h. Remove standalone http URLs on their own line (artifact from PDF)
-    cleaned = cleaned.replace(/^https?:\/\/\S+$/gm, "");
+    // 1h. Remove standalone http URLs (may contain spaces from broken PDF extraction)
+    cleaned = cleaned.replace(/^https?:\/\/.*$/gm, "");
 
     // ═══ Step 2: Line-by-line parsing ═══
     const lines = cleaned.split("\n");
