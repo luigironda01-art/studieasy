@@ -122,34 +122,44 @@ export default function SourceDetailPage() {
     }
   };
 
-  // Fetch flashcard counts for each chapter
+  // Fetch flashcard counts for each chapter (single query)
   const fetchFlashcardCounts = async () => {
-    if (!user) return;
+    if (!user || chapters.length === 0) return;
+
+    const chapterIds = chapters.map(c => c.id);
+    const { data } = await supabase
+      .from("flashcards")
+      .select("chapter_id")
+      .in("chapter_id", chapterIds)
+      .eq("user_id", user.id);
 
     const counts: Record<string, number> = {};
-    for (const chapter of chapters) {
-      const { count } = await supabase
-        .from("flashcards")
-        .select("*", { count: "exact", head: true })
-        .eq("chapter_id", chapter.id)
-        .eq("user_id", user.id);
-      counts[chapter.id] = count || 0;
+    for (const ch of chapters) counts[ch.id] = 0;
+    if (data) {
+      for (const row of data) {
+        counts[row.chapter_id] = (counts[row.chapter_id] || 0) + 1;
+      }
     }
     setFlashcardCounts(counts);
   };
 
-  // Fetch quiz counts for each chapter
+  // Fetch quiz counts for each chapter (single query)
   const fetchQuizCounts = async () => {
-    if (!user) return;
+    if (!user || chapters.length === 0) return;
+
+    const chapterIds = chapters.map(c => c.id);
+    const { data } = await supabase
+      .from("quizzes")
+      .select("chapter_id")
+      .in("chapter_id", chapterIds)
+      .eq("user_id", user.id);
 
     const counts: Record<string, number> = {};
-    for (const chapter of chapters) {
-      const { count } = await supabase
-        .from("quizzes")
-        .select("*", { count: "exact", head: true })
-        .eq("chapter_id", chapter.id)
-        .eq("user_id", user.id);
-      counts[chapter.id] = count || 0;
+    for (const ch of chapters) counts[ch.id] = 0;
+    if (data) {
+      for (const row of data) {
+        counts[row.chapter_id] = (counts[row.chapter_id] || 0) + 1;
+      }
     }
     setQuizCounts(counts);
   };
