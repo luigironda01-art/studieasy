@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic";
 
 // Models to try in order (via OpenRouter)
 const IMAGE_MODELS = [
-  "google/gemini-2.5-flash-image",
   "google/gemini-3.1-flash-image-preview",
+  "google/gemini-3-pro-image-preview",
 ];
 
 export async function POST(request: NextRequest) {
