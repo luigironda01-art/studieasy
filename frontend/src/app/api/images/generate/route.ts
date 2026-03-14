@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
-
 export const dynamic = "force-dynamic";
 
 // Models to try in order (via OpenRouter)
 const IMAGE_MODELS = [
-  "google/gemini-2.5-flash-image",
-  "google/gemini-3-pro-image-preview",
-  "google/gemini-3.1-flash-image-preview",
+  "google/gemini-2.5-flash-preview-image-generation",
+  "google/gemini-2.0-flash-exp:free",
 ];
 
 export async function POST(request: NextRequest) {
@@ -29,70 +26,62 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const openrouter = new OpenAI({
-      baseURL: "https://openrouter.ai/api/v1",
-      apiKey,
-    });
-
     const prompt = `Genera un'illustrazione chiara ed educativa per un documento di studio universitario.
 L'immagine deve rappresentare: ${description}
 Stile: Pulito, accademico, informativo. Adatto per un libro di testo o materiale di studio.
 Usa etichette chiare se necessario. Qualità professionale.`;
 
-    // Try each model until one works
+    // Try each model via raw fetch to OpenRouter (not OpenAI SDK)
+    // because OpenRouter returns images in non-standard fields
     for (const model of IMAGE_MODELS) {
       try {
-        const response = await openrouter.chat.completions.create({
-          model,
-          messages: [
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-          // @ts-expect-error OpenRouter supports responseModalities for image gen
-          modalities: ["image", "text"],
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: prompt }],
+            modalities: ["image", "text"],
+          }),
         });
 
-        // Extract image from response — cast to any since OpenRouter
-        // returns extended format beyond OpenAI SDK types
-        const choice = response.choices?.[0];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rawMessage = choice?.message as any;
-        if (!rawMessage?.content) continue;
-
-        const content = rawMessage.content;
-
-        // If content is a string, no image was generated
-        if (typeof content === "string") {
-          console.warn(`Model ${model}: text-only response`);
+        if (!res.ok) {
+          console.warn(`Model ${model}: HTTP ${res.status}`);
           continue;
         }
 
-        // Content is array of parts (OpenRouter multimodal format)
-        if (Array.isArray(content)) {
-          for (const part of content) {
-            // Check for inline image data
-            if (
-              part.type === "image_url" &&
-              part.image_url?.url?.startsWith("data:")
-            ) {
-              const dataUrl = part.image_url.url;
-              const base64Match = dataUrl.match(
-                /^data:([^;]+);base64,(.+)$/
-              );
-              if (base64Match) {
-                return NextResponse.json({
-                  image: base64Match[2],
-                  mimeType: base64Match[1],
-                });
+        const data = await res.json();
+        const choice = data.choices?.[0];
+        if (!choice?.message) continue;
+
+        const msg = choice.message;
+
+        // Format 1: images array on message (OpenRouter native)
+        if (Array.isArray(msg.images)) {
+          for (const img of msg.images) {
+            const url = img.image_url?.url || img.url;
+            if (url?.startsWith("data:")) {
+              const m = url.match(/^data:([^;]+);base64,(.+)$/);
+              if (m) {
+                return NextResponse.json({ image: m[2], mimeType: m[1] });
               }
             }
-            // Some models return base64 directly in content
-            if (
-              part.type === "image" &&
-              part.source?.type === "base64"
-            ) {
+          }
+        }
+
+        // Format 2: content is array with image parts
+        if (Array.isArray(msg.content)) {
+          for (const part of msg.content) {
+            if (part.type === "image_url" && part.image_url?.url?.startsWith("data:")) {
+              const m = part.image_url.url.match(/^data:([^;]+);base64,(.+)$/);
+              if (m) {
+                return NextResponse.json({ image: m[2], mimeType: m[1] });
+              }
+            }
+            if (part.type === "image" && part.source?.type === "base64") {
               return NextResponse.json({
                 image: part.source.data,
                 mimeType: part.source.media_type || "image/png",
@@ -101,46 +90,12 @@ Usa etichette chiare se necessario. Qualità professionale.`;
           }
         }
 
-        console.warn(`Model ${model}: no image extracted from response`);
+        console.warn(`Model ${model}: no image in response. Keys:`, Object.keys(msg));
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         console.warn(`Model ${model} error:`, errMsg.substring(0, 200));
         continue;
       }
-    }
-
-    // All models failed — try raw fetch as fallback (Gemini native format)
-    try {
-      const googleKey = process.env.GOOGLE_AI_API_KEY;
-      if (googleKey) {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${googleKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
-            }),
-          }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const parts = data.candidates?.[0]?.content?.parts || [];
-          const imagePart = parts.find(
-            (p: { inlineData?: { data: string; mimeType: string } }) =>
-              p.inlineData
-          );
-          if (imagePart?.inlineData) {
-            return NextResponse.json({
-              image: imagePart.inlineData.data,
-              mimeType: imagePart.inlineData.mimeType || "image/png",
-            });
-          }
-        }
-      }
-    } catch {
-      // Google API fallback also failed
     }
 
     return NextResponse.json(

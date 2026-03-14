@@ -349,22 +349,6 @@ export default function SourceSummariesPage() {
     return blocks;
   };
 
-  // Generate an image from a description via Gemini
-  const generateImage = async (description: string): Promise<string | null> => {
-    try {
-      const res = await fetch("/api/images/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description }),
-      });
-      const data = await res.json();
-      if (data.image) return data.image; // base64 string
-      return null;
-    } catch {
-      console.warn("Image generation failed for:", description);
-      return null;
-    }
-  };
 
   const handleDownloadPdf = async (text: string, title: string, chapterId?: string) => {
     setPdfGenerating(true);
@@ -411,21 +395,8 @@ export default function SourceSummariesPage() {
 
       const blocks = parseMarkdownBlocks(freshText);
 
-      // Pre-generate images if any [IMMAGINE:] blocks exist
-      const imageBlocks = blocks.filter((b) => b.type === "image");
+      // Image generation disabled — too expensive per PDF
       const imageMap: Record<string, string> = {};
-
-      if (imageBlocks.length > 0) {
-        for (let i = 0; i < imageBlocks.length; i++) {
-          setPdfProgress(
-            `Generazione immagine ${i + 1} di ${imageBlocks.length}...`
-          );
-          const base64 = await generateImage(imageBlocks[i].text);
-          if (base64) {
-            imageMap[imageBlocks[i].text] = base64;
-          }
-        }
-      }
 
       setPdfProgress("Creazione PDF...");
 
