@@ -497,10 +497,10 @@ Rispondi SOLO con l'emoji, nient'altro:"""
         if len(text) < 2000:
             return []
 
-        # Use first 15k chars for analysis (enough to identify structure)
-        sample = text[:15000] if len(text) > 15000 else text
+        # Use first 20k chars for analysis (enough to identify structure)
+        sample = text[:20000] if len(text) > 20000 else text
 
-        prompt = f"""Analizza questo testo estratto da un documento di studio e identifica i CAPITOLI o SEZIONI principali basandoti sugli ARGOMENTI trattati.
+        prompt = f"""Analizza questo testo formattato di un documento di studio e identifica i CAPITOLI o SEZIONI principali basandoti sugli ARGOMENTI trattati.
 
 TESTO:
 {sample}
@@ -510,8 +510,9 @@ REGOLE:
 2. Minimo 2 capitoli, massimo 10
 3. Ogni capitolo deve coprire un argomento coerente e sostanziale
 4. Il titolo deve essere descrittivo dell'argomento trattato
-5. start_marker deve essere una frase ESATTA dal testo (le prime parole della sezione)
+5. start_marker deve essere una frase ESATTA copiata dal testo (le prime parole della sezione, inclusi eventuali caratteri markdown come # o **)
 6. Il primo capitolo deve iniziare dall'inizio del documento
+7. Cerca titoli, intestazioni o cambi di argomento come punti di divisione
 
 Rispondi SOLO con un array JSON valido:
 [

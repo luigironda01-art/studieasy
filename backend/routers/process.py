@@ -287,31 +287,35 @@ async def process_pdf(request: ProcessRequest):
         # Cap quality at 100
         extraction_quality = min(100, max(0, extraction_quality))
 
-        update_progress(72, "Identificazione capitoli...")
-
-        # Smart Chapter Splitting: AI identifies logical sections
-        chapter_splits = await openrouter.split_into_chapters(extracted_text)
-
         # Prepare common metadata
         notes_string = " | ".join(extraction_notes) if extraction_notes else None
         preferred_model = determine_preferred_model(extracted_text, extraction_method)
         print(f"Smart model selection: {preferred_model}")
 
+        # Step 1: Enhance the FULL text first (high quality on complete context)
+        update_progress(72, "Analisi AI del contenuto...")
+        processed_text = await openrouter.enhance_processed_text(extracted_text)
+        print(f"Full text enhanced: {len(extracted_text)} -> {len(processed_text)} chars")
+
+        # Step 2: Smart Chapter Splitting on the ENHANCED text
+        update_progress(82, "Identificazione capitoli...")
+        chapter_splits = await openrouter.split_into_chapters(processed_text)
+
         if len(chapter_splits) >= 2:
             # --- MULTI-CHAPTER MODE ---
             print(f"Splitting into {len(chapter_splits)} chapters")
-            update_progress(75, f"Trovati {len(chapter_splits)} capitoli, elaborazione...")
+            update_progress(85, f"Trovati {len(chapter_splits)} capitoli, suddivisione...")
 
-            # Split the text based on markers
+            # Split the enhanced text based on markers
             chapter_texts = []
             for idx, split in enumerate(chapter_splits):
                 marker = split["start_marker"]
-                # Find the marker position in text
-                pos = extracted_text.find(marker)
+                # Find the marker position in enhanced text
+                pos = processed_text.find(marker)
                 if pos == -1:
                     # Try partial match (first 50 chars of marker)
                     short_marker = marker[:50]
-                    pos = extracted_text.find(short_marker)
+                    pos = processed_text.find(short_marker)
                 if pos == -1 and idx == 0:
                     pos = 0  # First chapter always starts at beginning
                 chapter_texts.append({"title": split["title"], "pos": pos if pos >= 0 else -1})
@@ -322,53 +326,48 @@ async def process_pdf(request: ProcessRequest):
             # Sort by position and calculate text ranges
             chapter_texts.sort(key=lambda c: c["pos"])
 
-            # Build final chapter data with text slices
+            # Build final chapter data with text slices from enhanced text
             chapters_data = []
             for idx, ch in enumerate(chapter_texts):
                 start = ch["pos"]
-                end = chapter_texts[idx + 1]["pos"] if idx + 1 < len(chapter_texts) else len(extracted_text)
-                raw = extracted_text[start:end].strip()
-                if len(raw) > 100:  # Skip tiny chapters
-                    chapters_data.append({"title": ch["title"], "raw_text": raw})
+                end = chapter_texts[idx + 1]["pos"] if idx + 1 < len(chapter_texts) else len(processed_text)
+                enhanced_slice = processed_text[start:end].strip()
+                if len(enhanced_slice) > 100:  # Skip tiny chapters
+                    chapters_data.append({"title": ch["title"], "processed_text": enhanced_slice})
 
             if len(chapters_data) < 2:
                 # Fallback: splitting failed, use single chapter
-                chapters_data = [{"title": "Documento completo", "raw_text": extracted_text}]
+                chapters_data = [{"title": "Documento completo", "processed_text": processed_text}]
 
-            # Get file_url from original chapter for first chapter
+            # Get file_url from original chapter
             orig_chapter = supabase.table("chapters").select("file_url").eq("id", request.chapter_id).single().execute()
             file_url = orig_chapter.data.get("file_url") if orig_chapter.data else None
 
-            # Update first chapter (reuse the original) and create additional ones
+            # Save chapters (text is already enhanced, no per-chapter AI calls needed)
             for idx, ch_data in enumerate(chapters_data):
-                progress = 75 + int((idx / len(chapters_data)) * 20)
-                update_progress(progress, f"Elaborazione capitolo {idx+1}/{len(chapters_data)}: {ch_data['title'][:40]}...")
-
-                # Enhance chapter text
-                enhanced = await openrouter.enhance_processed_text(ch_data["raw_text"])
+                progress = 88 + int((idx / len(chapters_data)) * 10)
+                update_progress(progress, f"Salvataggio capitolo {idx+1}/{len(chapters_data)}...")
 
                 chapter_update = {
                     "title": ch_data["title"],
                     "order_index": idx,
-                    "raw_text": ch_data["raw_text"],
-                    "processed_text": enhanced,
+                    "raw_text": ch_data["processed_text"],  # Store enhanced text as raw too
+                    "processed_text": ch_data["processed_text"],
                     "processing_status": "completed",
                     "processing_progress": 100,
                     "extraction_quality": extraction_quality,
                     "extraction_method": extraction_method,
                     "extraction_notes": notes_string,
-                    "chars_extracted": len(ch_data["raw_text"]),
+                    "chars_extracted": len(ch_data["processed_text"]),
                     "page_count": page_count if idx == 0 else None,
                     "preferred_model": preferred_model,
                 }
 
                 if idx == 0:
-                    # Update the original chapter
                     chapter_update["file_url"] = file_url
                     supabase.table("chapters").update(chapter_update).eq("id", request.chapter_id).execute()
                     print(f"Chapter 1 updated: {ch_data['title']}")
                 else:
-                    # Create new chapter
                     chapter_update["source_id"] = request.source_id
                     chapter_update["file_url"] = file_url
                     supabase.table("chapters").insert(chapter_update).execute()
@@ -384,9 +383,6 @@ async def process_pdf(request: ProcessRequest):
 
         else:
             # --- SINGLE CHAPTER MODE (fallback) ---
-            update_progress(75, "Analisi AI del contenuto...")
-            processed_text = await openrouter.enhance_processed_text(extracted_text)
-
             update_progress(90, "Salvataggio risultati...")
             print(f"Updating chapter {request.chapter_id} with processed text...")
             update_data = {
