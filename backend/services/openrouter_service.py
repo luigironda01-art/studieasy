@@ -40,7 +40,7 @@ class OpenRouterService:
 
 ISTRUZIONI:
 1. Estrai il testo esattamente come appare in ogni pagina
-2. Per immagini, grafici, diagrammi: descrivi dettagliatamente cosa rappresentano tra tag [IMMAGINE: descrizione]
+2. Per immagini, grafici, diagrammi: descrivi dettagliatamente cosa rappresentano tra tag [IMMAGINE: descrizione]. LIMITE: inserisci al MASSIMO 5 tag [IMMAGINE:], preferibilmente meno. Scegli solo le immagini più importanti e didatticamente utili (formule complesse, strutture molecolari, diagrammi chiave). Se ci sono più di 5 immagini nel documento, seleziona le 5 più rilevanti e per le altre trascrivi semplicemente il contenuto come testo. Il massimo assoluto è 10 tag [IMMAGINE:].
 3. Per formule matematiche/chimiche: trascrivi in formato leggibile tra tag [FORMULA: formula]
 4. Per tabelle: converti in formato markdown
 5. Mantieni la struttura logica: titoli, paragrafi, elenchi
