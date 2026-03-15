@@ -329,13 +329,21 @@ export default function SourceSummariesPage() {
       }
       // Also detect: sequences of single chars separated by spaces (partial spaced text within a line)
       // e.g. "la rende una m o l e c o l a  p o l a r e. L'atomo..."
-      // Only match 4+ single NON-Italian chars in a row
-      return line.replace(/(\b[a-zA-Zà-ÿ]\s){4,}[a-zA-Zà-ÿ]\b/g, (match) => {
+      // For 6+ consecutive single chars: ALWAYS collapse (no Italian sentence has 6+ single-letter words in a row)
+      let fixedLine = line.replace(/(\b[a-zA-Zà-ÿ]\s){6,}[a-zA-Zà-ÿ]\b/g, (match) => {
+        const words = match.split(/\s{2,}/);
+        if (words.length > 1) {
+          return words.map((w: string) => w.replace(/\s/g, "")).join(" ");
+        }
+        return match.replace(/\s/g, "");
+      });
+      // For 4-5 consecutive single chars: check if mostly non-Italian
+      return fixedLine.replace(/(\b[a-zA-Zà-ÿ]\s){3,5}[a-zA-Zà-ÿ]\b/g, (match) => {
         const chars = match.split(/\s+/);
         const nonItalianSingles = chars.filter(
           (c: string) => c.length === 1 && !italianSingleWords.has(c)
         ).length;
-        if (nonItalianSingles > chars.length * 0.6) {
+        if (nonItalianSingles > chars.length * 0.5) {
           const words = match.split(/\s{2,}/);
           if (words.length > 1) {
             return words.map((w: string) => w.replace(/\s/g, "")).join(" ");
@@ -897,7 +905,12 @@ export default function SourceSummariesPage() {
         return text
           // Greek letters → spelled out or ASCII equivalent
           .replace(/α/g, "a").replace(/β/g, "b").replace(/γ/g, "g").replace(/δ/g, "d")
+          .replace(/ε/g, "e").replace(/ζ/g, "z").replace(/η/g, "n").replace(/θ/g, "th")
+          .replace(/ι/g, "i").replace(/κ/g, "k").replace(/λ/g, "l").replace(/μ/g, "u")
+          .replace(/ν/g, "v").replace(/ξ/g, "x").replace(/π/g, "pi").replace(/σ/g, "sigma")
+          .replace(/τ/g, "tau").replace(/φ/g, "phi").replace(/ω/g, "omega")
           .replace(/Α/g, "A").replace(/Β/g, "B").replace(/Γ/g, "G").replace(/Δ/g, "D")
+          .replace(/Π/g, "Pi").replace(/Σ/g, "Sigma").replace(/Ω/g, "Omega")
           // Subscript digits → normal digits (used in formulas like H₂O)
           .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
           .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
