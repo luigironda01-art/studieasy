@@ -22,6 +22,7 @@ export default function SourceSummariesPage() {
 
   const [source, setSource] = useState<Source | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [chapterSummaries, setChapterSummaries] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "read">("list");
@@ -104,6 +105,23 @@ export default function SourceSummariesPage() {
         setChapters(chaptersData);
         if (chaptersData.length > 0) {
           setGenerateChapterId(chaptersData[0].id);
+        }
+
+        // Fetch existing summaries for all chapters
+        const chapterIds = chaptersData.map(c => c.id);
+        if (chapterIds.length > 0) {
+          const { data: summariesData } = await supabase
+            .from("summaries")
+            .select("chapter_id, content")
+            .in("chapter_id", chapterIds);
+
+          if (summariesData) {
+            const summaryMap: Record<string, string> = {};
+            for (const s of summariesData) {
+              summaryMap[s.chapter_id] = s.content;
+            }
+            setChapterSummaries(summaryMap);
+          }
         }
       }
     } catch (err) {
@@ -1304,6 +1322,10 @@ export default function SourceSummariesPage() {
       }
 
       setGeneratedSummary(data.summary);
+      // Update the chapter summaries map so the full book view uses this summary
+      if (generateChapterId) {
+        setChapterSummaries(prev => ({ ...prev, [generateChapterId]: data.summary }));
+      }
     } catch (err) {
       console.error("Error generating summary:", err);
     } finally {
@@ -1662,34 +1684,48 @@ export default function SourceSummariesPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  const fullText = completedChapters
-                    .map(c => c.processed_text || "")
-                    .join("\n\n---\n\n");
-                  const fakeChapter = { ...completedChapters[0], title: source?.title || "Libro", processed_text: fullText };
-                  openReadMode(fakeChapter as Chapter);
-                }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"
-              >
-                <span>📖</span>
-                Leggi Tutto
-              </button>
-              <button
-                onClick={() => {
-                  const fullText = completedChapters
-                    .map(c => c.processed_text || "")
-                    .join("\n\n---\n\n");
-                  requestPdfDownload(fullText, source?.title || "Libro Completo");
-                }}
-                disabled={pdfGenerating}
-                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Genera e Scarica PDF
-              </button>
+              {(() => {
+                const chaptersWithSummary = completedChapters.filter(c => chapterSummaries[c.id]);
+                const chaptersWithoutSummary = completedChapters.filter(c => !chapterSummaries[c.id]);
+                const allHaveSummaries = chaptersWithoutSummary.length === 0;
+
+                return (
+                  <>
+                    <button
+                      onClick={() => {
+                        const fullText = completedChapters
+                          .map(c => chapterSummaries[c.id] || c.processed_text || "")
+                          .join("\n\n---\n\n");
+                        const fakeChapter = { ...completedChapters[0], title: source?.title || "Libro", processed_text: fullText };
+                        openReadMode(fakeChapter as Chapter);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"
+                    >
+                      <span>📖</span>
+                      Leggi Tutto
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!allHaveSummaries) {
+                          alert(`Genera prima i riassunti per tutti i capitoli.\nMancano: ${chaptersWithoutSummary.map(c => c.title).join(", ")}`);
+                          return;
+                        }
+                        const fullText = completedChapters
+                          .map(c => chapterSummaries[c.id])
+                          .join("\n\n---\n\n");
+                        requestPdfDownload(fullText, source?.title || "Libro Completo");
+                      }}
+                      disabled={pdfGenerating}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      {allHaveSummaries ? "Scarica PDF Riassunto" : `Scarica PDF (${chaptersWithSummary.length}/${completedChapters.length} riassunti)`}
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </div>
 
@@ -1700,7 +1736,12 @@ export default function SourceSummariesPage() {
               {completedChapters.map((chapter, idx) => (
                 <div key={chapter.id} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/5 transition-colors">
                   <span className="text-slate-500 text-sm font-mono w-6">{idx + 1}.</span>
-                  <span className="text-slate-300 text-sm">{chapter.title}</span>
+                  <span className="text-slate-300 text-sm flex-1">{chapter.title}</span>
+                  {chapterSummaries[chapter.id] ? (
+                    <span className="text-emerald-400 text-xs">Riassunto pronto</span>
+                  ) : (
+                    <span className="text-amber-400 text-xs">Da riassumere</span>
+                  )}
                 </div>
               ))}
             </div>
