@@ -358,6 +358,10 @@ export default function SourceSummariesPage() {
     // 1e4. Fix spaces before accented characters: "Propriet à" → "Proprietà"
     cleaned = cleaned.replace(/(\w)\s+(à|è|ù|ò|ì|é|ó|ú|í)/g, "$1$2");
 
+    // 1e4b. Fix glued "è" (Italian verb "is"): "palladioè" → "palladio è"
+    // Safe: Italian words ending in grave-è are short (caffè, tè, cioè = max 4 chars before è)
+    cleaned = cleaned.replace(/([a-zà-ùA-ZÀ-Ù]{5,})(è)(?=\s|[,.:;!?]|$)/g, "$1 $2");
+
     // 1e5. Remove AI truncation artifacts
     cleaned = cleaned.replace(/\(CONTINUA NELLA PROSSIMA RISPOSTA.*?\)/gi, "");
     cleaned = cleaned.replace(/\(CONTINUA.*?CARATTERI.*?\)/gi, "");
@@ -1661,7 +1665,7 @@ export default function SourceSummariesPage() {
               <button
                 onClick={() => {
                   const fullText = completedChapters
-                    .map(c => `## ${c.title}\n\n${c.processed_text || ""}`)
+                    .map(c => c.processed_text || "")
                     .join("\n\n---\n\n");
                   requestPdfDownload(fullText, source?.title || "Libro Completo");
                 }}
