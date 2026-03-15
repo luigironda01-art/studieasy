@@ -352,6 +352,30 @@ export default function SourceSummariesPage() {
     // 1e2. Clean ▪ (U+25AA) bullet markers → bullet
     cleaned = cleaned.replace(/^\s*▪\s*/gm, "- ");
 
+    // 1e3. Fix spaces after apostrophes: "L' acqua" → "L'acqua", "all' elevato" → "all'elevato"
+    cleaned = cleaned.replace(/(\w)'\s+(\w)/g, "$1'$2");
+
+    // 1e4. Fix spaces before accented characters: "Propriet à" → "Proprietà"
+    cleaned = cleaned.replace(/(\w)\s+(à|è|ù|ò|ì|é|ó|ú|í)/g, "$1$2");
+
+    // 1e5. Remove AI truncation artifacts
+    cleaned = cleaned.replace(/\(CONTINUA NELLA PROSSIMA RISPOSTA.*?\)/gi, "");
+    cleaned = cleaned.replace(/\(CONTINUA.*?CARATTERI.*?\)/gi, "");
+
+    // 1e6. Remove duplicate consecutive headings (same text repeated)
+    cleaned = cleaned.split("\n").map((line: string, idx: number, arr: string[]) => {
+      const trimmed = line.trim();
+      if (idx > 0 && trimmed.length > 0) {
+        const prevTrimmed = arr[idx - 1].trim();
+        // Skip if current line is identical to previous (duplicate heading/paragraph)
+        if (trimmed === prevTrimmed) return "";
+        // Also catch heading followed by same text without # prefix
+        if (prevTrimmed.startsWith("#") && prevTrimmed.replace(/^#+\s*/, "") === trimmed) return "";
+        if (trimmed.startsWith("#") && trimmed.replace(/^#+\s*/, "") === prevTrimmed) return "";
+      }
+      return line;
+    }).join("\n");
+
     // 1f. Clean [FORMULA: x] → x
     cleaned = cleaned.replace(/\[FORMULA:\s*(.*?)\]/gi, "$1");
 

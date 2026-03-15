@@ -3,6 +3,7 @@ OpenRouter AI Service - Unified AI Access
 Provides access to Claude, Gemini, and other models via OpenRouter API.
 """
 import os
+import re
 import json
 import asyncio
 from typing import Optional
@@ -575,7 +576,6 @@ Rispondi SOLO con un array JSON valido:
         Programmatic cleanup of PDF-extracted text.
         Fixes spacing issues, formatting artifacts without losing content.
         """
-        import re
 
         # Fix common PDF extraction spacing issues
         # "dal50al98%" → "dal 50 al 98%"
@@ -702,7 +702,7 @@ Rispondi SOLO con un array JSON valido:
 
     async def _ai_pass(self, text: str, prompt_template: str, pass_name: str, min_ratio: float = 0.7, use_content_model: bool = False) -> str:
         """Run an AI pass on text, processing in chunks if needed."""
-        chunks = self._split_into_chunks(text, chunk_size=10000)  # Smaller chunks = less truncation risk
+        chunks = self._split_into_chunks(text, chunk_size=6000)  # Small chunks to avoid output truncation
         model = self.content_model if use_content_model else self.vision_model
         print(f"{pass_name}: {len(chunks)} chunk(s), {len(text)} chars totali, model={model}")
 
@@ -713,12 +713,16 @@ Rispondi SOLO con un array JSON valido:
                 response = await asyncio.wait_for(
                     self.client.chat.completions.create(
                         model=model,
-                        max_tokens=20000,
+                        max_tokens=16000,
                         messages=[{"role": "user", "content": prompt}]
                     ),
                     timeout=180.0
                 )
                 part = response.choices[0].message.content
+                # Remove AI truncation artifacts like "(CONTINUA NELLA PROSSIMA RISPOSTA...)"
+                part = re.sub(r'\(CONTINUA NELLA PROSSIMA RISPOSTA.*?\)', '', part, flags=re.IGNORECASE)
+                part = re.sub(r'\(CONTINUA.*?CARATTERI.*?\)', '', part, flags=re.IGNORECASE)
+                part = part.rstrip()
                 # Check for truncation: if output ends mid-sentence, try to detect
                 finish_reason = getattr(response.choices[0], 'finish_reason', None)
                 if finish_reason == 'length':
@@ -792,6 +796,11 @@ REGOLA CRITICA SUI TAG:
 - NON riscrivere, parafrasare o integrare il contenuto dei tag nel testo
 - NON rimuovere i tag — sono marcatori essenziali per il rendering frontend
 - Posiziona i tag nel punto logicamente più appropriato del testo riscritto
+
+REGOLA CRITICA SULLA COMPLETEZZA:
+- NON scrivere MAI frasi come "(CONTINUA NELLA PROSSIMA RISPOSTA...)" o simili
+- Se il testo è lungo, riassumi le parti finali piuttosto che troncarle
+- Il tuo output DEVE essere un testo COMPLETO e autosufficiente
 
 Restituisci SOLO il testo riscritto, nient'altro"""
 
