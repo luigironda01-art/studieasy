@@ -45,6 +45,18 @@ export default function SourceSummariesPage() {
   const [bulkGenerating, setBulkGenerating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, chapterName: "" });
 
+  // Pre-generated summary images
+  const [summaryImages, setSummaryImages] = useState<Array<{
+    id: string;
+    title: string;
+    description: string;
+    image_url: string;
+    position_index: number;
+    anchor_text: string | null;
+  }>>([]);
+  const [imageGenerating, setImageGenerating] = useState(false);
+  const [imageProgress, setImageProgress] = useState("");
+
   // PDF download confirmation dialog
   const [showPdfDialog, setShowPdfDialog] = useState(false);
   const [pendingPdfArgs, setPendingPdfArgs] = useState<{
@@ -128,6 +140,15 @@ export default function SourceSummariesPage() {
           }
         }
       }
+
+      // Fetch existing pre-generated summary images
+      try {
+        const imgRes = await fetch(`/api/images/generate-for-summary?sourceId=${sourceId}`);
+        if (imgRes.ok) {
+          const imgData = await imgRes.json();
+          if (imgData.images) setSummaryImages(imgData.images);
+        }
+      } catch { /* ignore */ }
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -818,7 +839,36 @@ export default function SourceSummariesPage() {
         return null;
       };
 
-      if (withImages) {
+      // Pre-generated images for full book PDF (from summary_images table)
+      const preGenImages: Array<{ base64: string; title: string; description: string }> = [];
+      const isFullBookPdf = !chapterId && summaryImages.length > 0;
+
+      if (withImages && isFullBookPdf) {
+        // Use pre-generated images — download them as base64
+        setPdfProgress(`Caricamento ${summaryImages.length} immagini pre-generate...`);
+        for (let i = 0; i < summaryImages.length; i++) {
+          try {
+            const imgRes = await fetch(summaryImages[i].image_url);
+            if (imgRes.ok) {
+              const blob = await imgRes.blob();
+              const buffer = await blob.arrayBuffer();
+              const base64 = btoa(
+                new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+              );
+              preGenImages.push({
+                base64,
+                title: summaryImages[i].title,
+                description: summaryImages[i].description,
+              });
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch pre-generated image ${i}:`, err);
+          }
+        }
+        console.log(`[PDF] Loaded ${preGenImages.length} pre-generated images`);
+      }
+
+      if (withImages && !isFullBookPdf) {
         try {
           // Phase 1: Generate image tags — distributed evenly across sections
           const allImageBlocks = blocks.filter((b) => b.type === "image");
@@ -914,7 +964,7 @@ export default function SourceSummariesPage() {
         } catch (err) {
           console.warn("[PDF] Image generation failed:", err);
         }
-      } else {
+      } else if (!withImages) {
         console.log("[PDF] Skipping image generation (user opted out)");
       }
 
@@ -1029,6 +1079,50 @@ export default function SourceSummariesPage() {
               // Image embedding failed, skip
             }
           }
+        }
+      };
+
+      // ── Pre-generated image insertion planning ──
+      // Distribute pre-gen images evenly across h2 headings
+      const h2Indices: number[] = [];
+      blocks.forEach((b, i) => { if (b.type === "h2") h2Indices.push(i); });
+      const preGenInsertAfter = new Map<number, typeof preGenImages[0]>();
+      if (preGenImages.length > 0 && h2Indices.length > 0) {
+        const step = Math.max(1, Math.floor(h2Indices.length / (preGenImages.length + 1)));
+        for (let i = 0; i < preGenImages.length; i++) {
+          const targetIdx = h2Indices[Math.min((i + 1) * step, h2Indices.length - 1)];
+          preGenInsertAfter.set(targetIdx, preGenImages[i]);
+        }
+      }
+
+      // Helper to render a pre-generated image
+      const renderPreGenImage = (img: typeof preGenImages[0]) => {
+        const imgWidth = maxWidth * 0.65;
+        const imgHeight = imgWidth * 0.55;
+        ensureSpace(imgHeight + 20);
+        const imgX = margin + (maxWidth - imgWidth) / 2;
+        try {
+          doc.addImage(
+            `data:image/png;base64,${img.base64}`,
+            "PNG",
+            imgX, y, imgWidth, imgHeight
+          );
+          y += imgHeight + 3;
+          // Caption: title + description
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "italic");
+          doc.setTextColor(100, 100, 100);
+          const caption = sanitizeForPdf(img.title);
+          const captionLines = doc.splitTextToSize(caption, maxWidth * 0.8);
+          for (const cl of captionLines) {
+            doc.text(cl, margin + (maxWidth - maxWidth * 0.8) / 2, y);
+            y += 4;
+          }
+          y += 4;
+          doc.setTextColor(0);
+          doc.setFont("helvetica", "normal");
+        } catch {
+          // Image embedding failed, skip
         }
       };
 
@@ -1255,6 +1349,13 @@ export default function SourceSummariesPage() {
 
         // After rendering each block, check if an AI-selected image should be inserted here
         tryInsertAnchorImage();
+
+        // Insert pre-generated image if this block is a distribution point
+        const preGenImg = preGenInsertAfter.get(currentBlockIdx);
+        if (preGenImg) {
+          renderPreGenImage(preGenImg);
+        }
+
         currentBlockIdx++;
       }
 
@@ -1371,6 +1472,49 @@ export default function SourceSummariesPage() {
 
     setBulkGenerating(false);
     setBulkProgress({ current: 0, total: 0, chapterName: "" });
+
+    // Auto-generate images after all summaries are ready
+    await generateSummaryImages();
+  };
+
+  const generateSummaryImages = async () => {
+    if (!user || imageGenerating) return;
+
+    // Check all chapters have summaries
+    const completed = chapters.filter(c => c.processing_status === "completed");
+    const allHaveSummaries = completed.every(c => chapterSummaries[c.id]);
+    if (!allHaveSummaries || completed.length === 0) return;
+
+    setImageGenerating(true);
+    setImageProgress("Analisi del testo per identificare argomenti chiave...");
+
+    try {
+      const res = await fetch("/api/images/generate-for-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId, userId: user.id }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.images) {
+          setSummaryImages(data.images);
+          setImageProgress(`${data.images.length} immagini generate!`);
+        }
+      } else {
+        const err = await res.json();
+        console.error("Image generation failed:", err);
+        setImageProgress("Generazione immagini fallita");
+      }
+    } catch (err) {
+      console.error("Image generation error:", err);
+      setImageProgress("Errore generazione immagini");
+    } finally {
+      setTimeout(() => {
+        setImageGenerating(false);
+        setImageProgress("");
+      }, 2000);
+    }
   };
 
   const openReadMode = (chapter: Chapter) => {
@@ -1821,6 +1965,58 @@ export default function SourceSummariesPage() {
                 </div>
               </div>
             );
+          })()}
+
+          {/* Image generation status */}
+          {(() => {
+            const allReady = completedChapters.every(c => chapterSummaries[c.id]);
+            const hasImages = summaryImages.length > 0;
+            return allReady ? (
+              <div className="mb-4">
+                <div className={`p-4 rounded-lg ${hasImages ? "bg-purple-500/10 border border-purple-500/20" : imageGenerating ? "bg-blue-500/10 border border-blue-500/20" : "bg-slate-500/10 border border-slate-500/20"}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{imageGenerating ? "⏳" : hasImages ? "🖼️" : "🎨"}</span>
+                    <div className="flex-1">
+                      {imageGenerating ? (
+                        <>
+                          <p className="text-sm font-medium text-blue-300">
+                            Generazione immagini in corso...
+                          </p>
+                          <p className="text-xs text-slate-400 mt-0.5">{imageProgress}</p>
+                        </>
+                      ) : hasImages ? (
+                        <p className="text-sm font-medium text-purple-300">
+                          {summaryImages.length} immagini pronte per il PDF
+                        </p>
+                      ) : (
+                        <p className="text-sm font-medium text-slate-400">
+                          Nessuna immagine generata per il riassunto intero
+                        </p>
+                      )}
+                    </div>
+                    {!imageGenerating && (
+                      <button
+                        onClick={generateSummaryImages}
+                        className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium whitespace-nowrap ${
+                          hasImages
+                            ? "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+                            : "bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
+                        }`}
+                      >
+                        {hasImages ? "Rigenera immagini" : "Genera 5 immagini"}
+                      </button>
+                    )}
+                  </div>
+                  {imageGenerating && (
+                    <div className="mt-3">
+                      <div className="w-full bg-slate-700 rounded-full h-2">
+                        <div className="bg-purple-500 h-2 rounded-full animate-pulse w-full" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null;
           })()}
 
           {/* Chapter index */}
