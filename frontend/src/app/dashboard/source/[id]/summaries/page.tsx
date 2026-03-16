@@ -41,6 +41,10 @@ export default function SourceSummariesPage() {
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
   const [includeImages, setIncludeImages] = useState(true);
 
+  // Bulk summary generation
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, chapterName: "" });
+
   // PDF download confirmation dialog
   const [showPdfDialog, setShowPdfDialog] = useState(false);
   const [pendingPdfArgs, setPendingPdfArgs] = useState<{
@@ -1333,6 +1337,42 @@ export default function SourceSummariesPage() {
     }
   };
 
+  const generateAllMissingSummaries = async () => {
+    if (!user || bulkGenerating) return;
+    const missing = chapters.filter(c => c.processing_status === "completed" && !chapterSummaries[c.id]);
+    if (missing.length === 0) return;
+
+    setBulkGenerating(true);
+    setBulkProgress({ current: 0, total: missing.length, chapterName: "" });
+
+    for (let i = 0; i < missing.length; i++) {
+      const ch = missing[i];
+      setBulkProgress({ current: i + 1, total: missing.length, chapterName: ch.title });
+      try {
+        const response = await fetch("/api/summaries/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chapterId: ch.id,
+            userId: user.id,
+            length: "medium",
+            maxWords: 500,
+            language: "it",
+          }),
+        });
+        const data = await response.json();
+        if (response.ok && data.summary) {
+          setChapterSummaries(prev => ({ ...prev, [ch.id]: data.summary }));
+        }
+      } catch (err) {
+        console.error(`Summary generation failed for ${ch.title}:`, err);
+      }
+    }
+
+    setBulkGenerating(false);
+    setBulkProgress({ current: 0, total: 0, chapterName: "" });
+  };
+
   const openReadMode = (chapter: Chapter) => {
     setSelectedChapter(chapter);
     setViewMode("read");
@@ -1735,20 +1775,49 @@ export default function SourceSummariesPage() {
             const totalCount = completedChapters.length;
             const allReady = readyCount === totalCount;
             return (
-              <div className={`border-t border-white/10 pt-4 mb-4 ${allReady ? "" : ""}`}>
-                <div className={`flex items-center gap-3 p-3 rounded-lg ${allReady ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-amber-500/10 border border-amber-500/20"}`}>
-                  <span className="text-xl">{allReady ? "✅" : "⚠️"}</span>
-                  <div className="flex-1">
-                    <p className={`text-sm font-medium ${allReady ? "text-emerald-300" : "text-amber-300"}`}>
-                      {allReady
-                        ? "Tutti i riassunti sono pronti! Puoi scaricare il PDF completo."
-                        : `${readyCount}/${totalCount} capitoli riassunti. Genera i riassunti mancanti dalla vista "Per Capitoli".`
-                      }
-                    </p>
+              <div className="border-t border-white/10 pt-4 mb-4">
+                <div className={`p-4 rounded-lg ${allReady ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-amber-500/10 border border-amber-500/20"}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{bulkGenerating ? "⏳" : allReady ? "✅" : "⚠️"}</span>
+                    <div className="flex-1">
+                      {bulkGenerating ? (
+                        <>
+                          <p className="text-sm font-medium text-blue-300">
+                            Generazione riassunto {bulkProgress.current}/{bulkProgress.total}...
+                          </p>
+                          <p className="text-xs text-slate-400 mt-0.5">{bulkProgress.chapterName}</p>
+                        </>
+                      ) : (
+                        <p className={`text-sm font-medium ${allReady ? "text-emerald-300" : "text-amber-300"}`}>
+                          {allReady
+                            ? "Tutti i riassunti sono pronti! Puoi scaricare il PDF completo."
+                            : `${readyCount}/${totalCount} capitoli riassunti.`
+                          }
+                        </p>
+                      )}
+                    </div>
+                    {!allReady && !bulkGenerating && (
+                      <button
+                        onClick={generateAllMissingSummaries}
+                        className="px-4 py-2 bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 transition-colors text-sm font-medium whitespace-nowrap"
+                      >
+                        Genera mancanti ({totalCount - readyCount})
+                      </button>
+                    )}
+                    <span className={`text-sm font-bold ${bulkGenerating ? "text-blue-400" : allReady ? "text-emerald-400" : "text-amber-400"}`}>
+                      {readyCount}/{totalCount}
+                    </span>
                   </div>
-                  <span className={`text-sm font-bold ${allReady ? "text-emerald-400" : "text-amber-400"}`}>
-                    {readyCount}/{totalCount}
-                  </span>
+                  {bulkGenerating && (
+                    <div className="mt-3">
+                      <div className="w-full bg-slate-700 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );
