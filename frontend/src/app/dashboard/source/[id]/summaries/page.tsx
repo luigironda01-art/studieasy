@@ -55,7 +55,7 @@ export default function SourceSummariesPage() {
     anchor_text: string | null;
   }>>([]);
   const [imageGenerating, setImageGenerating] = useState(false);
-  const [imageProgress, setImageProgress] = useState("");
+  const [imageProgress, setImageProgress] = useState({ step: "", current: 0, total: 0 });
 
   // PDF download confirmation dialog
   const [showPdfDialog, setShowPdfDialog] = useState(false);
@@ -1480,39 +1480,135 @@ export default function SourceSummariesPage() {
   const generateSummaryImages = async () => {
     if (!user || imageGenerating) return;
 
-    // Check all chapters have summaries
     const completed = chapters.filter(c => c.processing_status === "completed");
     const allHaveSummaries = completed.every(c => chapterSummaries[c.id]);
     if (!allHaveSummaries || completed.length === 0) return;
 
     setImageGenerating(true);
-    setImageProgress("Analisi del testo per identificare argomenti chiave...");
+    setImageProgress({ step: "Assemblaggio testo completo...", current: 0, total: 7 });
 
     try {
-      const res = await fetch("/api/images/generate-for-summary", {
+      // Step 1: Assemble full text from chapter summaries
+      const fullText = completed
+        .map(c => chapterSummaries[c.id] || "")
+        .filter(Boolean)
+        .join("\n\n---\n\n");
+
+      if (fullText.length < 100) {
+        setImageProgress({ step: "Testo troppo corto per generare immagini", current: 0, total: 0 });
+        return;
+      }
+
+      // Step 2: Analyze text to find 5 topics
+      setImageProgress({ step: "Analisi AI per identificare 5 argomenti chiave...", current: 1, total: 7 });
+
+      const analyzeRes = await fetch("/api/images/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceId, userId: user.id }),
+        body: JSON.stringify({ text: fullText }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.images) {
-          setSummaryImages(data.images);
-          setImageProgress(`${data.images.length} immagini generate!`);
-        }
-      } else {
-        const err = await res.json();
-        console.error("Image generation failed:", err);
-        setImageProgress("Generazione immagini fallita");
+      if (!analyzeRes.ok) throw new Error("Analisi fallita");
+
+      const { suggestions } = await analyzeRes.json();
+      if (!suggestions || suggestions.length === 0) {
+        setImageProgress({ step: "Nessun argomento adatto trovato", current: 0, total: 0 });
+        return;
       }
+
+      const totalSteps = suggestions.length + 2; // analyze + N images + save
+
+      // Step 3: Delete old images if any
+      if (summaryImages.length > 0) {
+        await fetch("/api/images/generate-for-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sourceId, userId: user.id, cleanupOnly: true }),
+        });
+      }
+
+      // Step 4: Generate each image one by one
+      const generated: Array<{
+        title: string;
+        description: string;
+        anchor: string;
+        base64: string;
+        positionIndex: number;
+      }> = [];
+
+      for (let i = 0; i < suggestions.length; i++) {
+        const s = suggestions[i];
+        const title = s.anchor?.split(" ").slice(0, 5).join(" ") || `Immagine ${i + 1}`;
+        setImageProgress({
+          step: `Generazione immagine ${i + 1}/${suggestions.length}: ${title}...`,
+          current: i + 2,
+          total: totalSteps,
+        });
+
+        try {
+          const imgRes = await fetch("/api/images/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ description: s.description }),
+          });
+
+          if (imgRes.ok) {
+            const imgData = await imgRes.json();
+            if (imgData.image) {
+              generated.push({
+                title: title,
+                description: s.description,
+                anchor: s.anchor || "",
+                base64: imgData.image,
+                positionIndex: i,
+              });
+            }
+          }
+        } catch (err) {
+          console.warn(`Image ${i + 1} generation failed:`, err);
+        }
+      }
+
+      // Step 5: Save all to Supabase via API
+      setImageProgress({
+        step: `Salvataggio ${generated.length} immagini...`,
+        current: totalSteps - 1,
+        total: totalSteps,
+      });
+
+      const saveRes = await fetch("/api/images/generate-for-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceId,
+          userId: user.id,
+          saveImages: generated.map(g => ({
+            title: g.title,
+            description: g.description,
+            anchor_text: g.anchor,
+            base64: g.base64,
+            position_index: g.positionIndex,
+          })),
+        }),
+      });
+
+      if (saveRes.ok) {
+        const saveData = await saveRes.json();
+        if (saveData.images) setSummaryImages(saveData.images);
+      }
+
+      setImageProgress({
+        step: `${generated.length} immagini generate con successo!`,
+        current: totalSteps,
+        total: totalSteps,
+      });
     } catch (err) {
       console.error("Image generation error:", err);
-      setImageProgress("Errore generazione immagini");
+      setImageProgress({ step: "Errore generazione immagini", current: 0, total: 0 });
     } finally {
       setTimeout(() => {
         setImageGenerating(false);
-        setImageProgress("");
+        setImageProgress({ step: "", current: 0, total: 0 });
       }, 2000);
     }
   };
@@ -1980,9 +2076,11 @@ export default function SourceSummariesPage() {
                       {imageGenerating ? (
                         <>
                           <p className="text-sm font-medium text-blue-300">
-                            Generazione immagini in corso...
+                            {imageProgress.total > 0
+                              ? `Immagini: ${imageProgress.current}/${imageProgress.total}`
+                              : "Generazione immagini in corso..."}
                           </p>
-                          <p className="text-xs text-slate-400 mt-0.5">{imageProgress}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{imageProgress.step}</p>
                         </>
                       ) : hasImages ? (
                         <p className="text-sm font-medium text-purple-300">
@@ -2007,10 +2105,17 @@ export default function SourceSummariesPage() {
                       </button>
                     )}
                   </div>
-                  {imageGenerating && (
+                  {imageGenerating && imageProgress.total > 0 && (
                     <div className="mt-3">
+                      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                        <span>{imageProgress.step}</span>
+                        <span>{Math.round((imageProgress.current / imageProgress.total) * 100)}%</span>
+                      </div>
                       <div className="w-full bg-slate-700 rounded-full h-2">
-                        <div className="bg-purple-500 h-2 rounded-full animate-pulse w-full" />
+                        <div
+                          className="bg-purple-500 h-2 rounded-full transition-all duration-700"
+                          style={{ width: `${(imageProgress.current / imageProgress.total) * 100}%` }}
+                        />
                       </div>
                     </div>
                   )}
