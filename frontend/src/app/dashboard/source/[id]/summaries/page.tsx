@@ -57,7 +57,7 @@ export default function SourceSummariesPage() {
   const [imageGenerating, setImageGenerating] = useState(false);
   const [imageProgress, setImageProgress] = useState({ step: "", current: 0, total: 0 });
 
-  // PDF download confirmation dialog
+  // PDF download confirmation dialog (for full book without images)
   const [showPdfDialog, setShowPdfDialog] = useState(false);
   const [pendingPdfArgs, setPendingPdfArgs] = useState<{
     text: string;
@@ -66,13 +66,23 @@ export default function SourceSummariesPage() {
   } | null>(null);
 
   const requestPdfDownload = (text: string, title: string, chapterId?: string) => {
-    setPendingPdfArgs({ text, title, chapterId });
-    setShowPdfDialog(true);
+    // Full book PDF without pre-generated images → show info dialog
+    const isFullBook = !chapterId;
+    const hasPreGenImages = summaryImages.length > 0;
+
+    if (isFullBook && !hasPreGenImages) {
+      setPendingPdfArgs({ text, title, chapterId });
+      setShowPdfDialog(true);
+      return;
+    }
+
+    // Otherwise download directly (with images if pre-generated, on-the-fly for chapters)
+    handleDownloadPdf(text, title, chapterId, true);
   };
 
-  const confirmPdfDownload = (withImages: boolean) => {
+  const confirmPdfDownload = () => {
     if (pendingPdfArgs) {
-      handleDownloadPdf(pendingPdfArgs.text, pendingPdfArgs.title, pendingPdfArgs.chapterId, withImages);
+      handleDownloadPdf(pendingPdfArgs.text, pendingPdfArgs.title, pendingPdfArgs.chapterId, false);
     }
     setShowPdfDialog(false);
     setPendingPdfArgs(null);
@@ -2211,45 +2221,37 @@ export default function SourceSummariesPage() {
       {/* Generate Summary Modal */}
       {renderGenerateModal()}
 
-      {/* PDF Download Options Dialog */}
+      {/* PDF Download Info Dialog (full book without images) */}
       {showPdfDialog && (
         <>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setShowPdfDialog(false)} />
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
-            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-2xl min-w-[360px]">
-              <h3 className="text-white font-semibold text-lg mb-1">Scarica PDF</h3>
-              <p className="text-slate-400 text-sm mb-5">Scegli il formato di download</p>
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-2xl min-w-[360px] max-w-[420px]">
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-3xl">📝</span>
+                <h3 className="text-white font-semibold text-lg">PDF solo testo</h3>
+              </div>
+              <p className="text-slate-300 text-sm mb-2">
+                Stai per scaricare un riassunto di <strong className="text-white">solo testo</strong>, senza immagini.
+              </p>
+              <p className="text-slate-400 text-sm mb-5">
+                Se vuoi un PDF con immagini educative, genera prima le immagini con il pulsante <strong className="text-purple-300">&quot;Genera 5 immagini&quot;</strong> nella sezione Libro Intero.
+              </p>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <button
-                  onClick={() => confirmPdfDownload(true)}
-                  className="w-full flex items-center gap-4 p-4 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl transition-colors text-left"
+                  onClick={() => confirmPdfDownload()}
+                  className="w-full py-3 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-xl transition-colors text-sm font-medium"
                 >
-                  <span className="text-3xl">🖼️</span>
-                  <div>
-                    <div className="text-white font-medium">Con immagini AI</div>
-                    <div className="text-slate-400 text-xs">Genera immagini educative nel PDF (più lento, usa crediti)</div>
-                  </div>
+                  Scarica solo testo
                 </button>
-
                 <button
-                  onClick={() => confirmPdfDownload(false)}
-                  className="w-full flex items-center gap-4 p-4 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-xl transition-colors text-left"
+                  onClick={() => setShowPdfDialog(false)}
+                  className="w-full py-2.5 text-slate-400 hover:text-white text-sm transition-colors"
                 >
-                  <span className="text-3xl">📝</span>
-                  <div>
-                    <div className="text-white font-medium">Solo testo</div>
-                    <div className="text-slate-400 text-xs">PDF veloce, senza costi extra per le immagini</div>
-                  </div>
+                  Annulla
                 </button>
               </div>
-
-              <button
-                onClick={() => setShowPdfDialog(false)}
-                className="w-full mt-4 py-2.5 text-slate-400 hover:text-white text-sm transition-colors"
-              >
-                Annulla
-              </button>
             </div>
           </div>
         </>
