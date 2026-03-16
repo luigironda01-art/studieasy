@@ -381,6 +381,62 @@ RIASSUNTO:"""
 
         return response.choices[0].message.content
 
+    async def generate_chapter_summary(
+        self,
+        processed_text: str,
+        model: str = "anthropic/claude-3.5-sonnet",
+        target_words: int = 500,
+    ) -> str:
+        """Generate a structured summary for a chapter, called automatically after processing."""
+        prompt = f"""Sei un esperto di sintesi e didattica. Il tuo compito è creare un riassunto chiaro, completo e ben strutturato.
+
+ISTRUZIONI:
+1. Scrivi un riassunto di circa {target_words} parole (±10%)
+2. STILE: Bilancia sintesi e dettaglio. Includi i concetti principali con spiegazioni moderate.
+3. Usa un linguaggio chiaro e accessibile
+4. **CRITICO**: Il riassunto DEVE coprire TUTTO il contenuto del documento, dall'inizio alla fine. NON fermarti a metà.
+5. **IMPORTANTE**: Dividi il riassunto in SEZIONI ben definite con titoli che rispecchiano la struttura del documento
+6. Usa elenchi puntati dove appropriato per migliorare la leggibilità
+7. Lingua: Italiano
+
+FORMATO OUTPUT OBBLIGATORIO:
+- Usa ## per i titoli delle sezioni principali
+- Usa ### per i sotto-titoli se necessario
+- Ogni sezione deve avere un titolo descrittivo
+- Usa **grassetto** per i concetti chiave
+- Usa elenchi puntati (- ) per liste di concetti
+- NON iniziare con "Riassunto:" o titoli generici simili
+- Inizia direttamente con la prima sezione
+
+REGOLA CRITICA SULLA COMPLETEZZA:
+- NON scrivere MAI frasi come "(CONTINUA NELLA PROSSIMA RISPOSTA...)" o simili
+- Il tuo output DEVE essere un testo COMPLETO e autosufficiente
+
+TESTO DA RIASSUMERE:
+{processed_text}
+
+Scrivi il riassunto strutturato:"""
+
+        max_tokens = max(4096, target_words * 3)
+
+        try:
+            response = await asyncio.wait_for(
+                self.client.chat.completions.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=[{"role": "user", "content": prompt}]
+                ),
+                timeout=120.0
+            )
+            content = response.choices[0].message.content or ""
+            # Strip truncation artifacts
+            content = re.sub(r'\(CONTINUA NELLA PROSSIMA RISPOSTA.*?\)', '', content, flags=re.IGNORECASE)
+            content = re.sub(r'\(CONTINUA.*?CARATTERI.*?\)', '', content, flags=re.IGNORECASE)
+            return content.rstrip()
+        except Exception as e:
+            print(f"generate_chapter_summary error: {e}")
+            return ""
+
     async def generate_concept_map(
         self,
         text: str,

@@ -438,8 +438,45 @@ async def process_pdf(request: ProcessRequest):
                     supabase.table("chapters").insert(chapter_update).execute()
                     print(f"Chapter {idx+1} created: {ch_data['title']}")
 
+            # --- AUTO GENERATE SUMMARIES FOR ALL CHAPTERS ---
+            update_progress(92, "Generazione riassunti capitoli...")
+            print(f"Auto-generating summaries for {len(chapters_data)} chapters...")
+
+            # Fetch all chapter IDs for this source (including newly created ones)
+            all_chapters = supabase.table("chapters").select("id, title, processed_text, preferred_model").eq("source_id", request.source_id).order("order_index").execute()
+
+            if all_chapters.data:
+                openrouter = get_openrouter_service()
+                for ch_idx, ch in enumerate(all_chapters.data):
+                    if not ch.get("processed_text"):
+                        continue
+                    progress = 92 + int((ch_idx / len(all_chapters.data)) * 7)
+                    update_progress(progress, f"Riassunto capitolo {ch_idx+1}/{len(all_chapters.data)}...")
+                    try:
+                        summary_text = await openrouter.generate_chapter_summary(
+                            ch["processed_text"],
+                            ch.get("preferred_model", "anthropic/claude-3.5-sonnet")
+                        )
+                        if summary_text:
+                            # Check if summary already exists
+                            existing = supabase.table("summaries").select("id").eq("chapter_id", ch["id"]).execute()
+                            if existing.data:
+                                supabase.table("summaries").delete().eq("id", existing.data[0]["id"]).execute()
+
+                            word_count = len(summary_text.strip().split())
+                            supabase.table("summaries").insert({
+                                "chapter_id": ch["id"],
+                                "user_id": source_data.data["user_id"],
+                                "content": summary_text,
+                                "word_count": word_count,
+                                "target_words": 500,
+                            }).execute()
+                            print(f"  Summary for '{ch['title']}': {word_count} words")
+                    except Exception as sum_err:
+                        print(f"  Warning: summary generation failed for '{ch['title']}': {sum_err}")
+
             update_progress(100, "Elaborazione completata!")
-            print(f"[100%] Elaborazione completata! {len(chapters_data)} capitoli creati")
+            print(f"[100%] Elaborazione completata! {len(chapters_data)} capitoli + riassunti")
 
             return ProcessResponse(
                 success=True,
@@ -464,6 +501,32 @@ async def process_pdf(request: ProcessRequest):
             }
             supabase.table("chapters").update(update_data).eq("id", request.chapter_id).execute()
             print(f"Extraction quality: {extraction_quality}%, method: {extraction_method}")
+
+            # --- AUTO GENERATE SUMMARY FOR SINGLE CHAPTER ---
+            update_progress(93, "Generazione riassunto...")
+            try:
+                openrouter = get_openrouter_service()
+                summary_text = await openrouter.generate_chapter_summary(
+                    processed_text,
+                    preferred_model or "anthropic/claude-3.5-sonnet"
+                )
+                if summary_text:
+                    existing = supabase.table("summaries").select("id").eq("chapter_id", request.chapter_id).execute()
+                    if existing.data:
+                        supabase.table("summaries").delete().eq("id", existing.data[0]["id"]).execute()
+                    word_count = len(summary_text.strip().split())
+                    supabase.table("summaries").insert({
+                        "chapter_id": request.chapter_id,
+                        "user_id": source_data.data["user_id"],
+                        "content": summary_text,
+                        "word_count": word_count,
+                        "target_words": 500,
+                    }).execute()
+                    print(f"  Summary generated: {word_count} words")
+            except Exception as sum_err:
+                print(f"  Warning: summary generation failed: {sum_err}")
+
+            update_progress(100, "Elaborazione completata!")
             print(f"[100%] Elaborazione completata!")
 
             return ProcessResponse(
