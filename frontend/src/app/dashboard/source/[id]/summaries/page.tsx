@@ -1729,6 +1729,31 @@ export default function SourceSummariesPage() {
             </div>
           </div>
 
+          {/* Summary status info */}
+          {(() => {
+            const readyCount = completedChapters.filter(c => chapterSummaries[c.id]).length;
+            const totalCount = completedChapters.length;
+            const allReady = readyCount === totalCount;
+            return (
+              <div className={`border-t border-white/10 pt-4 mb-4 ${allReady ? "" : ""}`}>
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${allReady ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-amber-500/10 border border-amber-500/20"}`}>
+                  <span className="text-xl">{allReady ? "✅" : "⚠️"}</span>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${allReady ? "text-emerald-300" : "text-amber-300"}`}>
+                      {allReady
+                        ? "Tutti i riassunti sono pronti! Puoi scaricare il PDF completo."
+                        : `${readyCount}/${totalCount} capitoli riassunti. Genera i riassunti mancanti dalla vista "Per Capitoli".`
+                      }
+                    </p>
+                  </div>
+                  <span className={`text-sm font-bold ${allReady ? "text-emerald-400" : "text-amber-400"}`}>
+                    {readyCount}/{totalCount}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Chapter index */}
           <div className="border-t border-white/10 pt-4">
             <h4 className="text-slate-400 text-sm font-medium mb-3">Indice dei capitoli</h4>
