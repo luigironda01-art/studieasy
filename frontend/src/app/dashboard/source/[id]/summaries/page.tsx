@@ -987,36 +987,81 @@ export default function SourceSummariesPage() {
         return text
           // Strip markdown bold/italic markers (**bold**, *italic*, ***both***)
           .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1")
-          // Greek letters → spelled out or ASCII equivalent
-          .replace(/α/g, "a").replace(/β/g, "b").replace(/γ/g, "g").replace(/δ/g, "d")
-          .replace(/ε/g, "e").replace(/ζ/g, "z").replace(/η/g, "n").replace(/θ/g, "th")
-          .replace(/ι/g, "i").replace(/κ/g, "k").replace(/λ/g, "l").replace(/μ/g, "u")
-          .replace(/ν/g, "v").replace(/ξ/g, "x").replace(/π/g, "pi").replace(/σ/g, "sigma")
-          .replace(/τ/g, "tau").replace(/φ/g, "phi").replace(/ω/g, "omega")
-          .replace(/Α/g, "A").replace(/Β/g, "B").replace(/Γ/g, "G").replace(/Δ/g, "D")
-          .replace(/Π/g, "Pi").replace(/Σ/g, "Sigma").replace(/Ω/g, "Omega")
-          // Subscript digits → normal digits (used in formulas like H₂O)
+
+          // ── Greek lowercase (complete alphabet) ──
+          .replace(/α/g, "alfa").replace(/β/g, "beta").replace(/γ/g, "gamma").replace(/δ/g, "delta")
+          .replace(/ε/g, "epsilon").replace(/ζ/g, "zeta").replace(/η/g, "eta").replace(/θ/g, "theta")
+          .replace(/ι/g, "iota").replace(/κ/g, "kappa").replace(/λ/g, "lambda").replace(/μ/g, "mu")
+          .replace(/ν/g, "nu").replace(/ξ/g, "xi").replace(/ο/g, "o").replace(/π/g, "pi")
+          .replace(/ρ/g, "rho").replace(/ς/g, "sigma").replace(/σ/g, "sigma").replace(/τ/g, "tau")
+          .replace(/υ/g, "upsilon").replace(/φ/g, "phi").replace(/χ/g, "chi")
+          .replace(/ψ/g, "psi").replace(/ω/g, "omega")
+
+          // ── Greek uppercase (complete alphabet) ──
+          .replace(/Α/g, "A").replace(/Β/g, "B").replace(/Γ/g, "Gamma").replace(/Δ/g, "Delta")
+          .replace(/Ε/g, "E").replace(/Ζ/g, "Z").replace(/Η/g, "H").replace(/Θ/g, "Theta")
+          .replace(/Ι/g, "I").replace(/Κ/g, "K").replace(/Λ/g, "Lambda").replace(/Μ/g, "M")
+          .replace(/Ν/g, "N").replace(/Ξ/g, "Xi").replace(/Ο/g, "O").replace(/Π/g, "Pi")
+          .replace(/Ρ/g, "Rho").replace(/Σ/g, "Sigma").replace(/Τ/g, "T").replace(/Υ/g, "Y")
+          .replace(/Φ/g, "Phi").replace(/Χ/g, "Chi").replace(/Ψ/g, "Psi").replace(/Ω/g, "Omega")
+
+          // ── Math symbols (critical for physics/chemistry) ──
+          .replace(/ℏ/g, "h-bar").replace(/ħ/g, "h-bar")   // Planck reduced constant
+          .replace(/∞/g, "infinito")                         // infinity
+          .replace(/≤/g, "<=").replace(/≥/g, ">=")           // inequalities
+          .replace(/≈/g, "~").replace(/≠/g, "!=")            // approx / not equal
+          .replace(/≡/g, "=").replace(/≪/g, "<<").replace(/≫/g, ">>")
+          .replace(/√/g, "sqrt")                             // square root
+          .replace(/∂/g, "d")                                // partial derivative
+          .replace(/∫/g, "integral")                         // integral
+          .replace(/∑/g, "sum")                              // summation
+          .replace(/∏/g, "product")                          // product
+          .replace(/∇/g, "nabla")                            // gradient
+          .replace(/∝/g, " prop. ")                          // proportional to
+          .replace(/∈/g, " in ")                             // element of
+          .replace(/∉/g, " not in ")                         // not element of
+          .replace(/ℓ/g, "l")                                // script l
+          .replace(/ℝ/g, "R").replace(/ℤ/g, "Z").replace(/ℕ/g, "N").replace(/ℂ/g, "C")
+          // ° (U+00B0) is Latin-1, Helvetica renders it fine — no replacement needed
+
+          // ── Subscript digits → normal digits (H₂O, CO₂) ──
           .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
           .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
           .replace(/₈/g, "8").replace(/₉/g, "9")
-          // Superscript digits → normal digits with context
+
+          // ── Subscript letters (ψₙ, Eₙ) ──
+          .replace(/ₐ/g, "a").replace(/ₑ/g, "e").replace(/ₒ/g, "o").replace(/ₓ/g, "x")
+          .replace(/ₕ/g, "h").replace(/ₖ/g, "k").replace(/ₗ/g, "l").replace(/ₘ/g, "m")
+          .replace(/ₙ/g, "n").replace(/ₚ/g, "p").replace(/ₛ/g, "s").replace(/ₜ/g, "t")
+
+          // ── Superscript digits → normal digits ──
           .replace(/⁰/g, "0").replace(/¹/g, "1").replace(/²/g, "2").replace(/³/g, "3")
           .replace(/⁴/g, "4").replace(/⁵/g, "5").replace(/⁶/g, "6").replace(/⁷/g, "7")
           .replace(/⁸/g, "8").replace(/⁹/g, "9")
-          // Superscript +/- → normal +/-
+
+          // ── Superscript letters ──
+          .replace(/ⁱ/g, "i").replace(/ⁿ/g, "n")
+
+          // ── Superscript +/- ──
           .replace(/⁺/g, "+").replace(/⁻/g, "-")
-          // Arrows
+
+          // ── Arrows ──
           .replace(/→/g, "->").replace(/←/g, "<-").replace(/↔/g, "<->")
-          // Special dashes
+          .replace(/⇒/g, "=>").replace(/⇐/g, "<=").replace(/⇔/g, "<=>")
+          .replace(/↑/g, "^").replace(/↓/g, "v")
+
+          // ── Special dashes and punctuation ──
           .replace(/—/g, "-").replace(/–/g, "-")
-          // Bullet (already handled by list rendering, but just in case)
           .replace(/•/g, "-")
-          // Ellipsis
           .replace(/…/g, "...")
-          // Quotes
           .replace(/[""]/g, '"').replace(/['']/g, "'")
-          // Non-breaking space
-          .replace(/\u00A0/g, " ");
+          .replace(/\u00A0/g, " ")
+
+          // ── Final safety net: remove any remaining non-Latin-1 characters ──
+          // jsPDF Helvetica only supports U+0000–U+00FF (Latin-1)
+          // Replace any char > U+00FF that wasn't caught above with '?'
+          // eslint-disable-next-line no-control-regex
+          .replace(/[^\u0000-\u00FF]/g, "?");
       };
 
       // Helper: check page break and add new page if needed
