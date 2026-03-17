@@ -1009,7 +1009,9 @@ export default function SourceSummariesPage() {
       const sanitizeForPdf = (text: string): string => {
         let result = text
           // Strip markdown bold/italic markers (**bold**, *italic*, ***both***)
-          .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1");
+          .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1")
+          // Strip escaped underscores from markdown (\_n → _n)
+          .replace(/\\_/g, "_");
 
         if (unicodeFontLoaded) {
           // ── DejaVu Sans: Greek, math, arrows, ℏ all render natively ──
