@@ -812,34 +812,28 @@ export default function SourceSummariesPage() {
         format: "a4",
       });
 
-      // ── Load Noto Sans Unicode font (supports Greek, math symbols, etc.) ──
-      const fontVariants = [
-        { file: "NotoSans-Regular.ttf", style: "normal" },
-        { file: "NotoSans-Bold.ttf", style: "bold" },
-        { file: "NotoSans-Italic.ttf", style: "italic" },
-      ];
+      // ── Load DejaVu Sans Unicode font (full Greek, math, arrows, subscripts) ──
       let unicodeFontLoaded = false;
       try {
-        for (const variant of fontVariants) {
-          const fontRes = await fetch(`/fonts/${variant.file}`);
-          if (!fontRes.ok) throw new Error(`Font ${variant.file} not found`);
-          const fontBuf = await fontRes.arrayBuffer();
-          const fontBase64 = btoa(
-            new Uint8Array(fontBuf).reduce((data, byte) => data + String.fromCharCode(byte), "")
-          );
-          doc.addFileToVFS(variant.file, fontBase64);
-          doc.addFont(variant.file, "NotoSans", variant.style);
-        }
-        doc.setFont("NotoSans", "normal");
+        const fontRes = await fetch("/fonts/DejaVuSans.ttf");
+        if (!fontRes.ok) throw new Error("DejaVuSans.ttf not found");
+        const fontBuf = await fontRes.arrayBuffer();
+        const fontBase64 = btoa(
+          new Uint8Array(fontBuf).reduce((data, byte) => data + String.fromCharCode(byte), "")
+        );
+        doc.addFileToVFS("DejaVuSans.ttf", fontBase64);
+        doc.addFont("DejaVuSans.ttf", "DejaVuSans", "normal");
+        doc.addFont("DejaVuSans.ttf", "DejaVuSans", "bold");
+        doc.addFont("DejaVuSans.ttf", "DejaVuSans", "italic");
+        doc.setFont("DejaVuSans", "normal");
         unicodeFontLoaded = true;
-        console.log("[PDF] Noto Sans Unicode font loaded successfully");
       } catch (fontErr) {
         console.warn("[PDF] Failed to load Unicode font, falling back to Helvetica:", fontErr);
         doc.setFont("helvetica", "normal");
       }
 
-      // Font helper: use NotoSans if available, else Helvetica
-      const pdfFont = unicodeFontLoaded ? "NotoSans" : "helvetica";
+      // Font helper: use DejaVuSans if available, else Helvetica
+      const pdfFont = unicodeFontLoaded ? "DejaVuSans" : "helvetica";
 
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -1018,25 +1012,10 @@ export default function SourceSummariesPage() {
           .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1");
 
         if (unicodeFontLoaded) {
-          // ── Noto Sans: Greek letters, math symbols render natively ──
-          // Only need to convert subscript/superscript to normal chars
-          // and handle special punctuation
+          // ── DejaVu Sans: Greek, math, arrows, ℏ all render natively ──
+          // Only convert subscript/superscript (too small in PDF) and punctuation
 
           result = result
-            // ── Math symbols NOT in this Noto Sans build → ASCII fallback ──
-            .replace(/∞/g, " inf.").replace(/≤/g, "<=").replace(/≥/g, ">=")
-            .replace(/≈/g, "~").replace(/≠/g, "!=").replace(/≡/g, "=")
-            .replace(/≪/g, "<<").replace(/≫/g, ">>")
-            .replace(/√/g, "sqrt").replace(/∂/g, "d")
-            .replace(/∫/g, "integrale").replace(/∑/g, "somma").replace(/∏/g, "prodotto")
-            .replace(/∇/g, "nabla").replace(/∝/g, " prop. ")
-            .replace(/∈/g, " in ").replace(/∉/g, " not in ")
-            .replace(/ℓ/g, "l").replace(/⋅/g, "·")
-            .replace(/ℝ/g, "R").replace(/ℤ/g, "Z").replace(/ℕ/g, "N").replace(/ℂ/g, "C")
-            // ── Arrows → ASCII ──
-            .replace(/→/g, " -> ").replace(/←/g, " <- ").replace(/↔/g, " <-> ")
-            .replace(/⇒/g, " => ").replace(/⇐/g, " <= ").replace(/⇔/g, " <=> ")
-            .replace(/↑/g, "^").replace(/↓/g, "v")
             // ── Subscript digits → normal digits (H₂O, CO₂) ──
             .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
             .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
@@ -1052,6 +1031,10 @@ export default function SourceSummariesPage() {
             // ── Superscript letters & operators ──
             .replace(/ⁱ/g, "i").replace(/ⁿ/g, "n")
             .replace(/⁺/g, "+").replace(/⁻/g, "-")
+            // ── Double arrows → ASCII (not in DejaVu) ──
+            .replace(/⇒/g, " => ").replace(/⇐/g, " <= ").replace(/⇔/g, " <=> ")
+            // ── Set notation (rarely in font) ──
+            .replace(/ℝ/g, "R").replace(/ℤ/g, "Z").replace(/ℕ/g, "N").replace(/ℂ/g, "C")
             // ── Special dashes and punctuation ──
             .replace(/—/g, " - ").replace(/–/g, "-")
             .replace(/…/g, "...").replace(/•/g, "-")
