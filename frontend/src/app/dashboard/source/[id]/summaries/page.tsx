@@ -1022,8 +1022,18 @@ export default function SourceSummariesPage() {
           .replace(/\bfinche'(?=\s|$|[,.])/gi, "finché")
           .replace(/\bne'(?=\s|$|[,.])/gi, "né")
           .replace(/\bnonche'(?=\s|$|[,.])/gi, "nonché")
-          // Fix words glued to "è" (nonè → non è, cheè → che è)
-          .replace(/\b(non|che|come|dove|se|ci|si|lo|la|le|li|mi|ti|vi|ne|ce)è/g, "$1 è")
+          // Fix words glued to "è" (nonè → non è, ondaè → onda è, edè → ed è)
+          // Matches any 2+ letter word + è, except Italian words that end in è (caffè, cioè, etc.)
+          .replace(/(\w{2,})è(?=\s|[,.:;!?)]|$)/g, (match: string, word: string) => {
+            const exceptions = ["caff", "cio", "ahim", "beb", "pur", "gil", "merc", "canap", "pi"];
+            if (exceptions.includes(word.toLowerCase())) return match;
+            return word + " è";
+          })
+          // Single-char word + è (skip "tè" which is valid Italian)
+          .replace(/\b([A-Za-z])è(?=\s|[,.]|$)/g, (match: string, char: string) => {
+            if (char.toLowerCase() === "t") return match;
+            return char + " è";
+          })
           // Fix "e'piu'" pattern (e'piu'quantizzata → è più quantizzata)
           .replace(/\be'piu'/gi, "è più ");
 
