@@ -1038,25 +1038,10 @@ export default function SourceSummariesPage() {
           .replace(/\be'piu'/gi, "è più ");
 
         if (unicodeFontLoaded) {
-          // ── DejaVu Sans: Greek, math, arrows, ℏ all render natively ──
-          // Only convert subscript/superscript (too small in PDF) and punctuation
+          // ── DejaVu Sans: Greek, math, arrows, superscripts, subscripts all render natively ──
+          // Only convert chars NOT in DejaVu Sans
 
           result = result
-            // ── Subscript digits → normal digits (H₂O, CO₂) ──
-            .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
-            .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
-            .replace(/₈/g, "8").replace(/₉/g, "9")
-            // ── Subscript letters (ψₙ, Eₙ) ──
-            .replace(/ₐ/g, "a").replace(/ₑ/g, "e").replace(/ₒ/g, "o").replace(/ₓ/g, "x")
-            .replace(/ₕ/g, "h").replace(/ₖ/g, "k").replace(/ₗ/g, "l").replace(/ₘ/g, "m")
-            .replace(/ₙ/g, "n").replace(/ₚ/g, "p").replace(/ₛ/g, "s").replace(/ₜ/g, "t")
-            // ── Superscript digits → normal digits ──
-            .replace(/⁰/g, "0").replace(/¹/g, "1").replace(/²/g, "2").replace(/³/g, "3")
-            .replace(/⁴/g, "4").replace(/⁵/g, "5").replace(/⁶/g, "6").replace(/⁷/g, "7")
-            .replace(/⁸/g, "8").replace(/⁹/g, "9")
-            // ── Superscript letters & operators ──
-            .replace(/ⁱ/g, "i").replace(/ⁿ/g, "n")
-            .replace(/⁺/g, "+").replace(/⁻/g, "-")
             // ── Double arrows → ASCII (not in DejaVu) ──
             .replace(/⇒/g, " => ").replace(/⇐/g, " <= ").replace(/⇔/g, " <=> ")
             // ── Set notation (rarely in font) ──

@@ -416,7 +416,20 @@ QUALITÀ DEL TESTO ITALIANO:
 - Usa SEMPRE gli accenti corretti: è, é, à, ò, ù, ì, più, già, può, perché, poiché, cioè, finché, né
 - MAI usare apostrofi al posto di accenti (NO: e', piu', cioe', perche'. SI: è, più, cioè, perché)
 - Separa SEMPRE le parole correttamente (NO: "nonè", "cheè". SI: "non è", "che è")
-- Per simboli matematici e greci, usa i caratteri Unicode nativi: ψ, φ, π, α, β, ∞, ≤, ≥, ℏ, √, →
+
+FORMULE E NOTAZIONE SCIENTIFICA:
+- Usa SEMPRE i caratteri Unicode per apici e pedici nelle formule:
+  - Apici: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹ ⁺ ⁻ ⁿ (esempio: x², E₁, ψₙ, 10⁻³)
+  - Pedici: ₀ ₁ ₂ ₃ ₄ ₅ ₆ ₇ ₈ ₉ ₙ ₘ ₓ (esempio: H₂O, ψₙ, E₁)
+- Usa i simboli greci e matematici nativi: ψ, φ, π, α, β, ω, ∞, ≤, ≥, ℏ, √, →, ∂, ∫, ∑, ∇, ≈, ≠
+- Scrivi le formule in modo chiaro e leggibile:
+  - NO: -h2/2m d2psi(x)/dx2 = Epsi(x)
+  - SI: −ℏ²/2m · d²ψ(x)/dx² = Eψ(x)
+  - NO: En = n2h2/8mL2
+  - SI: Eₙ = n²h²/(8mL²)
+  - NO: psi_n(x) = sqrt(2/L) sin(npix/L)
+  - SI: ψₙ(x) = √(2/L) sin(nπx/L)
+- Per le frazioni semplici usa / (es. ℏ²/2m). Per quelle complesse separa chiaramente numeratore e denominatore
 
 TESTO DA RIASSUMERE:
 {processed_text}
