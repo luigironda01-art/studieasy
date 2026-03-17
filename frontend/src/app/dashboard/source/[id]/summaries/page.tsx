@@ -867,7 +867,7 @@ export default function SourceSummariesPage() {
               );
               preGenImages.push({
                 base64,
-                title: summaryImages[i].title,
+                title: (summaryImages[i].title || "").replace(/\*/g, ""),
                 description: summaryImages[i].description,
               });
             }
@@ -985,6 +985,8 @@ export default function SourceSummariesPage() {
       // Characters above U+00FF get corrupted: α(U+03B1)→±(U+00B1), β(U+03B2)→²(U+00B2)
       const sanitizeForPdf = (text: string): string => {
         return text
+          // Strip markdown bold/italic markers (**bold**, *italic*, ***both***)
+          .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1")
           // Greek letters → spelled out or ASCII equivalent
           .replace(/α/g, "a").replace(/β/g, "b").replace(/γ/g, "g").replace(/δ/g, "d")
           .replace(/ε/g, "e").replace(/ζ/g, "z").replace(/η/g, "n").replace(/θ/g, "th")
@@ -1107,9 +1109,11 @@ export default function SourceSummariesPage() {
 
       // Helper to render a pre-generated image
       const renderPreGenImage = (img: typeof preGenImages[0]) => {
-        const imgWidth = maxWidth * 0.65;
-        const imgHeight = imgWidth * 0.55;
-        ensureSpace(imgHeight + 20);
+        const imgWidth = maxWidth * 0.6;
+        const imgHeight = imgWidth * 0.5;
+        const captionSpace = 14; // space for caption lines
+        ensureSpace(imgHeight + captionSpace);
+        y += 3; // small gap before image
         const imgX = margin + (maxWidth - imgWidth) / 2;
         try {
           doc.addImage(
@@ -1117,18 +1121,18 @@ export default function SourceSummariesPage() {
             "PNG",
             imgX, y, imgWidth, imgHeight
           );
-          y += imgHeight + 3;
-          // Caption: title + description
-          doc.setFontSize(8);
+          y += imgHeight + 2;
+          // Caption: title (stripped of markdown)
+          doc.setFontSize(7.5);
           doc.setFont("helvetica", "italic");
           doc.setTextColor(100, 100, 100);
-          const caption = sanitizeForPdf(img.title);
+          const caption = sanitizeForPdf(img.title.replace(/\*/g, ""));
           const captionLines = doc.splitTextToSize(caption, maxWidth * 0.8);
-          for (const cl of captionLines) {
-            doc.text(cl, margin + (maxWidth - maxWidth * 0.8) / 2, y);
-            y += 4;
+          for (const cl of captionLines.slice(0, 2)) {
+            doc.text(cl, pageWidth / 2, y, { align: "center" });
+            y += 3.5;
           }
-          y += 4;
+          y += 3;
           doc.setTextColor(0);
           doc.setFont("helvetica", "normal");
         } catch {
@@ -1495,7 +1499,7 @@ export default function SourceSummariesPage() {
     if (!allHaveSummaries || completed.length === 0) return;
 
     setImageGenerating(true);
-    setImageProgress({ step: "Assemblaggio testo completo...", current: 0, total: 7 });
+    setImageProgress({ step: "Assemblaggio testo completo...", current: 0, total: 5 });
 
     try {
       // Step 1: Assemble full text from chapter summaries
@@ -1510,7 +1514,7 @@ export default function SourceSummariesPage() {
       }
 
       // Step 2: Analyze text to find 5 topics
-      setImageProgress({ step: "Analisi AI per identificare 5 argomenti chiave...", current: 1, total: 7 });
+      setImageProgress({ step: "Analisi AI per identificare argomenti chiave...", current: 0, total: 5 });
 
       const analyzeRes = await fetch("/api/images/analyze", {
         method: "POST",
@@ -1526,7 +1530,7 @@ export default function SourceSummariesPage() {
         return;
       }
 
-      const totalSteps = suggestions.length + 2; // analyze + N images + save
+      const totalImages = suggestions.length; // typically 5
 
       // Step 3: Delete old images if any
       if (summaryImages.length > 0) {
@@ -1548,11 +1552,11 @@ export default function SourceSummariesPage() {
 
       for (let i = 0; i < suggestions.length; i++) {
         const s = suggestions[i];
-        const title = s.anchor?.split(" ").slice(0, 5).join(" ") || `Immagine ${i + 1}`;
+        const title = (s.anchor?.split(" ").slice(0, 5).join(" ") || `Immagine ${i + 1}`).replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1");
         setImageProgress({
-          step: `Generazione immagine ${i + 1}/${suggestions.length}: ${title}...`,
-          current: i + 2,
-          total: totalSteps,
+          step: `Generazione immagine ${i + 1}/${totalImages}: ${title}...`,
+          current: i,
+          total: totalImages,
         });
 
         try {
@@ -1582,8 +1586,8 @@ export default function SourceSummariesPage() {
       // Step 5: Save all to Supabase via API
       setImageProgress({
         step: `Salvataggio ${generated.length} immagini...`,
-        current: totalSteps - 1,
-        total: totalSteps,
+        current: totalImages,
+        total: totalImages,
       });
 
       const saveRes = await fetch("/api/images/generate-for-summary", {
@@ -1595,7 +1599,7 @@ export default function SourceSummariesPage() {
           saveImages: generated.map(g => ({
             title: g.title,
             description: g.description,
-            anchor_text: g.anchor,
+            anchor_text: g.anchor.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1"),
             base64: g.base64,
             position_index: g.positionIndex,
           })),
@@ -1609,8 +1613,8 @@ export default function SourceSummariesPage() {
 
       setImageProgress({
         step: `${generated.length} immagini generate con successo!`,
-        current: totalSteps,
-        total: totalSteps,
+        current: totalImages,
+        total: totalImages,
       });
     } catch (err) {
       console.error("Image generation error:", err);
@@ -2087,8 +2091,8 @@ export default function SourceSummariesPage() {
                         <>
                           <p className="text-sm font-medium text-blue-300">
                             {imageProgress.total > 0
-                              ? `Immagini: ${imageProgress.current}/${imageProgress.total}`
-                              : "Generazione immagini in corso..."}
+                              ? `Immagine ${Math.min(imageProgress.current + 1, imageProgress.total)} di ${imageProgress.total}`
+                              : "Preparazione generazione immagini..."}
                           </p>
                           <p className="text-xs text-slate-400 mt-0.5">{imageProgress.step}</p>
                         </>
