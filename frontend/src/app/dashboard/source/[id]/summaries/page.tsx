@@ -812,6 +812,35 @@ export default function SourceSummariesPage() {
         format: "a4",
       });
 
+      // ── Load Noto Sans Unicode font (supports Greek, math symbols, etc.) ──
+      const fontVariants = [
+        { file: "NotoSans-Regular.ttf", style: "normal" },
+        { file: "NotoSans-Bold.ttf", style: "bold" },
+        { file: "NotoSans-Italic.ttf", style: "italic" },
+      ];
+      let unicodeFontLoaded = false;
+      try {
+        for (const variant of fontVariants) {
+          const fontRes = await fetch(`/fonts/${variant.file}`);
+          if (!fontRes.ok) throw new Error(`Font ${variant.file} not found`);
+          const fontBuf = await fontRes.arrayBuffer();
+          const fontBase64 = btoa(
+            new Uint8Array(fontBuf).reduce((data, byte) => data + String.fromCharCode(byte), "")
+          );
+          doc.addFileToVFS(variant.file, fontBase64);
+          doc.addFont(variant.file, "NotoSans", variant.style);
+        }
+        doc.setFont("NotoSans", "normal");
+        unicodeFontLoaded = true;
+        console.log("[PDF] Noto Sans Unicode font loaded successfully");
+      } catch (fontErr) {
+        console.warn("[PDF] Failed to load Unicode font, falling back to Helvetica:", fontErr);
+        doc.setFont("helvetica", "normal");
+      }
+
+      // Font helper: use NotoSans if available, else Helvetica
+      const pdfFont = unicodeFontLoaded ? "NotoSans" : "helvetica";
+
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 20;
@@ -984,84 +1013,97 @@ export default function SourceSummariesPage() {
       // jsPDF's Helvetica only supports Latin-1 (ISO 8859-1)
       // Characters above U+00FF get corrupted: α(U+03B1)→±(U+00B1), β(U+03B2)→²(U+00B2)
       const sanitizeForPdf = (text: string): string => {
-        return text
+        let result = text
           // Strip markdown bold/italic markers (**bold**, *italic*, ***both***)
-          .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1")
+          .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1");
 
-          // ── Greek lowercase (complete alphabet) ──
-          .replace(/α/g, "alfa").replace(/β/g, "beta").replace(/γ/g, "gamma").replace(/δ/g, "delta")
-          .replace(/ε/g, "epsilon").replace(/ζ/g, "zeta").replace(/η/g, "eta").replace(/θ/g, "theta")
-          .replace(/ι/g, "iota").replace(/κ/g, "kappa").replace(/λ/g, "lambda").replace(/μ/g, "mu")
-          .replace(/ν/g, "nu").replace(/ξ/g, "xi").replace(/ο/g, "o").replace(/π/g, "pi")
-          .replace(/ρ/g, "rho").replace(/ς/g, "sigma").replace(/σ/g, "sigma").replace(/τ/g, "tau")
-          .replace(/υ/g, "upsilon").replace(/φ/g, "phi").replace(/χ/g, "chi")
-          .replace(/ψ/g, "psi").replace(/ω/g, "omega")
+        if (unicodeFontLoaded) {
+          // ── Noto Sans: Greek letters, math symbols render natively ──
+          // Only need to convert subscript/superscript to normal chars
+          // and handle special punctuation
 
-          // ── Greek uppercase (complete alphabet) ──
-          .replace(/Α/g, "A").replace(/Β/g, "B").replace(/Γ/g, "Gamma").replace(/Δ/g, "Delta")
-          .replace(/Ε/g, "E").replace(/Ζ/g, "Z").replace(/Η/g, "H").replace(/Θ/g, "Theta")
-          .replace(/Ι/g, "I").replace(/Κ/g, "K").replace(/Λ/g, "Lambda").replace(/Μ/g, "M")
-          .replace(/Ν/g, "N").replace(/Ξ/g, "Xi").replace(/Ο/g, "O").replace(/Π/g, "Pi")
-          .replace(/Ρ/g, "Rho").replace(/Σ/g, "Sigma").replace(/Τ/g, "T").replace(/Υ/g, "Y")
-          .replace(/Φ/g, "Phi").replace(/Χ/g, "Chi").replace(/Ψ/g, "Psi").replace(/Ω/g, "Omega")
+          result = result
+            // ── Subscript digits → normal digits (H₂O, CO₂) ──
+            .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
+            .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
+            .replace(/₈/g, "8").replace(/₉/g, "9")
+            // ── Subscript letters (ψₙ, Eₙ) ──
+            .replace(/ₐ/g, "a").replace(/ₑ/g, "e").replace(/ₒ/g, "o").replace(/ₓ/g, "x")
+            .replace(/ₕ/g, "h").replace(/ₖ/g, "k").replace(/ₗ/g, "l").replace(/ₘ/g, "m")
+            .replace(/ₙ/g, "n").replace(/ₚ/g, "p").replace(/ₛ/g, "s").replace(/ₜ/g, "t")
+            // ── Superscript digits → normal digits ──
+            .replace(/⁰/g, "0").replace(/¹/g, "1").replace(/²/g, "2").replace(/³/g, "3")
+            .replace(/⁴/g, "4").replace(/⁵/g, "5").replace(/⁶/g, "6").replace(/⁷/g, "7")
+            .replace(/⁸/g, "8").replace(/⁹/g, "9")
+            // ── Superscript letters & operators ──
+            .replace(/ⁱ/g, "i").replace(/ⁿ/g, "n")
+            .replace(/⁺/g, "+").replace(/⁻/g, "-")
+            // ── Arrows → ASCII (more readable in PDF) ──
+            .replace(/→/g, " → ").replace(/←/g, " ← ").replace(/↔/g, " ↔ ")
+            .replace(/⇒/g, " ⇒ ").replace(/⇐/g, " ⇐ ").replace(/⇔/g, " ⇔ ")
+            // ── Special dashes and punctuation ──
+            .replace(/—/g, " – ").replace(/…/g, "...")
+            .replace(/[""]/g, '"').replace(/['']/g, "'")
+            .replace(/\u00A0/g, " ");
 
-          // ── Math symbols (critical for physics/chemistry) ──
-          .replace(/ℏ/g, "h-bar").replace(/ħ/g, "h-bar")   // Planck reduced constant
-          .replace(/∞/g, "infinito")                         // infinity
-          .replace(/≤/g, "<=").replace(/≥/g, ">=")           // inequalities
-          .replace(/≈/g, "~").replace(/≠/g, "!=")            // approx / not equal
-          .replace(/≡/g, "=").replace(/≪/g, "<<").replace(/≫/g, ">>")
-          .replace(/√/g, "sqrt")                             // square root
-          .replace(/∂/g, "d")                                // partial derivative
-          .replace(/∫/g, "integral")                         // integral
-          .replace(/∑/g, "sum")                              // summation
-          .replace(/∏/g, "product")                          // product
-          .replace(/∇/g, "nabla")                            // gradient
-          .replace(/∝/g, " prop. ")                          // proportional to
-          .replace(/∈/g, " in ")                             // element of
-          .replace(/∉/g, " not in ")                         // not element of
-          .replace(/ℓ/g, "l")                                // script l
-          .replace(/ℝ/g, "R").replace(/ℤ/g, "Z").replace(/ℕ/g, "N").replace(/ℂ/g, "C")
-          // ° (U+00B0) is Latin-1, Helvetica renders it fine — no replacement needed
+        } else {
+          // ── Helvetica fallback: replace ALL non-Latin-1 characters ──
+          result = result
+            // Greek lowercase
+            .replace(/α/g, "alfa").replace(/β/g, "beta").replace(/γ/g, "gamma").replace(/δ/g, "delta")
+            .replace(/ε/g, "epsilon").replace(/ζ/g, "zeta").replace(/η/g, "eta").replace(/θ/g, "theta")
+            .replace(/ι/g, "iota").replace(/κ/g, "kappa").replace(/λ/g, "lambda").replace(/μ/g, "mu")
+            .replace(/ν/g, "nu").replace(/ξ/g, "xi").replace(/ο/g, "o").replace(/π/g, "pi")
+            .replace(/ρ/g, "rho").replace(/ς/g, "sigma").replace(/σ/g, "sigma").replace(/τ/g, "tau")
+            .replace(/υ/g, "upsilon").replace(/φ/g, "phi").replace(/χ/g, "chi")
+            .replace(/ψ/g, "psi").replace(/ω/g, "omega")
+            // Greek uppercase
+            .replace(/Α/g, "A").replace(/Β/g, "B").replace(/Γ/g, "Gamma").replace(/Δ/g, "Delta")
+            .replace(/Ε/g, "E").replace(/Ζ/g, "Z").replace(/Η/g, "H").replace(/Θ/g, "Theta")
+            .replace(/Ι/g, "I").replace(/Κ/g, "K").replace(/Λ/g, "Lambda").replace(/Μ/g, "M")
+            .replace(/Ν/g, "N").replace(/Ξ/g, "Xi").replace(/Ο/g, "O").replace(/Π/g, "Pi")
+            .replace(/Ρ/g, "Rho").replace(/Σ/g, "Sigma").replace(/Τ/g, "T").replace(/Υ/g, "Y")
+            .replace(/Φ/g, "Phi").replace(/Χ/g, "Chi").replace(/Ψ/g, "Psi").replace(/Ω/g, "Omega")
+            // Math symbols
+            .replace(/ℏ/g, "h-bar").replace(/ħ/g, "h-bar")
+            .replace(/∞/g, "infinito")
+            .replace(/≤/g, "<=").replace(/≥/g, ">=")
+            .replace(/≈/g, "~").replace(/≠/g, "!=")
+            .replace(/≡/g, "=").replace(/≪/g, "<<").replace(/≫/g, ">>")
+            .replace(/√/g, "sqrt").replace(/∂/g, "d")
+            .replace(/∫/g, "integral").replace(/∑/g, "sum").replace(/∏/g, "product")
+            .replace(/∇/g, "nabla").replace(/∝/g, " prop. ")
+            .replace(/∈/g, " in ").replace(/∉/g, " not in ")
+            .replace(/ℓ/g, "l").replace(/⋅/g, "·")
+            .replace(/ℝ/g, "R").replace(/ℤ/g, "Z").replace(/ℕ/g, "N").replace(/ℂ/g, "C")
+            // Subscript digits
+            .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
+            .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
+            .replace(/₈/g, "8").replace(/₉/g, "9")
+            // Subscript letters
+            .replace(/ₐ/g, "a").replace(/ₑ/g, "e").replace(/ₒ/g, "o").replace(/ₓ/g, "x")
+            .replace(/ₕ/g, "h").replace(/ₖ/g, "k").replace(/ₗ/g, "l").replace(/ₘ/g, "m")
+            .replace(/ₙ/g, "n").replace(/ₚ/g, "p").replace(/ₛ/g, "s").replace(/ₜ/g, "t")
+            // Superscript digits
+            .replace(/⁰/g, "0").replace(/¹/g, "1").replace(/²/g, "2").replace(/³/g, "3")
+            .replace(/⁴/g, "4").replace(/⁵/g, "5").replace(/⁶/g, "6").replace(/⁷/g, "7")
+            .replace(/⁸/g, "8").replace(/⁹/g, "9")
+            .replace(/ⁱ/g, "i").replace(/ⁿ/g, "n")
+            .replace(/⁺/g, "+").replace(/⁻/g, "-")
+            // Arrows
+            .replace(/→/g, "->").replace(/←/g, "<-").replace(/↔/g, "<->")
+            .replace(/⇒/g, "=>").replace(/⇐/g, "<=").replace(/⇔/g, "<=>")
+            .replace(/↑/g, "^").replace(/↓/g, "v")
+            // Special dashes and punctuation
+            .replace(/—/g, "-").replace(/–/g, "-")
+            .replace(/•/g, "-").replace(/…/g, "...")
+            .replace(/[""]/g, '"').replace(/['']/g, "'")
+            .replace(/\u00A0/g, " ")
+            // Safety net: any remaining non-Latin-1 → ?
+            .replace(/[^\u0000-\u00FF]/g, "?");
+        }
 
-          // ── Subscript digits → normal digits (H₂O, CO₂) ──
-          .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
-          .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
-          .replace(/₈/g, "8").replace(/₉/g, "9")
-
-          // ── Subscript letters (ψₙ, Eₙ) ──
-          .replace(/ₐ/g, "a").replace(/ₑ/g, "e").replace(/ₒ/g, "o").replace(/ₓ/g, "x")
-          .replace(/ₕ/g, "h").replace(/ₖ/g, "k").replace(/ₗ/g, "l").replace(/ₘ/g, "m")
-          .replace(/ₙ/g, "n").replace(/ₚ/g, "p").replace(/ₛ/g, "s").replace(/ₜ/g, "t")
-
-          // ── Superscript digits → normal digits ──
-          .replace(/⁰/g, "0").replace(/¹/g, "1").replace(/²/g, "2").replace(/³/g, "3")
-          .replace(/⁴/g, "4").replace(/⁵/g, "5").replace(/⁶/g, "6").replace(/⁷/g, "7")
-          .replace(/⁸/g, "8").replace(/⁹/g, "9")
-
-          // ── Superscript letters ──
-          .replace(/ⁱ/g, "i").replace(/ⁿ/g, "n")
-
-          // ── Superscript +/- ──
-          .replace(/⁺/g, "+").replace(/⁻/g, "-")
-
-          // ── Arrows ──
-          .replace(/→/g, "->").replace(/←/g, "<-").replace(/↔/g, "<->")
-          .replace(/⇒/g, "=>").replace(/⇐/g, "<=").replace(/⇔/g, "<=>")
-          .replace(/↑/g, "^").replace(/↓/g, "v")
-
-          // ── Special dashes and punctuation ──
-          .replace(/—/g, "-").replace(/–/g, "-")
-          .replace(/•/g, "-")
-          .replace(/…/g, "...")
-          .replace(/[""]/g, '"').replace(/['']/g, "'")
-          .replace(/\u00A0/g, " ")
-
-          // ── Final safety net: remove any remaining non-Latin-1 characters ──
-          // jsPDF Helvetica only supports U+0000–U+00FF (Latin-1)
-          // Replace any char > U+00FF that wasn't caught above with '?'
-          // eslint-disable-next-line no-control-regex
-          .replace(/[^\u0000-\u00FF]/g, "?");
+        return result;
       };
 
       // Helper: check page break and add new page if needed
@@ -1082,7 +1124,7 @@ export default function SourceSummariesPage() {
 
       // ── Document Title ──
       doc.setFontSize(22);
-      doc.setFont("helvetica", "bold");
+      doc.setFont(pdfFont, "bold");
       const titleLines = doc.splitTextToSize(sanitizeForPdf(title), maxWidth);
       for (const tl of titleLines) {
         ensureSpace(10);
@@ -1123,7 +1165,7 @@ export default function SourceSummariesPage() {
               );
               y += imgHeight + 2;
               doc.setFontSize(8);
-              doc.setFont("helvetica", "italic");
+              doc.setFont(pdfFont, "italic");
               doc.setTextColor(120);
               const captionLines = doc.splitTextToSize(sanitizeForPdf(imgData.description), maxWidth * 0.8);
               for (const cl of captionLines.slice(0, 2)) {
@@ -1169,7 +1211,7 @@ export default function SourceSummariesPage() {
           y += imgHeight + 2;
           // Caption: title (stripped of markdown)
           doc.setFontSize(7.5);
-          doc.setFont("helvetica", "italic");
+          doc.setFont(pdfFont, "italic");
           doc.setTextColor(100, 100, 100);
           const caption = sanitizeForPdf(img.title.replace(/\*/g, ""));
           const captionLines = doc.splitTextToSize(caption, maxWidth * 0.8);
@@ -1179,7 +1221,7 @@ export default function SourceSummariesPage() {
           }
           y += 3;
           doc.setTextColor(0);
-          doc.setFont("helvetica", "normal");
+          doc.setFont(pdfFont, "normal");
         } catch {
           // Image embedding failed, skip
         }
@@ -1193,7 +1235,7 @@ export default function SourceSummariesPage() {
             ensureSpace(16);
             y += 6;
             doc.setFontSize(16);
-            doc.setFont("helvetica", "bold");
+            doc.setFont(pdfFont, "bold");
             doc.setTextColor(0);
             const h1Lines = doc.splitTextToSize(block.text, maxWidth);
             for (const line of h1Lines) {
@@ -1213,7 +1255,7 @@ export default function SourceSummariesPage() {
             ensureSpace(14);
             y += 4;
             doc.setFontSize(13);
-            doc.setFont("helvetica", "bold");
+            doc.setFont(pdfFont, "bold");
             doc.setTextColor(30, 30, 30);
             const h2Lines = doc.splitTextToSize(block.text, maxWidth);
             for (const line of h2Lines) {
@@ -1230,7 +1272,7 @@ export default function SourceSummariesPage() {
             ensureSpace(12);
             y += 3;
             doc.setFontSize(12);
-            doc.setFont("helvetica", "bold");
+            doc.setFont(pdfFont, "bold");
             doc.setTextColor(50, 50, 50);
             const h3Lines = doc.splitTextToSize(block.text, maxWidth);
             for (const line of h3Lines) {
@@ -1245,7 +1287,7 @@ export default function SourceSummariesPage() {
 
           case "list": {
             doc.setFontSize(10.5);
-            doc.setFont("helvetica", "normal");
+            doc.setFont(pdfFont, "normal");
             doc.setTextColor(30, 30, 30);
             const bulletChar = "\u2022";
             const indentFirst = margin + 4;
@@ -1305,13 +1347,13 @@ export default function SourceSummariesPage() {
                   if (isHeader) {
                     doc.setFillColor(230, 230, 240);
                     doc.rect(cellX, y - 5, cellWidth, rowHeight, "F");
-                    doc.setFont("helvetica", "bold");
+                    doc.setFont(pdfFont, "bold");
                   } else {
                     if (rowIdx % 2 === 0) {
                       doc.setFillColor(248, 248, 252);
                       doc.rect(cellX, y - 5, cellWidth, rowHeight, "F");
                     }
-                    doc.setFont("helvetica", "normal");
+                    doc.setFont(pdfFont, "normal");
                   }
 
                   // Cell border
@@ -1363,7 +1405,7 @@ export default function SourceSummariesPage() {
                 y += imgHeight + 2;
                 // Brief caption under image (word-wrapped)
                 doc.setFontSize(8);
-                doc.setFont("helvetica", "italic");
+                doc.setFont(pdfFont, "italic");
                 doc.setTextColor(120);
                 const captionMaxWidth = maxWidth * 0.85;
                 const captionLines = doc.splitTextToSize(block.text, captionMaxWidth);
@@ -1384,7 +1426,7 @@ export default function SourceSummariesPage() {
 
           case "paragraph": {
             doc.setFontSize(10.5);
-            doc.setFont("helvetica", "normal");
+            doc.setFont(pdfFont, "normal");
             doc.setTextColor(30, 30, 30);
             // Strip remaining markdown
             const cleanPara = block.text
@@ -1433,7 +1475,7 @@ export default function SourceSummariesPage() {
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
-        doc.setFont("helvetica", "normal");
+        doc.setFont(pdfFont, "normal");
         doc.setTextColor(150);
         doc.text(
           `Generato da Backup Buddy v3 - Pagina ${i}/${totalPages}`,
