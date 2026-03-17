@@ -1011,7 +1011,21 @@ export default function SourceSummariesPage() {
           // Strip markdown bold/italic markers (**bold**, *italic*, ***both***)
           .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1")
           // Strip escaped underscores from markdown (\_n → _n)
-          .replace(/\\_/g, "_");
+          .replace(/\\_/g, "_")
+          // ── Fix Italian text quality issues (AI generation artifacts) ──
+          // Fix apostrophe used instead of accent (e' → è, piu' → più, etc.)
+          .replace(/\be'(?=\s|$|[,.])/gi, "è")
+          .replace(/\bpiu'(?=\s|$|[,.])/gi, "più")
+          .replace(/\bcioe'(?=\s|$|[,.])/gi, "cioè")
+          .replace(/\bperche'(?=\s|$|[,.])/gi, "perché")
+          .replace(/\bpoiche'(?=\s|$|[,.])/gi, "poiché")
+          .replace(/\bfinche'(?=\s|$|[,.])/gi, "finché")
+          .replace(/\bne'(?=\s|$|[,.])/gi, "né")
+          .replace(/\bnonche'(?=\s|$|[,.])/gi, "nonché")
+          // Fix words glued to "è" (nonè → non è, cheè → che è)
+          .replace(/\b(non|che|come|dove|se|ci|si|lo|la|le|li|mi|ti|vi|ne|ce)è/g, "$1 è")
+          // Fix "e'piu'" pattern (e'piu'quantizzata → è più quantizzata)
+          .replace(/\be'piu'/gi, "è più ");
 
         if (unicodeFontLoaded) {
           // ── DejaVu Sans: Greek, math, arrows, ℏ all render natively ──

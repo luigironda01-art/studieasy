@@ -412,6 +412,12 @@ REGOLA CRITICA SULLA COMPLETEZZA:
 - NON scrivere MAI frasi come "(CONTINUA NELLA PROSSIMA RISPOSTA...)" o simili
 - Il tuo output DEVE essere un testo COMPLETO e autosufficiente
 
+QUALITÀ DEL TESTO ITALIANO:
+- Usa SEMPRE gli accenti corretti: è, é, à, ò, ù, ì, più, già, può, perché, poiché, cioè, finché, né
+- MAI usare apostrofi al posto di accenti (NO: e', piu', cioe', perche'. SI: è, più, cioè, perché)
+- Separa SEMPRE le parole correttamente (NO: "nonè", "cheè". SI: "non è", "che è")
+- Per simboli matematici e greci, usa i caratteri Unicode nativi: ψ, φ, π, α, β, ∞, ≤, ≥, ℏ, √, →
+
 TESTO DA RIASSUMERE:
 {processed_text}
 
