@@ -1584,6 +1584,44 @@ export default function SourceSummariesPage() {
     await generateSummaryImages();
   };
 
+  const regenerateAllSummaries = async () => {
+    if (!user || bulkGenerating) return;
+    const allChapters = chapters.filter(c => c.processing_status === "completed");
+    if (allChapters.length === 0) return;
+
+    if (!confirm(`Rigenerare i riassunti di tutti i ${allChapters.length} capitoli? I riassunti attuali verranno sovrascritti.`)) return;
+
+    setBulkGenerating(true);
+    setBulkProgress({ current: 0, total: allChapters.length, chapterName: "" });
+
+    for (let i = 0; i < allChapters.length; i++) {
+      const ch = allChapters[i];
+      setBulkProgress({ current: i + 1, total: allChapters.length, chapterName: ch.title });
+      try {
+        const response = await fetch("/api/summaries/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chapterId: ch.id,
+            userId: user.id,
+            length: "medium",
+            maxWords: 500,
+            language: "it",
+          }),
+        });
+        const data = await response.json();
+        if (response.ok && data.summary) {
+          setChapterSummaries(prev => ({ ...prev, [ch.id]: data.summary }));
+        }
+      } catch (err) {
+        console.error(`Summary regeneration failed for ${ch.title}:`, err);
+      }
+    }
+
+    setBulkGenerating(false);
+    setBulkProgress({ current: 0, total: 0, chapterName: "" });
+  };
+
   const generateSummaryImages = async () => {
     if (!user || imageGenerating) return;
 
@@ -2252,18 +2290,34 @@ export default function SourceSummariesPage() {
       ) : (
         /* ── CHAPTERS VIEW ── */
         <div className="space-y-4">
+          {/* Rigenera tutti button */}
+          <div className="flex justify-end">
+            <button
+              onClick={regenerateAllSummaries}
+              disabled={bulkGenerating}
+              className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {bulkGenerating
+                ? `Rigenerando ${bulkProgress.current}/${bulkProgress.total}...`
+                : "Rigenera tutti i riassunti"}
+            </button>
+          </div>
+
           {completedChapters.map((chapter) => (
             <div
               key={chapter.id}
               className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-5 hover:border-blue-500/30 transition-all"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl flex items-center justify-center">
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl flex items-center justify-center shrink-0">
                     <span className="text-2xl">📄</span>
                   </div>
-                  <div>
-                    <h3 className="text-white font-semibold text-lg">{chapter.title}</h3>
+                  <div className="min-w-0">
+                    <h3 className="text-white font-semibold text-lg truncate">{chapter.title}</h3>
                     <div className="flex items-center gap-3 mt-1">
                       {chapter.page_count && (
                         <span className="text-slate-500 text-sm">
@@ -2279,17 +2333,17 @@ export default function SourceSummariesPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => openReadMode(chapter)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"
+                    className="flex items-center justify-center gap-2 w-[100px] py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"
                   >
                     <span>📖</span>
                     Leggi
                   </button>
                   <button
                     onClick={() => openGenerateModal(chapter.id)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium"
+                    className="flex items-center justify-center gap-2 w-[160px] py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium"
                   >
                     Genera Riassunto
                   </button>
@@ -2300,7 +2354,7 @@ export default function SourceSummariesPage() {
                       chapter.id
                     )}
                     disabled={pdfGenerating}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 w-[80px] py-2.5 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Scarica come PDF"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
