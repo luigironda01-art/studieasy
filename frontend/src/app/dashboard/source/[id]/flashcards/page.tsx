@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,6 +41,9 @@ export default function SourceFlashcardsPage() {
   const [loading, setLoading] = useState(true);
   const [viewingCard, setViewingCard] = useState<FlashcardWithChapter | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [cardReviewId, setCardReviewId] = useState<string | null>(null);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratingSuccess, setRatingSuccess] = useState<number | null>(null);
 
   // Filters
   const [filterChapter, setFilterChapter] = useState<string>("all");
@@ -171,6 +174,56 @@ export default function SourceFlashcardsPage() {
     }
   };
 
+  const openCardModal = async (card: FlashcardWithChapter) => {
+    setViewingCard(card);
+    setShowAnswer(false);
+    setCardReviewId(null);
+    setRatingSuccess(null);
+
+    // Fetch the review record for this flashcard
+    if (user) {
+      try {
+        const { data } = await supabase
+          .from("reviews")
+          .select("id")
+          .eq("flashcard_id", card.id)
+          .eq("user_id", user.id)
+          .single();
+        if (data) {
+          setCardReviewId(data.id);
+        }
+      } catch (err) {
+        console.error("Error fetching review:", err);
+      }
+    }
+  };
+
+  const handleRating = async (rating: 1 | 2 | 3 | 4) => {
+    if (!user || !viewingCard || !cardReviewId || ratingSubmitting) return;
+
+    setRatingSubmitting(true);
+    try {
+      const response = await fetch("/api/study/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewId: cardReviewId,
+          flashcardId: viewingCard.id,
+          userId: user.id,
+          rating,
+        }),
+      });
+
+      if (response.ok) {
+        setRatingSuccess(rating);
+      }
+    } catch (err) {
+      console.error("Error submitting rating:", err);
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
+
   // Get unique generation dates for filter
   const uniqueDates = useMemo(() => {
     const dates = new Set<string>();
@@ -282,6 +335,22 @@ export default function SourceFlashcardsPage() {
 
   const difficultyLabel = (d: string) =>
     d === "easy" ? "Facile" : d === "hard" ? "Difficile" : "Media";
+
+  // Keyboard shortcuts for FSRS rating in modal
+  const handleKeyPress = useCallback((e: KeyboardEvent) => {
+    if (!viewingCard || !showAnswer || !cardReviewId || ratingSuccess || ratingSubmitting) return;
+    switch (e.key) {
+      case "1": handleRating(1); break;
+      case "2": handleRating(2); break;
+      case "3": handleRating(3); break;
+      case "4": handleRating(4); break;
+    }
+  }, [viewingCard, showAnswer, cardReviewId, ratingSuccess, ratingSubmitting]);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [handleKeyPress]);
 
   const activeFiltersCount = [filterChapter, filterDate].filter(f => f !== "all").length;
 
@@ -546,7 +615,7 @@ export default function SourceFlashcardsPage() {
                                   {batch.cards.map((card) => (
                                     <div
                                       key={card.id}
-                                      onClick={() => { setViewingCard(card); setShowAnswer(false); }}
+                                      onClick={() => openCardModal(card)}
                                       className="bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer hover:border-purple-500/50 hover:bg-slate-750 transition-all group"
                                     >
                                       <p className="text-white font-medium text-sm line-clamp-3 group-hover:text-purple-300 transition-colors">
@@ -607,6 +676,57 @@ export default function SourceFlashcardsPage() {
                   </button>
                 )}
               </div>
+
+              {/* FSRS Rating Buttons - shown after answer is revealed */}
+              {showAnswer && cardReviewId && !ratingSuccess && (
+                <div className="mb-4">
+                  <p className="text-slate-400 text-sm mb-3 text-center">Quanto bene ricordavi?</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    <button
+                      onClick={() => handleRating(1)}
+                      disabled={ratingSubmitting}
+                      className="flex flex-col items-center gap-1 py-3 px-2 bg-red-500/10 border border-red-500/30 rounded-xl hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                    >
+                      <span className="text-red-400 font-medium text-sm">Again</span>
+                      <kbd className="text-slate-500 text-xs">1</kbd>
+                    </button>
+                    <button
+                      onClick={() => handleRating(2)}
+                      disabled={ratingSubmitting}
+                      className="flex flex-col items-center gap-1 py-3 px-2 bg-orange-500/10 border border-orange-500/30 rounded-xl hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+                    >
+                      <span className="text-orange-400 font-medium text-sm">Hard</span>
+                      <kbd className="text-slate-500 text-xs">2</kbd>
+                    </button>
+                    <button
+                      onClick={() => handleRating(3)}
+                      disabled={ratingSubmitting}
+                      className="flex flex-col items-center gap-1 py-3 px-2 bg-green-500/10 border border-green-500/30 rounded-xl hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                    >
+                      <span className="text-green-400 font-medium text-sm">Good</span>
+                      <kbd className="text-slate-500 text-xs">3</kbd>
+                    </button>
+                    <button
+                      onClick={() => handleRating(4)}
+                      disabled={ratingSubmitting}
+                      className="flex flex-col items-center gap-1 py-3 px-2 bg-blue-500/10 border border-blue-500/30 rounded-xl hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                    >
+                      <span className="text-blue-400 font-medium text-sm">Easy</span>
+                      <kbd className="text-slate-500 text-xs">4</kbd>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Rating success feedback */}
+              {ratingSuccess && (
+                <div className="mb-4 py-3 px-4 bg-green-500/10 border border-green-500/30 rounded-xl text-center">
+                  <p className="text-green-400 text-sm font-medium">
+                    Feedback registrato! La prossima revisione è stata programmata.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button
                   onClick={() => setViewingCard(null)}
