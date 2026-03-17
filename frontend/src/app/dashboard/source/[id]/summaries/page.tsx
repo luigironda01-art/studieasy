@@ -1023,6 +1023,20 @@ export default function SourceSummariesPage() {
           // and handle special punctuation
 
           result = result
+            // ── Math symbols NOT in this Noto Sans build → ASCII fallback ──
+            .replace(/∞/g, " inf.").replace(/≤/g, "<=").replace(/≥/g, ">=")
+            .replace(/≈/g, "~").replace(/≠/g, "!=").replace(/≡/g, "=")
+            .replace(/≪/g, "<<").replace(/≫/g, ">>")
+            .replace(/√/g, "sqrt").replace(/∂/g, "d")
+            .replace(/∫/g, "integrale").replace(/∑/g, "somma").replace(/∏/g, "prodotto")
+            .replace(/∇/g, "nabla").replace(/∝/g, " prop. ")
+            .replace(/∈/g, " in ").replace(/∉/g, " not in ")
+            .replace(/ℓ/g, "l").replace(/⋅/g, "·")
+            .replace(/ℝ/g, "R").replace(/ℤ/g, "Z").replace(/ℕ/g, "N").replace(/ℂ/g, "C")
+            // ── Arrows → ASCII ──
+            .replace(/→/g, " -> ").replace(/←/g, " <- ").replace(/↔/g, " <-> ")
+            .replace(/⇒/g, " => ").replace(/⇐/g, " <= ").replace(/⇔/g, " <=> ")
+            .replace(/↑/g, "^").replace(/↓/g, "v")
             // ── Subscript digits → normal digits (H₂O, CO₂) ──
             .replace(/₀/g, "0").replace(/₁/g, "1").replace(/₂/g, "2").replace(/₃/g, "3")
             .replace(/₄/g, "4").replace(/₅/g, "5").replace(/₆/g, "6").replace(/₇/g, "7")
@@ -1038,11 +1052,9 @@ export default function SourceSummariesPage() {
             // ── Superscript letters & operators ──
             .replace(/ⁱ/g, "i").replace(/ⁿ/g, "n")
             .replace(/⁺/g, "+").replace(/⁻/g, "-")
-            // ── Arrows → ASCII (more readable in PDF) ──
-            .replace(/→/g, " → ").replace(/←/g, " ← ").replace(/↔/g, " ↔ ")
-            .replace(/⇒/g, " ⇒ ").replace(/⇐/g, " ⇐ ").replace(/⇔/g, " ⇔ ")
             // ── Special dashes and punctuation ──
-            .replace(/—/g, " – ").replace(/…/g, "...")
+            .replace(/—/g, " - ").replace(/–/g, "-")
+            .replace(/…/g, "...").replace(/•/g, "-")
             .replace(/[""]/g, '"').replace(/['']/g, "'")
             .replace(/\u00A0/g, " ");
 
