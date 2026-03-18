@@ -1541,6 +1541,9 @@ export default function SourceSummariesPage() {
         }
         // Fix "per" appearing in formula (Italian word leaked in) — remove it
         s = s.replace(/\bper\b/g, "\\quad");
+        // Ensure LaTeX commands followed by a letter have a space between them
+        // e.g. \timesp → \times p, \alphax → \alpha x
+        s = s.replace(/\\(times|cdot|pm|leq|geq|neq|approx|quad|hbar|infty|nabla|partial|alpha|beta|gamma|delta|Delta|omega|Omega|theta|sigma|lambda|mu|epsilon|rho|tau|nu|xi|pi|psi|Psi|phi|Phi|sin|cos|tan|log|ln|exp|lim|int|sum|prod|sqrt|frac|left|right|vec|hat|bar|dot|ddot|tilde)([a-zA-Z])/g, "\\$1 $2");
         return s;
       };
 
