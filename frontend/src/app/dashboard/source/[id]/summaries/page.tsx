@@ -602,8 +602,9 @@ export default function SourceSummariesPage() {
       if (hasProseMarkers && regularWords >= 1) return line;
       // Skip if many regular words regardless
       if (regularWords > 2) return line;
-      // Need strong math signal: score >= 4 AND density > 0.06, OR score >= 8
-      if (mathScore < 4 || (mathDensity < 0.06 && mathScore < 8)) return line;
+      // Need math signal: score >= 3 AND density > 0.05, OR score >= 6
+      // (prose is already filtered above by prose markers + regularWords check)
+      if (mathScore < 3 || (mathDensity < 0.05 && mathScore < 6)) return line;
 
       // This line looks like a formula — convert Unicode to LaTeX
       const unicodeToLatex = (s: string): string => {
