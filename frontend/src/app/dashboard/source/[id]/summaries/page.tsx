@@ -1584,10 +1584,10 @@ export default function SourceSummariesPage() {
           container.style.fontSize = "22px";
           container.style.color = "#000000";
           container.style.backgroundColor = "#ffffff";
-          container.style.padding = "4px 8px";
+          container.style.padding = "12px 16px";
           container.style.display = "inline-block";
-          container.style.lineHeight = "1.2";
-          container.style.overflow = "hidden";
+          container.style.lineHeight = "1.6";
+          container.style.overflow = "visible";
           // Force black color on ALL child elements (KaTeX uses nested spans)
           const style = document.createElement("style");
           style.textContent = `
@@ -1602,6 +1602,16 @@ export default function SourceSummariesPage() {
             }
             .katex-formula-capture .katex-html {
               background: transparent !important;
+            }
+            .katex-formula-capture .katex .frac-line {
+              border-bottom-width: 0.06em !important;
+              min-height: 1px !important;
+            }
+            .katex-formula-capture .katex .mfrac > .vlist-t2 {
+              row-gap: 0.1em;
+            }
+            .katex-formula-capture .katex .mord, .katex-formula-capture .katex .mop {
+              padding: 0.05em 0;
             }
           `;
           container.classList.add("katex-formula-capture");
