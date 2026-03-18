@@ -1561,7 +1561,7 @@ export default function SourceSummariesPage() {
       const renderLatexToImage = async (latex: string): Promise<{ dataUrl: string; width: number; height: number } | null> => {
         try {
           const katex = (await import("katex")).default;
-          const html2canvas = (await import("html2canvas")).default;
+          const { toPng } = await import("html-to-image");
           await ensureKatexCss();
 
           const cleaned = cleanLatex(latex);
@@ -1573,7 +1573,7 @@ export default function SourceSummariesPage() {
             output: "html",
           });
 
-          // Create container (needs to be in DOM for html2canvas)
+          // Create container (needs to be in DOM for rendering)
           const container = document.createElement("div");
           container.innerHTML = html;
           container.style.position = "fixed";
@@ -1581,94 +1581,48 @@ export default function SourceSummariesPage() {
           container.style.top = "-9999px";
           container.style.zIndex = "-9999";
           container.style.pointerEvents = "none";
-          container.style.fontSize = "22px";
+          container.style.fontSize = "24px";
           container.style.color = "#000000";
           container.style.backgroundColor = "#ffffff";
           container.style.padding = "12px 16px";
           container.style.display = "inline-block";
-          container.style.lineHeight = "1.6";
-          container.style.overflow = "visible";
-          // Force black color on ALL child elements (KaTeX uses nested spans)
+          // Force black color on ALL child elements
           const style = document.createElement("style");
           style.textContent = `
             .katex-formula-capture, .katex-formula-capture * {
               color: #000000 !important;
               opacity: 1 !important;
               -webkit-text-fill-color: #000000 !important;
-              background: transparent !important;
             }
             .katex-formula-capture {
               background-color: #ffffff !important;
-            }
-            .katex-formula-capture .katex-html {
-              background: transparent !important;
-            }
-            .katex-formula-capture .katex .frac-line {
-              border-bottom-width: 0.06em !important;
-              min-height: 1px !important;
-            }
-            .katex-formula-capture .katex .mfrac > .vlist-t2 {
-              row-gap: 0.1em;
-            }
-            .katex-formula-capture .katex .mord, .katex-formula-capture .katex .mop {
-              padding: 0.05em 0;
             }
           `;
           container.classList.add("katex-formula-capture");
           document.head.appendChild(style);
           document.body.appendChild(container);
 
-          // Wait for CSS to apply
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Wait for KaTeX CSS to fully apply
+          await new Promise(resolve => setTimeout(resolve, 150));
 
-          const rawCanvas = await html2canvas(container, {
-            scale: 3,
+          // Use html-to-image (SVG foreignObject) — preserves exact browser CSS rendering
+          // Unlike html2canvas, this doesn't re-implement CSS — it uses the browser's own renderer
+          const pixelRatio = 3;
+          const dataUrl = await toPng(container, {
+            pixelRatio,
             backgroundColor: "#ffffff",
-            logging: false,
-            useCORS: true,
+            skipAutoScale: true,
           });
 
-          // Cleanup style tag
+          // Get rendered dimensions
+          const imgWidth = container.offsetWidth * pixelRatio;
+          const imgHeight = container.offsetHeight * pixelRatio;
+
+          // Cleanup
           document.head.removeChild(style);
           document.body.removeChild(container);
 
-          // Auto-crop: remove gray/non-white rows from top and bottom
-          const ctx = rawCanvas.getContext("2d");
-          if (!ctx) return null;
-          const imgData = ctx.getImageData(0, 0, rawCanvas.width, rawCanvas.height);
-          const { data, width, height } = imgData;
-
-          // Find first and last rows that contain non-white pixels (threshold 240)
-          const isWhiteRow = (row: number) => {
-            for (let x = 0; x < width; x++) {
-              const i = (row * width + x) * 4;
-              if (data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240) return false;
-            }
-            return true;
-          };
-
-          let topCrop = 0;
-          while (topCrop < height && isWhiteRow(topCrop)) topCrop++;
-          let bottomCrop = height - 1;
-          while (bottomCrop > topCrop && isWhiteRow(bottomCrop)) bottomCrop--;
-
-          // Add small padding (6px)
-          topCrop = Math.max(0, topCrop - 6);
-          bottomCrop = Math.min(height - 1, bottomCrop + 6);
-          const croppedHeight = bottomCrop - topCrop + 1;
-
-          // Create cropped canvas
-          const croppedCanvas = document.createElement("canvas");
-          croppedCanvas.width = width;
-          croppedCanvas.height = croppedHeight;
-          const croppedCtx = croppedCanvas.getContext("2d");
-          if (!croppedCtx) return null;
-          croppedCtx.fillStyle = "#ffffff";
-          croppedCtx.fillRect(0, 0, width, croppedHeight);
-          croppedCtx.drawImage(rawCanvas, 0, topCrop, width, croppedHeight, 0, 0, width, croppedHeight);
-
-          const dataUrl = croppedCanvas.toDataURL("image/png");
-          return { dataUrl, width, height: croppedHeight };
+          return { dataUrl, width: imgWidth, height: imgHeight };
         } catch (err) {
           console.warn("[PDF] KaTeX render failed for:", latex, err);
           return null;
