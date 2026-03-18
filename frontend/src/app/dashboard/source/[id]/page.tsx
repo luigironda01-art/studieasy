@@ -1017,6 +1017,13 @@ export default function SourceDetailPage() {
                             <span>📖</span>
                             Leggi
                           </button>
+                          <Link
+                            href={`/dashboard/source/${sourceId}/summaries`}
+                            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-600 text-white text-sm rounded-lg font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+                          >
+                            <span>📄</span>
+                            Riassunti
+                          </Link>
                           <button
                             onClick={() => openGenerateModal(chapter.id, chapter.title, "flashcards")}
                             disabled={generatingFlashcardsId !== null || generatingQuizId !== null}
