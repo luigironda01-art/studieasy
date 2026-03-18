@@ -575,7 +575,8 @@ export default function SourceSummariesPage() {
       // Skip lines already LaTeX, headings, tables, images, bullets, short lines
       if (!trimmed || trimmed.length < 5) return line;
       if (trimmed.startsWith("$$") || trimmed.startsWith("#") || trimmed.startsWith("[") || trimmed.startsWith("-") || trimmed.startsWith("•")) return line;
-      if (trimmed.match(/\|.*\|/)) return line;
+      // Skip table-like lines — but NOT if they contain math indicators (absolute value |ψ|²)
+      if (trimmed.match(/\|.*\|/) && !(trimmed.match(/[αβγδεζηθικλμνξπρσςτυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΠΡΣΤΥΦΧΨΩ∫∑√∂∇₀₁₂₃₄₅₆₇₈₉ₐₑₒₓₕₖₗₘₙₚₛₜ⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻ⁿⁱ]/))) return line;
 
       // Count math indicators in the line
       const greekLetters = (trimmed.match(/[αβγδεζηθικλμνξπρσςτυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΠΡΣΤΥΦΧΨΩ]/g) || []).length;
@@ -654,11 +655,14 @@ export default function SourceSummariesPage() {
         // Only convert simple a/b patterns (single tokens separated by /)
         l = l.replace(/\(([^()\/]+)\/([^()]+)\)/g, "\\frac{$1}{$2}");
 
-        // Fix "per" (Italian) leaked into formula
-        l = l.replace(/\bper\b/g, "\\quad ");
+        // Fix "per" (Italian) leaked into formula — also handle "per0" (glued to number)
+        l = l.replace(/\bper(?=\b|\d)/g, "\\quad ");
 
-        // Fix common function names that need backslash
-        l = l.replace(/(?<![\\a-zA-Z])(sin|cos|tan|log|ln|exp|lim)(?=[(_\s{^]|$)/g, "\\$1");
+        // Fix common function names that need backslash (lookahead includes \ for \frac etc.)
+        l = l.replace(/(?<![\\a-zA-Z])(sin|cos|tan|log|ln|exp|lim)(?=[(_\s{^\\]|$)/g, "\\$1");
+
+        // Convert |expr| to \left|expr\right| (absolute value)
+        l = l.replace(/\|([^|]+)\|/g, "\\left|$1\\right|");
 
         // Clean up multiple spaces
         l = l.replace(/\s{2,}/g, " ").trim();
