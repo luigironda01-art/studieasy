@@ -600,26 +600,42 @@ export default function SourceSummariesPage() {
           tableRows = [];
           inTable = false;
         }
-        // Multi-line LaTeX: collect until closing $$ (standalone or at end of line)
-        let latexContent = line.startsWith("$$") && line.length > 2 ? line.slice(2).trim() : "";
+
+        const hasInlineContent = line.startsWith("$$") && line.length > 2;
+        const inlineFormula = hasInlineContent ? line.slice(2).trim() : "";
+
+        // Look for closing $$ within next 5 lines max (prevent eating entire document)
+        let latexContent = inlineFormula;
         let j = i + 1;
-        while (j < lines.length) {
+        let foundClose = false;
+        const maxLookAhead = 5;
+        while (j < lines.length && j <= i + maxLookAhead) {
           const jLine = lines[j].trim();
           if (jLine === "$$") {
+            foundClose = true;
             break; // standalone closing $$
           }
           if (jLine.endsWith("$$")) {
             latexContent += (latexContent ? " " : "") + jLine.slice(0, -2).trim();
+            foundClose = true;
             break; // closing $$ at end of line
           }
           latexContent += (latexContent ? " " : "") + jLine;
           j++;
         }
-        if (latexContent.trim()) {
+
+        if (foundClose && latexContent.trim()) {
+          // Multi-line block with proper closing
           blocks.push({ type: "latex", text: latexContent.trim() });
-          i = j < lines.length ? j : j - 1; // skip to closing line
+          i = j;
+          continue;
+        } else if (inlineFormula) {
+          // No closing $$ found — treat as single-line formula (AI forgot closing $$)
+          blocks.push({ type: "latex", text: inlineFormula });
           continue;
         }
+        // Standalone $$ with no closing — skip it (orphan delimiter)
+        continue;
       }
 
       // Table detection: lines with 2+ pipe chars (with OR without leading |)
@@ -1306,6 +1322,7 @@ export default function SourceSummariesPage() {
 
       // Clean up LaTeX string before passing to KaTeX
       const cleanLatex = (raw: string): string => {
+        if (!raw || raw === "undefined") return "";
         let s = raw.trim();
         // Remove leading/trailing $$ if somehow still present
         if (s.startsWith("$$")) s = s.slice(2);
@@ -1470,6 +1487,9 @@ export default function SourceSummariesPage() {
           }
 
           case "latex": {
+            // Guard against undefined/empty latex
+            if (!block.text || block.text === "undefined") break;
+
             // Helper: convert LaTeX to readable Unicode for fallback
             const latexToReadable = (tex: string): string => {
               let s = cleanLatex(tex);
