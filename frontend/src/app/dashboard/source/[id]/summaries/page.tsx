@@ -567,6 +567,121 @@ export default function SourceSummariesPage() {
       return line;
     }).join("\n");
 
+    // 1k. Detect Unicode math in plain text and convert to $$LaTeX$$
+    // AI sometimes generates formulas as flat Unicode (ψₙ(x)=√(2/L)sin(nπx/L))
+    // instead of $$\psi_n(x)=\sqrt{\frac{2}{L}}\sin\left(\frac{n\pi x}{L}\right)$$
+    cleaned = cleaned.split("\n").map((line: string) => {
+      const trimmed = line.trim();
+      // Skip lines already LaTeX, headings, tables, images, bullets, short lines
+      if (!trimmed || trimmed.length < 5) return line;
+      if (trimmed.startsWith("$$") || trimmed.startsWith("#") || trimmed.startsWith("[") || trimmed.startsWith("-") || trimmed.startsWith("•")) return line;
+      if (trimmed.match(/\|.*\|/)) return line;
+
+      // Count math indicators in the line
+      const greekLetters = (trimmed.match(/[αβγδεζηθικλμνξπρσςτυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΠΡΣΤΥΦΧΨΩ]/g) || []).length;
+      const subscripts = (trimmed.match(/[₀₁₂₃₄₅₆₇₈₉ₐₑₒₓₕₖₗₘₙₚₛₜ]/g) || []).length;
+      const superscripts = (trimmed.match(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻ⁿⁱ]/g) || []).length;
+      const mathSymbols = (trimmed.match(/[√∫∑∏∂∇∞≤≥≠≈±×·∈∉ℏℓℝℤℕℂ⁺⁻→←↔⇒⇐⇔]/g) || []).length;
+      const hasEquals = trimmed.includes("=");
+
+      const mathScore = greekLetters * 2 + subscripts + superscripts + mathSymbols * 2 + (hasEquals ? 1 : 0);
+      const textLength = trimmed.length;
+      const mathDensity = mathScore / textLength;
+
+      // Count regular Italian/text words (4+ chars, excluding math function names)
+      const mathFunctions = new Set(["sin", "cos", "tan", "log", "exp", "lim", "sqrt", "frac", "left", "right", "quad", "infty", "cdot", "times"]);
+      const allWords = trimmed.split(/[\s=+\-*/()[\]{},;:]+/).filter(w => w.length >= 1);
+      const regularWords = allWords.filter(
+        w => /^[a-zà-ÿ]{4,}$/i.test(w) && !mathFunctions.has(w.toLowerCase())
+      ).length;
+      // Check for Italian articles/prepositions that clearly indicate prose
+      const hasProseMarkers = /\b(il|lo|la|le|li|gli|un|una|dei|del|della|delle|dello|degli|nel|nella|che|con|sono|viene|questa|questo|ogni|anche|come|dove|quando|è|ha|più|può|tra|fra|sul|alla|allo|alle|dalla|dalle)\b/i.test(trimmed);
+
+      // Skip if it has prose markers AND regular words — it's a sentence, not a formula
+      if (hasProseMarkers && regularWords >= 1) return line;
+      // Skip if many regular words regardless
+      if (regularWords > 2) return line;
+      // Need strong math signal: score >= 4 AND density > 0.06, OR score >= 8
+      if (mathScore < 4 || (mathDensity < 0.06 && mathScore < 8)) return line;
+
+      // This line looks like a formula — convert Unicode to LaTeX
+      const unicodeToLatex = (s: string): string => {
+        let l = s;
+        // Greek lowercase
+        l = l.replace(/ψ/g, "\\psi ").replace(/φ/g, "\\phi ").replace(/α/g, "\\alpha ")
+          .replace(/β/g, "\\beta ").replace(/γ/g, "\\gamma ").replace(/δ/g, "\\delta ")
+          .replace(/ε/g, "\\epsilon ").replace(/ζ/g, "\\zeta ").replace(/η/g, "\\eta ")
+          .replace(/θ/g, "\\theta ").replace(/ι/g, "\\iota ").replace(/κ/g, "\\kappa ")
+          .replace(/λ/g, "\\lambda ").replace(/μ/g, "\\mu ").replace(/ν/g, "\\nu ")
+          .replace(/ξ/g, "\\xi ").replace(/π/g, "\\pi ").replace(/ρ/g, "\\rho ")
+          .replace(/σ/g, "\\sigma ").replace(/ς/g, "\\sigma ").replace(/τ/g, "\\tau ")
+          .replace(/ω/g, "\\omega ");
+        // Greek uppercase
+        l = l.replace(/Ψ/g, "\\Psi ").replace(/Φ/g, "\\Phi ").replace(/Γ/g, "\\Gamma ")
+          .replace(/Δ/g, "\\Delta ").replace(/Θ/g, "\\Theta ").replace(/Λ/g, "\\Lambda ")
+          .replace(/Ξ/g, "\\Xi ").replace(/Π/g, "\\Pi ").replace(/Σ/g, "\\Sigma ")
+          .replace(/Ω/g, "\\Omega ");
+
+        // Subscripts → _{...}
+        const subMap: Record<string, string> = { "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4", "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9", "ₐ": "a", "ₑ": "e", "ₒ": "o", "ₓ": "x", "ₕ": "h", "ₖ": "k", "ₗ": "l", "ₘ": "m", "ₙ": "n", "ₚ": "p", "ₛ": "s", "ₜ": "t" };
+        l = l.replace(/[₀₁₂₃₄₅₆₇₈₉ₐₑₒₓₕₖₗₘₙₚₛₜ]+/g, (match) => {
+          const converted = match.split("").map(c => subMap[c] || c).join("");
+          return `_{${converted}}`;
+        });
+
+        // Superscripts → ^{...}
+        const supMap: Record<string, string> = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9", "⁺": "+", "⁻": "-", "ⁿ": "n", "ⁱ": "i" };
+        l = l.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻ⁿⁱ]+/g, (match) => {
+          const converted = match.split("").map(c => supMap[c] || c).join("");
+          return `^{${converted}}`;
+        });
+
+        // Math symbols
+        l = l.replace(/∫/g, "\\int ").replace(/∑/g, "\\sum ").replace(/∏/g, "\\prod ")
+          .replace(/∂/g, "\\partial ").replace(/∇/g, "\\nabla ").replace(/∞/g, "\\infty ")
+          .replace(/≤/g, "\\leq ").replace(/≥/g, "\\geq ").replace(/≠/g, "\\neq ")
+          .replace(/≈/g, "\\approx ").replace(/±/g, "\\pm ").replace(/×/g, "\\times ")
+          .replace(/·/g, "\\cdot ").replace(/ℏ/g, "\\hbar ");
+
+        // √(a/b) → \sqrt{\frac{a}{b}}, √(expr) → \sqrt{expr}
+        l = l.replace(/√\(([^)]*?)\/([^)]*?)\)/g, "\\sqrt{\\frac{$1}{$2}}");
+        l = l.replace(/√\(([^)]+)\)/g, "\\sqrt{$1}");
+        l = l.replace(/√([a-zA-Z0-9])/g, "\\sqrt{$1}");
+        // Standalone √ without parens
+        l = l.replace(/√/g, "\\sqrt ");
+
+        // (a/b) patterns → \frac{a}{b} when inside math context
+        // Only convert simple a/b patterns (single tokens separated by /)
+        l = l.replace(/\(([^()\/]+)\/([^()]+)\)/g, "\\frac{$1}{$2}");
+
+        // Fix "per" (Italian) leaked into formula
+        l = l.replace(/\bper\b/g, "\\quad ");
+
+        // Fix common function names that need backslash
+        l = l.replace(/(?<![\\a-zA-Z])(sin|cos|tan|log|ln|exp|lim)(?=[(_\s{^]|$)/g, "\\$1");
+
+        // Clean up multiple spaces
+        l = l.replace(/\s{2,}/g, " ").trim();
+        return l;
+      };
+
+      // Check if line is PURE formula or mixed text+formula
+      // Pure formula: mostly math chars, short, no long Italian words
+      const italianWordCount = (trimmed.match(/[a-zà-ÿ]{4,}/gi) || []).filter(
+        w => !["sin", "cos", "tan", "log", "exp", "lim", "sqrt", "frac", "left", "right", "quad"].includes(w.toLowerCase())
+      ).length;
+
+      if (italianWordCount <= 1) {
+        // Pure formula (at most 1 stray word like "per") — wrap entire line
+        return `$$${unicodeToLatex(trimmed)}$$`;
+      }
+
+      // Mixed text+formula: try to split at the formula boundary
+      // Look for the longest contiguous math segment
+      // For now, just wrap the whole thing — cleanLatex + KaTeX throwOnError:false handles gracefully
+      return `$$${unicodeToLatex(trimmed)}$$`;
+    }).join("\n");
+
     // ═══ Step 2: Line-by-line parsing ═══
     const lines = cleaned.split("\n");
     const blocks: PdfBlock[] = [];
