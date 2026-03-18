@@ -417,18 +417,30 @@ QUALITÀ DEL TESTO ITALIANO:
 - MAI usare apostrofi al posto di accenti (NO: e', piu', cioe', perche'. SI: è, più, cioè, perché)
 - Separa SEMPRE le parole correttamente (NO: "nonè", "cheè". SI: "non è", "che è")
 
-FORMULE E NOTAZIONE SCIENTIFICA:
-- Per formule COMPLESSE (frazioni, integrali, sommatorie, derivate), usa SEMPRE la notazione LaTeX racchiusa tra $$...$$ su una riga a sé:
-  - Esempio: $$-\\frac{{\\hbar^2}}{{2m}} \\frac{{d^2\\psi(x)}}{{dx^2}} = E\\psi(x)$$
-  - Esempio: $$E_n = \\frac{{n^2 h^2}}{{8mL^2}}$$
-  - Esempio: $$\\psi_n(x) = \\sqrt{{\\frac{{2}}{{L}}}} \\sin\\left(\\frac{{n\\pi x}}{{L}}\\right)$$
-  - Esempio: $$\\int_0^L |\\psi(x)|^2 dx = 1$$
-- Per formule SEMPLICI inline (senza frazioni), usa caratteri Unicode nel testo:
-  - Apici: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹ ⁺ ⁻ ⁿ (esempio: x², E₁, ψₙ, 10⁻³)
-  - Pedici: ₀ ₁ ₂ ₃ ₄ ₅ ₆ ₇ ₈ ₉ ₙ ₘ ₓ (esempio: H₂O, ψₙ, E₁)
-  - Simboli greci e matematici: ψ, φ, π, α, β, ω, ∞, ≤, ≥, ℏ, √, →, ∂, ∫, ∑, ∇, ≈, ≠
-- REGOLA: se una formula contiene frazioni (numeratore/denominatore), integrali, o sommatorie → usa $$LaTeX$$
-- REGOLA: se è solo un simbolo o formula piatta (es. E = mc²) → usa Unicode inline
+FORMULE E NOTAZIONE SCIENTIFICA (REGOLE OBBLIGATORIE):
+
+CRITICO: Ogni formula con UNO QUALSIASI di questi elementi DEVE essere in $$LaTeX$$ su una riga a sé:
+- Frazioni o divisioni (a/b)
+- Integrali, sommatorie, derivate
+- Radici di espressioni complesse
+- Funzioni d'onda con argomenti
+- Equazioni con più di 3 simboli matematici
+
+FORMATO: $$formula$$ (su riga propria, $$ all'inizio e alla fine della STESSA riga)
+
+ESEMPI:
+$$-\\frac{{\\hbar^2}}{{2m}} \\frac{{d^2\\psi(x)}}{{dx^2}} = E\\psi(x)$$
+$$E_n = \\frac{{n^2 h^2}}{{8mL^2}}$$
+$$\\psi_n(x) = \\sqrt{{\\frac{{2}}{{L}}}} \\sin\\left(\\frac{{n\\pi x}}{{L}}\\right)$$
+$$\\int_0^L |\\psi(x)|^2 dx = 1$$
+$$|\\psi_n(x)|^2 = \\frac{{2}}{{L}} \\sin^2\\left(\\frac{{n\\pi x}}{{L}}\\right)$$
+
+ERRORI VIETATI:
+- NO testo piatto per frazioni: "h²/2m" DEVE essere $$\\frac{{h^2}}{{2m}}$$
+- NO tag HTML: MAI usare <sub>, <sup>, <br>
+- NO Unicode piatto per formule complesse: "Eₙ = n²h²/(8mL²)" DEVE essere $$E_n = \\frac{{n^2 h^2}}{{8mL^2}}$$
+
+SOLO Unicode per formule semplici senza frazioni: E = mc², n = 1, 2, 3..., V = 0
 
 TESTO DA RIASSUMERE:
 {processed_text}

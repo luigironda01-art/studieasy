@@ -1102,6 +1102,17 @@ export default function SourceSummariesPage() {
       // Characters above U+00FF get corrupted: α(U+03B1)→±(U+00B1), β(U+03B2)→²(U+00B2)
       const sanitizeForPdf = (text: string): string => {
         let result = text
+          // Strip HTML tags: <sub>x</sub> → x, <sup>2</sup> → ², <br> → space
+          .replace(/<br\s*\/?>/gi, " ")
+          .replace(/<sup>(.*?)<\/sup>/gi, (_m, c) => {
+            const supMap: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "+": "⁺", "-": "⁻", "n": "ⁿ" };
+            return c.split("").map((ch: string) => supMap[ch] || ch).join("");
+          })
+          .replace(/<sub>(.*?)<\/sub>/gi, (_m, c) => {
+            const subMap: Record<string, string> = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "n": "ₙ", "m": "ₘ", "x": "ₓ" };
+            return c.split("").map((ch: string) => subMap[ch] || ch).join("");
+          })
+          .replace(/<[^>]+>/g, "") // Strip any remaining HTML tags
           // Strip markdown bold/italic markers (**bold**, *italic*, ***both***)
           .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1")
           // Strip escaped underscores from markdown (\_n → _n)

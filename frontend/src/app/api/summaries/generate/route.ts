@@ -126,19 +126,40 @@ QUALITÀ DEL TESTO ITALIANO:
 - MAI usare apostrofi al posto di accenti (NO: e', piu', cioe', perche'. SI: è, più, cioè, perché)
 - Separa SEMPRE le parole correttamente (NO: "nonè", "cheè". SI: "non è", "che è")
 
-FORMULE E NOTAZIONE SCIENTIFICA:
-- Per formule COMPLESSE (frazioni, integrali, sommatorie, derivate), usa SEMPRE la notazione LaTeX racchiusa tra $$...$$ su una riga a sé:
-  - Esempio: $$-\\frac{\\hbar^2}{2m} \\frac{d^2\\psi(x)}{dx^2} = E\\psi(x)$$
-  - Esempio: $$E_n = \\frac{n^2 h^2}{8mL^2}$$
-  - Esempio: $$\\psi_n(x) = \\sqrt{\\frac{2}{L}} \\sin\\left(\\frac{n\\pi x}{L}\\right)$$
-  - Esempio: $$\\int_0^L |\\psi(x)|^2 dx = 1$$
-  - Esempio: $$L = \\hbar\\sqrt{l(l+1)}$$
-- Per formule SEMPLICI inline (senza frazioni), usa caratteri Unicode nel testo:
-  - Apici: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹ ⁺ ⁻ ⁿ (esempio: x², E₁, ψₙ, 10⁻³)
-  - Pedici: ₀ ₁ ₂ ₃ ₄ ₅ ₆ ₇ ₈ ₉ ₙ ₘ ₓ (esempio: H₂O, ψₙ, E₁)
-  - Simboli greci e matematici: ψ, φ, π, α, β, ω, ∞, ≤, ≥, ℏ, √, →, ∂, ∫, ∑, ∇, ≈, ≠
-- REGOLA: se una formula contiene frazioni (numeratore/denominatore), integrali, radici di espressioni complesse, o sommatorie → usa $$LaTeX$$
-- REGOLA: se è solo un simbolo o formula piatta (es. E = mc², μ = γL) → usa Unicode inline
+FORMULE E NOTAZIONE SCIENTIFICA (REGOLE OBBLIGATORIE):
+
+⚠️ CRITICO: Ogni formula matematica che contiene UNO QUALSIASI di questi elementi DEVE essere scritta in $$LaTeX$$ su una riga a sé stante:
+- Frazioni o divisioni (a/b, numeratore/denominatore)
+- Integrali (∫)
+- Sommatorie (∑)
+- Derivate (d/dx, d²/dx², ∂/∂x)
+- Radici di espressioni (√ con espressioni complesse)
+- Funzioni d'onda con argomenti (ψ(x), φ(r))
+- Equazioni con più di 3 simboli matematici
+
+FORMATO OBBLIGATORIO per formule LaTeX:
+$$formula_qui$$
+(DEVE essere su una riga a sé, con $$ all'inizio e $$ alla fine della STESSA riga)
+
+ESEMPI CORRETTI (copia questo formato esattamente):
+$$-\\frac{\\hbar^2}{2m} \\frac{d^2\\psi(x)}{dx^2} = E\\psi(x)$$
+$$E_n = \\frac{n^2 h^2}{8mL^2}$$
+$$\\psi_n(x) = \\sqrt{\\frac{2}{L}} \\sin\\left(\\frac{n\\pi x}{L}\\right)$$
+$$\\int_0^L |\\psi(x)|^2 dx = 1$$
+$$|\\psi_n(x)|^2 = \\frac{2}{L} \\sin^2\\left(\\frac{n\\pi x}{L}\\right)$$
+$$E_0 = \\frac{1}{2}\\hbar\\omega$$
+$$\\omega = \\sqrt{\\frac{k}{m}}$$
+
+ERRORI DA NON FARE MAI:
+❌ NO: ℏ²/2m d²ψ(x)/dx² = Eψ(x)  (testo piatto — VIETATO per formule con frazioni)
+❌ NO: E<sub>n</sub> = n²h²/8mL²  (HTML tags — MAI usare <sub>, <sup> nel riassunto)
+❌ NO: Eₙ = n²h²/(8mL²)  (Unicode piatto per formula con frazione — DEVE essere $$LaTeX$$)
+✅ SI: $$E_n = \\frac{n^2 h^2}{8mL^2}$$
+
+SOLO Unicode inline per formule VERAMENTE semplici senza frazioni:
+- E = mc², x², ψₙ, n = 1, 2, 3..., V = 0, V = ∞
+
+MAI usare tag HTML (<sub>, <sup>, <br>) nel riassunto. MAI.
 
 TESTO DA RIASSUMERE:
 ${chapter.processed_text}
