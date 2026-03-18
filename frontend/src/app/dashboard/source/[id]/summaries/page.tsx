@@ -477,14 +477,16 @@ export default function SourceSummariesPage() {
       const line = rawLines[i];
       const trimmed = line.trim();
 
-      // Keep empty lines, headings, tables, image tags as-is (start new line)
+      // Keep empty lines, headings, tables, image tags, LaTeX blocks as-is (start new line)
       if (
         !trimmed ||
         trimmed.startsWith("#") ||
         trimmed.match(/\|.*\|/) ||
         trimmed.startsWith("[IMMAGINE:") ||
         trimmed.startsWith("[Vedi figura:") ||
-        trimmed.startsWith("Illustrazione")
+        trimmed.startsWith("Illustrazione") ||
+        trimmed.startsWith("$$") ||
+        trimmed.endsWith("$$")
       ) {
         joined.push(line);
         continue;
@@ -506,13 +508,16 @@ export default function SourceSummariesPage() {
       if (prevIdx >= 0) {
         const prev = joined[prevIdx].trim();
 
-        // Can't merge with empty, headings, tables, images
+        // Can't merge with empty, headings, tables, images, LaTeX
         if (
           !prev ||
           prev.startsWith("#") ||
           prev.match(/\|.*\|/) ||
           prev.startsWith("[IMMAGINE:") ||
-          prev.startsWith("[Vedi figura:")
+          prev.startsWith("[Vedi figura:") ||
+          prev.startsWith("$$") ||
+          prev.endsWith("$$") ||
+          prev.includes("$$")
         ) {
           joined.push(line);
           continue;
@@ -542,6 +547,25 @@ export default function SourceSummariesPage() {
       joined.push(line);
     }
     cleaned = joined.join("\n");
+
+    // 1j. Final pass: extract any remaining $$...$$ from composite lines
+    // This catches formulas that survived merge or were inline in AI output
+    cleaned = cleaned.split("\n").map((line: string) => {
+      const trimmed = line.trim();
+      // Skip lines that are already pure LaTeX
+      if (trimmed.startsWith("$$") && trimmed.endsWith("$$")) return line;
+      if (trimmed === "$$") return line;
+      // Check for $$...$$ within the line
+      const inlineMatch = trimmed.match(/^(.*?)(\$\$(?:[^$]|\$(?!\$))+\$\$)(.*)$/);
+      if (inlineMatch) {
+        const parts: string[] = [];
+        if (inlineMatch[1].trim()) parts.push(inlineMatch[1].trimEnd());
+        parts.push(inlineMatch[2]);
+        if (inlineMatch[3].trim()) parts.push(inlineMatch[3].trimStart());
+        return parts.join("\n");
+      }
+      return line;
+    }).join("\n");
 
     // ═══ Step 2: Line-by-line parsing ═══
     const lines = cleaned.split("\n");
@@ -1715,6 +1739,51 @@ export default function SourceSummariesPage() {
           }
 
           case "paragraph": {
+            // Safety net: if paragraph still contains $$...$$, extract and render as LaTeX
+            const paraInlineLatex = block.text.match(/\$\$((?:[^$]|\$(?!\$))+)\$\$/);
+            if (paraInlineLatex) {
+              // Split into text-before, formula, text-after
+              const idx = block.text.indexOf(paraInlineLatex[0]);
+              const before = block.text.slice(0, idx).trim();
+              const formula = paraInlineLatex[1];
+              const after = block.text.slice(idx + paraInlineLatex[0].length).trim();
+
+              // Render text before
+              if (before) {
+                doc.setFontSize(10.5);
+                doc.setFont(pdfFont, "normal");
+                doc.setTextColor(30, 30, 30);
+                const beforeClean = before.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1");
+                const bLines = doc.splitTextToSize(beforeClean, maxWidth);
+                for (const bl of bLines) { ensureSpace(6); doc.text(bl, margin, y); y += 5.5; }
+              }
+              // Render formula
+              try {
+                const rendered = await renderLatexToImage(formula);
+                if (rendered) {
+                  let imgW = Math.min(maxWidth * 0.7, rendered.width / 3 * 0.264583);
+                  let imgH = imgW * (rendered.height / rendered.width);
+                  if (imgH < 4) { imgH = 4; imgW = imgH * (rendered.width / rendered.height); }
+                  ensureSpace(imgH + 6);
+                  y += 2;
+                  doc.addImage(rendered.dataUrl, "PNG", margin + (maxWidth - imgW) / 2, y, imgW, imgH);
+                  y += imgH + 4;
+                }
+              } catch { /* skip */ }
+              // Render text after
+              if (after) {
+                doc.setFontSize(10.5);
+                doc.setFont(pdfFont, "normal");
+                doc.setTextColor(30, 30, 30);
+                const afterClean = after.replace(/\*\*(.*?)\*\*/g, "$1").replace(/\*(.*?)\*/g, "$1");
+                const aLines = doc.splitTextToSize(afterClean, maxWidth);
+                for (const al of aLines) { ensureSpace(6); doc.text(al, margin, y); y += 5.5; }
+              }
+              y += 3;
+              doc.setTextColor(0);
+              break;
+            }
+
             doc.setFontSize(10.5);
             doc.setFont(pdfFont, "normal");
             doc.setTextColor(30, 30, 30);
