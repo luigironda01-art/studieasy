@@ -1390,9 +1390,8 @@ export default function SourceSummariesPage() {
           const container = document.createElement("div");
           container.innerHTML = html;
           container.style.position = "fixed";
-          container.style.left = "0";
+          container.style.left = "-9999px";
           container.style.top = "0";
-          container.style.zIndex = "99999";
           container.style.fontSize = "22px";
           container.style.color = "#000000";
           container.style.background = "#ffffff";
