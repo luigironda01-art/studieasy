@@ -568,6 +568,40 @@ export default function SourceSummariesPage() {
         continue;
       }
 
+      // LaTeX formula blocks: $$...$$ (single line) or $$ on its own line (start multi-line)
+      // MUST be checked BEFORE table detection (LaTeX may contain | pipe chars)
+      const latexSingleMatch = line.match(/^\$\$(.*)\$\$$/);
+      if (latexSingleMatch) {
+        // End any open table
+        if (inTable && tableRows.length > 0) {
+          blocks.push({ type: "table", text: "", rows: [...tableRows] });
+          tableRows = [];
+          inTable = false;
+        }
+        blocks.push({ type: "latex", text: latexSingleMatch[1].trim() });
+        continue;
+      }
+      if (line === "$$") {
+        // End any open table
+        if (inTable && tableRows.length > 0) {
+          blocks.push({ type: "table", text: "", rows: [...tableRows] });
+          tableRows = [];
+          inTable = false;
+        }
+        // Multi-line LaTeX: collect until closing $$
+        let latexContent = "";
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() !== "$$") {
+          latexContent += (latexContent ? " " : "") + lines[j].trim();
+          j++;
+        }
+        if (j < lines.length) {
+          blocks.push({ type: "latex", text: latexContent.trim() });
+          i = j; // skip to closing $$
+          continue;
+        }
+      }
+
       // Table detection: lines with 2+ pipe chars (with OR without leading |)
       const pipeCount = (line.match(/\|/g) || []).length;
       if (pipeCount >= 2) {
@@ -598,27 +632,6 @@ export default function SourceSummariesPage() {
       if (!line) {
         blocks.push({ type: "empty", text: "" });
         continue;
-      }
-
-      // LaTeX formula blocks: $$...$$ (single line) or $$ on its own line (start multi-line)
-      const latexSingleMatch = line.match(/^\$\$(.*)\$\$$/);
-      if (latexSingleMatch) {
-        blocks.push({ type: "latex", text: latexSingleMatch[1].trim() });
-        continue;
-      }
-      if (line === "$$") {
-        // Multi-line LaTeX: collect until closing $$
-        let latexContent = "";
-        let j = i + 1;
-        while (j < lines.length && lines[j].trim() !== "$$") {
-          latexContent += (latexContent ? " " : "") + lines[j].trim();
-          j++;
-        }
-        if (j < lines.length) {
-          blocks.push({ type: "latex", text: latexContent.trim() });
-          i = j; // skip to closing $$
-          continue;
-        }
       }
 
       // [IMMAGINE: description] or [Vedi figura: description] tags
@@ -1288,10 +1301,8 @@ export default function SourceSummariesPage() {
           const container = document.createElement("div");
           container.innerHTML = html;
           container.style.position = "fixed";
-          container.style.left = "0";
+          container.style.left = "-2000px";
           container.style.top = "0";
-          container.style.zIndex = "-9999";
-          container.style.opacity = "0.01";
           container.style.fontSize = "22px";
           container.style.color = "#000000";
           container.style.background = "#ffffff";
