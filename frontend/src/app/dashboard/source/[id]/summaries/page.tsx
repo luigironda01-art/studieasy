@@ -1552,7 +1552,7 @@ export default function SourceSummariesPage() {
           const w = window as unknown as Record<string, unknown>;
           w.MathJax = {
             tex: { packages: { "[+]": ["ams"] } },
-            svg: { fontCache: "global" },
+            svg: { fontCache: "local" },
             startup: {
               ready: () => {
                 const MJ = (window as unknown as Record<string, unknown>).MathJax as Record<string, { defaultReady: () => void }>;
