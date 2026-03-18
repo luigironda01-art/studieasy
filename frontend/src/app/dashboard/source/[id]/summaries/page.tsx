@@ -655,14 +655,22 @@ export default function SourceSummariesPage() {
         // Only convert simple a/b patterns (single tokens separated by /)
         l = l.replace(/\(([^()\/]+)\/([^()]+)\)/g, "\\frac{$1}{$2}");
 
-        // Fix "per" (Italian) leaked into formula — also handle "per0" (glued to number)
-        l = l.replace(/\bper(?=\b|\d)/g, "\\quad ");
+        // Fix "per" (Italian for "for") — convert to quad spacing
+        l = l.replace(/per(?=\d|\\leq|\\geq)/g, "\\quad ");
+        l = l.replace(/(?<![a-zA-Z])per(?![a-zA-Z])/g, "\\quad ");
 
         // Fix common function names that need backslash (lookahead includes \ for \frac etc.)
         l = l.replace(/(?<![\\a-zA-Z])(sin|cos|tan|log|ln|exp|lim)(?=[(_\s{^\\]|$)/g, "\\$1");
 
         // Convert |expr| to \left|expr\right| (absolute value)
         l = l.replace(/\|([^|]+)\|/g, "\\left|$1\\right|");
+
+        // Wrap known Italian words that leak into formulas in \text{}
+        // Only target specific words (safe list) to avoid breaking LaTeX commands
+        const italianMathWords = ["altrove", "dove", "quando", "oppure", "ovvero", "quindi", "circa", "tale", "ogni", "solo", "sempre"];
+        for (const word of italianMathWords) {
+          l = l.replace(new RegExp(`(?<![\\\\a-zA-Z])${word}(?![a-zA-Z])`, "gi"), `\\text{ ${word} }`);
+        }
 
         // Clean up multiple spaces
         l = l.replace(/\s{2,}/g, " ").trim();
@@ -1527,7 +1535,9 @@ export default function SourceSummariesPage() {
           container.innerHTML = html;
           container.style.position = "fixed";
           container.style.left = "-9999px";
-          container.style.top = "0";
+          container.style.top = "-9999px";
+          container.style.zIndex = "-9999";
+          container.style.pointerEvents = "none";
           container.style.fontSize = "22px";
           container.style.color = "#000000";
           container.style.backgroundColor = "#ffffff";
