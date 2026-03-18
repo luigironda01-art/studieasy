@@ -59,6 +59,7 @@ export default function SourceFlashcardsPage() {
   const [generateCount, setGenerateCount] = useState(10);
   const [generateDifficulty, setGenerateDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [generating, setGenerating] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState("");
 
   useBreadcrumb(
     source
@@ -145,27 +146,32 @@ export default function SourceFlashcardsPage() {
         // Build array: [cardsForCh0, cardsForCh1, ...] — first 'remainder' chapters get +1
         const distribution = chapters.map((_, i) => basePerChapter + (i < remainder ? 1 : 0));
 
-        // Fire all requests in parallel
-        const requests = chapters.map((ch, i) => {
-          if (distribution[i] <= 0) return Promise.resolve();
-          return fetch("/api/flashcards/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chapterId: ch.id,
-              userId: user.id,
-              numCards: distribution[i],
-              difficulty: generateDifficulty,
-              language: "it",
-            }),
-          });
-        });
-
-        const results = await Promise.all(requests);
-        const failed = results.filter(r => r && !r.ok);
-        if (failed.length === results.length) {
-          throw new Error("Generazione fallita");
+        // Process sequentially to avoid API overload
+        let completed = 0;
+        let failed = 0;
+        for (let i = 0; i < chapters.length; i++) {
+          if (distribution[i] <= 0) continue;
+          setGenerateProgress(`Capitolo ${completed + 1} di ${numChapters}...`);
+          try {
+            const res = await fetch("/api/flashcards/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chapterId: chapters[i].id,
+                userId: user.id,
+                numCards: distribution[i],
+                difficulty: generateDifficulty,
+                language: "it",
+              }),
+            });
+            if (res.ok) completed++;
+            else failed++;
+          } catch {
+            failed++;
+          }
         }
+        setGenerateProgress("");
+        if (completed === 0) throw new Error("Generazione fallita");
       } else {
         // Single chapter generation
         const response = await fetch("/api/flashcards/generate", {
@@ -855,7 +861,7 @@ export default function SourceFlashcardsPage() {
                 {generating ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    Generando...
+                    {generateProgress || "Generando..."}
                   </>
                 ) : (
                   `Genera ${generateCount}`
