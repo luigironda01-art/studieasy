@@ -1368,14 +1368,21 @@ export default function SourceSummariesPage() {
         s = s.replace(/\\(psi|phi|Psi|Phi|alpha|beta|gamma|delta|omega|theta|sigma|lambda|mu|epsilon|rho|tau|nu|xi|pi|hbar|sqrt|frac|sin|cos|tan|log|ln|exp|int|sum|prod|left|right|lim|inf|sup|max|min|det|ker|dim|deg|gcd|arg|bmod|pmod)\s+(\(|\{|\[)/g, "\\$1$2");
         // Fix double backslashes that aren't line breaks: \\frac → \frac
         s = s.replace(/\\\\(?=(frac|sqrt|psi|phi|int|sum|prod|left|right|sin|cos|tan|hbar|alpha|beta|gamma|delta))/g, "\\");
-        // Fix missing backslash: standalone "int" at word boundary → \int
-        s = s.replace(/(?<![\\a-zA-Z])int(?=[_^{\s]|$)/g, "\\int");
-        // Fix missing backslash: standalone "sum" → \sum, "prod" → \prod
-        s = s.replace(/(?<![\\a-zA-Z])sum(?=[_^{\s]|$)/g, "\\sum");
-        s = s.replace(/(?<![\\a-zA-Z])prod(?=[_^{\s]|$)/g, "\\prod");
-        // Fix missing backslash: "sqrt" → \sqrt, "frac" → \frac
-        s = s.replace(/(?<![\\a-zA-Z])sqrt(?=[{\s(])/g, "\\sqrt");
-        s = s.replace(/(?<![\\a-zA-Z])frac(?=[{\s(])/g, "\\frac");
+        // Fix missing backslash on common LaTeX commands (AI sometimes omits \)
+        const latexCommands = [
+          "int", "sum", "prod", "sqrt", "frac", "left", "right",
+          "psi", "Psi", "phi", "Phi", "alpha", "beta", "gamma", "delta", "Delta",
+          "omega", "Omega", "theta", "sigma", "lambda", "mu", "epsilon", "rho",
+          "tau", "nu", "xi", "pi", "hbar", "nabla", "partial", "infty",
+          "sin", "cos", "tan", "log", "ln", "exp", "lim",
+          "leq", "geq", "neq", "approx", "cdot", "times", "pm",
+          "vec", "hat", "bar", "dot", "ddot", "tilde",
+        ];
+        for (const cmd of latexCommands) {
+          // Match standalone command not preceded by \ or other letters
+          const re = new RegExp(`(?<![\\\\a-zA-Z])${cmd}(?=[_^{\\s(\\[|]|$)`, "g");
+          s = s.replace(re, `\\${cmd}`);
+        }
         // Fix "per" appearing in formula (Italian word leaked in) — remove it
         s = s.replace(/\bper\b/g, "\\quad");
         return s;
@@ -1432,7 +1439,7 @@ export default function SourceSummariesPage() {
           // Wait for CSS to apply
           await new Promise(resolve => setTimeout(resolve, 100));
 
-          const canvas = await html2canvas(container, {
+          const rawCanvas = await html2canvas(container, {
             scale: 3,
             backgroundColor: "#ffffff",
             logging: false,
@@ -1441,14 +1448,45 @@ export default function SourceSummariesPage() {
 
           // Cleanup style tag
           document.head.removeChild(style);
-
-          const dataUrl = canvas.toDataURL("image/png");
-          const w = canvas.width;
-          const h = canvas.height;
-
           document.body.removeChild(container);
 
-          return { dataUrl, width: w, height: h };
+          // Auto-crop: remove gray/non-white rows from top and bottom
+          const ctx = rawCanvas.getContext("2d");
+          if (!ctx) return null;
+          const imgData = ctx.getImageData(0, 0, rawCanvas.width, rawCanvas.height);
+          const { data, width, height } = imgData;
+
+          // Find first and last rows that contain non-white pixels (threshold 240)
+          const isWhiteRow = (row: number) => {
+            for (let x = 0; x < width; x++) {
+              const i = (row * width + x) * 4;
+              if (data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240) return false;
+            }
+            return true;
+          };
+
+          let topCrop = 0;
+          while (topCrop < height && isWhiteRow(topCrop)) topCrop++;
+          let bottomCrop = height - 1;
+          while (bottomCrop > topCrop && isWhiteRow(bottomCrop)) bottomCrop--;
+
+          // Add small padding (6px)
+          topCrop = Math.max(0, topCrop - 6);
+          bottomCrop = Math.min(height - 1, bottomCrop + 6);
+          const croppedHeight = bottomCrop - topCrop + 1;
+
+          // Create cropped canvas
+          const croppedCanvas = document.createElement("canvas");
+          croppedCanvas.width = width;
+          croppedCanvas.height = croppedHeight;
+          const croppedCtx = croppedCanvas.getContext("2d");
+          if (!croppedCtx) return null;
+          croppedCtx.fillStyle = "#ffffff";
+          croppedCtx.fillRect(0, 0, width, croppedHeight);
+          croppedCtx.drawImage(rawCanvas, 0, topCrop, width, croppedHeight, 0, 0, width, croppedHeight);
+
+          const dataUrl = croppedCanvas.toDataURL("image/png");
+          return { dataUrl, width, height: croppedHeight };
         } catch (err) {
           console.warn("[PDF] KaTeX render failed for:", latex, err);
           return null;
