@@ -1511,17 +1511,31 @@ export default function SourceSummariesPage() {
 
       // ── KaTeX formula rendering helper ──
       // Load KaTeX CSS once for all formulas
-      let katexCssLoaded = !!document.querySelector('link[href*="katex"]');
+      let katexCssLoaded = !!document.querySelector('style[data-katex-inline]');
       const ensureKatexCss = async () => {
         if (katexCssLoaded) return;
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.38/dist/katex.min.css";
-        document.head.appendChild(link);
-        await new Promise<void>(resolve => {
-          link.onload = () => resolve();
-          setTimeout(resolve, 1500); // fallback timeout
-        });
+        // Remove any cross-origin <link> tags for KaTeX (html2canvas can't read them)
+        document.querySelectorAll('link[href*="katex"]').forEach(el => el.remove());
+        try {
+          // Fetch CSS content and inject as inline <style> so html2canvas can read it
+          // (html2canvas cannot read cross-origin <link> stylesheets)
+          const res = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.38/dist/katex.min.css");
+          const cssText = await res.text();
+          const style = document.createElement("style");
+          style.setAttribute("data-katex-inline", "true");
+          style.textContent = cssText;
+          document.head.appendChild(style);
+        } catch {
+          // Fallback to link tag if fetch fails
+          const link = document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.38/dist/katex.min.css";
+          document.head.appendChild(link);
+          await new Promise<void>(resolve => {
+            link.onload = () => resolve();
+            setTimeout(resolve, 1500);
+          });
+        }
         katexCssLoaded = true;
       };
 
@@ -1581,46 +1595,59 @@ export default function SourceSummariesPage() {
           container.style.top = "-9999px";
           container.style.zIndex = "-9999";
           container.style.pointerEvents = "none";
-          // Larger font = more pixels for fraction detail = less overlap
           container.style.fontSize = "32px";
           container.style.color = "#000000";
           container.style.backgroundColor = "#ffffff";
           container.style.padding = "16px 20px";
           container.style.display = "inline-block";
           container.style.overflow = "visible";
-          // Force black color on ALL child elements (KaTeX uses nested spans)
-          const style = document.createElement("style");
-          style.textContent = `
-            .katex-formula-capture, .katex-formula-capture * {
-              color: #000000 !important;
-              opacity: 1 !important;
-              -webkit-text-fill-color: #000000 !important;
-              background: transparent !important;
-            }
-            .katex-formula-capture {
-              background-color: #ffffff !important;
-            }
-            .katex-formula-capture .katex-html {
-              background: transparent !important;
-            }
-          `;
-          container.classList.add("katex-formula-capture");
-          document.head.appendChild(style);
           document.body.appendChild(container);
 
-          // Wait for KaTeX CSS to fully apply
-          await new Promise(resolve => setTimeout(resolve, 200));
+          // Wait for KaTeX CSS + fonts to fully apply
+          await document.fonts.ready;
+          await new Promise(resolve => setTimeout(resolve, 150));
 
-          // Higher scale (5) = more pixels = less sub-pixel rounding errors in fraction positioning
+          // CRITICAL: Inline ALL computed styles on every element so html2canvas
+          // doesn't need to interpret KaTeX's complex CSS (vlist, pstrut, frac-line, etc.)
+          const inlineComputedStyles = (el: HTMLElement) => {
+            const cs = window.getComputedStyle(el);
+            // All properties that affect KaTeX fraction/vertical positioning
+            const props = [
+              "position", "top", "left", "right", "bottom",
+              "display", "width", "height", "min-width", "min-height", "max-width",
+              "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+              "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+              "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+              "border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
+              "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+              "vertical-align", "line-height", "text-align",
+              "font-family", "font-size", "font-weight", "font-style",
+              "color", "background-color", "opacity",
+              "transform", "transform-origin",
+              "box-sizing", "overflow",
+            ];
+            for (const prop of props) {
+              const val = cs.getPropertyValue(prop);
+              if (val) el.style.setProperty(prop, val);
+            }
+            // Force black text
+            el.style.setProperty("color", "#000000");
+            el.style.setProperty("opacity", "1");
+            // Recurse into children
+            Array.from(el.children).forEach(child => {
+              if (child instanceof HTMLElement) inlineComputedStyles(child);
+            });
+          };
+          inlineComputedStyles(container);
+
           const rawCanvas = await html2canvas(container, {
-            scale: 5,
+            scale: 4,
             backgroundColor: "#ffffff",
             logging: false,
             useCORS: true,
           });
 
           // Cleanup
-          document.head.removeChild(style);
           document.body.removeChild(container);
 
           // Auto-crop: remove white rows from top and bottom
