@@ -154,7 +154,15 @@ ERRORI DA NON FARE MAI:
 ❌ NO: ℏ²/2m d²ψ(x)/dx² = Eψ(x)  (testo piatto — VIETATO per formule con frazioni)
 ❌ NO: E<sub>n</sub> = n²h²/8mL²  (HTML tags — MAI usare <sub>, <sup> nel riassunto)
 ❌ NO: Eₙ = n²h²/(8mL²)  (Unicode piatto per formula con frazione — DEVE essere $$LaTeX$$)
+❌ NO: $$\\psi_n(x) = ... per 0 \\leq x \\leq L$$  (parole italiane DENTRO la formula)
 ✅ SI: $$E_n = \\frac{n^2 h^2}{8mL^2}$$
+✅ SI: La formula vale per 0 ≤ x ≤ L (testo italiano FUORI dalla formula, dopo $$...$$)
+
+REGOLE AGGIUNTIVE:
+- NON mettere MAI parole italiane (per, dove, con, se, ecc.) dentro $$...$$
+- Il dominio di validità va scritto DOPO la formula come testo normale
+- Usa SEMPRE \\int (non "int"), \\sum (non "sum"), \\frac (non "frac")
+- SEMPRE chiudere $$ alla fine della formula sulla STESSA riga: $$formula$$
 
 SOLO Unicode inline per formule VERAMENTE semplici senza frazioni:
 - E = mc², x², ψₙ, n = 1, 2, 3..., V = 0, V = ∞

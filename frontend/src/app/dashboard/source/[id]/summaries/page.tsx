@@ -1368,6 +1368,16 @@ export default function SourceSummariesPage() {
         s = s.replace(/\\(psi|phi|Psi|Phi|alpha|beta|gamma|delta|omega|theta|sigma|lambda|mu|epsilon|rho|tau|nu|xi|pi|hbar|sqrt|frac|sin|cos|tan|log|ln|exp|int|sum|prod|left|right|lim|inf|sup|max|min|det|ker|dim|deg|gcd|arg|bmod|pmod)\s+(\(|\{|\[)/g, "\\$1$2");
         // Fix double backslashes that aren't line breaks: \\frac → \frac
         s = s.replace(/\\\\(?=(frac|sqrt|psi|phi|int|sum|prod|left|right|sin|cos|tan|hbar|alpha|beta|gamma|delta))/g, "\\");
+        // Fix missing backslash: standalone "int" at word boundary → \int
+        s = s.replace(/(?<![\\a-zA-Z])int(?=[_^{\s]|$)/g, "\\int");
+        // Fix missing backslash: standalone "sum" → \sum, "prod" → \prod
+        s = s.replace(/(?<![\\a-zA-Z])sum(?=[_^{\s]|$)/g, "\\sum");
+        s = s.replace(/(?<![\\a-zA-Z])prod(?=[_^{\s]|$)/g, "\\prod");
+        // Fix missing backslash: "sqrt" → \sqrt, "frac" → \frac
+        s = s.replace(/(?<![\\a-zA-Z])sqrt(?=[{\s(])/g, "\\sqrt");
+        s = s.replace(/(?<![\\a-zA-Z])frac(?=[{\s(])/g, "\\frac");
+        // Fix "per" appearing in formula (Italian word leaked in) — remove it
+        s = s.replace(/\bper\b/g, "\\quad");
         return s;
       };
 
@@ -1394,9 +1404,11 @@ export default function SourceSummariesPage() {
           container.style.top = "0";
           container.style.fontSize = "22px";
           container.style.color = "#000000";
-          container.style.background = "#ffffff";
-          container.style.padding = "10px 16px";
+          container.style.backgroundColor = "#ffffff";
+          container.style.padding = "4px 8px";
           container.style.display = "inline-block";
+          container.style.lineHeight = "1.2";
+          container.style.overflow = "hidden";
           // Force black color on ALL child elements (KaTeX uses nested spans)
           const style = document.createElement("style");
           style.textContent = `
@@ -1404,6 +1416,13 @@ export default function SourceSummariesPage() {
               color: #000000 !important;
               opacity: 1 !important;
               -webkit-text-fill-color: #000000 !important;
+              background: transparent !important;
+            }
+            .katex-formula-capture {
+              background-color: #ffffff !important;
+            }
+            .katex-formula-capture .katex-html {
+              background: transparent !important;
             }
           `;
           container.classList.add("katex-formula-capture");

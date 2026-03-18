@@ -440,6 +440,11 @@ ERRORI VIETATI:
 - NO tag HTML: MAI usare <sub>, <sup>, <br>
 - NO Unicode piatto per formule complesse: "Eₙ = n²h²/(8mL²)" DEVE essere $$E_n = \\frac{{n^2 h^2}}{{8mL^2}}$$
 
+REGOLE AGGIUNTIVE:
+- NON mettere MAI parole italiane (per, dove, con) dentro $$...$$
+- Usa SEMPRE \\int (non "int"), \\sum (non "sum"), \\frac (non "frac")
+- SEMPRE chiudere $$ alla fine della formula sulla STESSA riga
+
 SOLO Unicode per formule semplici senza frazioni: E = mc², n = 1, 2, 3..., V = 0
 
 TESTO DA RIASSUMERE:
