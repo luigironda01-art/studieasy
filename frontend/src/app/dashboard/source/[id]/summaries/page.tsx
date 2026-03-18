@@ -592,23 +592,32 @@ export default function SourceSummariesPage() {
         blocks.push({ type: "latex", text: latexSingleMatch[1].trim() });
         continue;
       }
-      if (line === "$$" || line === "$ $") {
+      // Multi-line LaTeX: standalone $$ or $$ with content (start of block)
+      if (line === "$$" || line === "$ $" || (line.startsWith("$$") && !line.endsWith("$$"))) {
         // End any open table
         if (inTable && tableRows.length > 0) {
           blocks.push({ type: "table", text: "", rows: [...tableRows] });
           tableRows = [];
           inTable = false;
         }
-        // Multi-line LaTeX: collect until closing $$
-        let latexContent = "";
+        // Multi-line LaTeX: collect until closing $$ (standalone or at end of line)
+        let latexContent = line.startsWith("$$") && line.length > 2 ? line.slice(2).trim() : "";
         let j = i + 1;
-        while (j < lines.length && lines[j].trim() !== "$$") {
-          latexContent += (latexContent ? " " : "") + lines[j].trim();
+        while (j < lines.length) {
+          const jLine = lines[j].trim();
+          if (jLine === "$$") {
+            break; // standalone closing $$
+          }
+          if (jLine.endsWith("$$")) {
+            latexContent += (latexContent ? " " : "") + jLine.slice(0, -2).trim();
+            break; // closing $$ at end of line
+          }
+          latexContent += (latexContent ? " " : "") + jLine;
           j++;
         }
-        if (j < lines.length) {
+        if (latexContent.trim()) {
           blocks.push({ type: "latex", text: latexContent.trim() });
-          i = j; // skip to closing $$
+          i = j < lines.length ? j : j - 1; // skip to closing line
           continue;
         }
       }
@@ -1295,14 +1304,31 @@ export default function SourceSummariesPage() {
         katexCssLoaded = true;
       };
 
+      // Clean up LaTeX string before passing to KaTeX
+      const cleanLatex = (raw: string): string => {
+        let s = raw.trim();
+        // Remove leading/trailing $$ if somehow still present
+        if (s.startsWith("$$")) s = s.slice(2);
+        if (s.endsWith("$$")) s = s.slice(0, -2);
+        s = s.trim();
+        // Fix common AI output issues:
+        // \psi (x) → \psi(x), \frac {a}{b} → \frac{a}{b}
+        s = s.replace(/\\(psi|phi|Psi|Phi|alpha|beta|gamma|delta|omega|theta|sigma|lambda|mu|epsilon|rho|tau|nu|xi|pi|hbar|sqrt|frac|sin|cos|tan|log|ln|exp|int|sum|prod|left|right|lim|inf|sup|max|min|det|ker|dim|deg|gcd|arg|bmod|pmod)\s+(\(|\{|\[)/g, "\\$1$2");
+        // Fix double backslashes that aren't line breaks: \\frac → \frac
+        s = s.replace(/\\\\(?=(frac|sqrt|psi|phi|int|sum|prod|left|right|sin|cos|tan|hbar|alpha|beta|gamma|delta))/g, "\\");
+        return s;
+      };
+
       const renderLatexToImage = async (latex: string): Promise<{ dataUrl: string; width: number; height: number } | null> => {
         try {
           const katex = (await import("katex")).default;
           const html2canvas = (await import("html2canvas")).default;
           await ensureKatexCss();
 
+          const cleaned = cleanLatex(latex);
+
           // Render LaTeX to HTML
-          const html = katex.renderToString(latex, {
+          const html = katex.renderToString(cleaned, {
             displayMode: true,
             throwOnError: false,
             output: "html",
@@ -1444,27 +1470,93 @@ export default function SourceSummariesPage() {
           }
 
           case "latex": {
+            // Helper: convert LaTeX to readable Unicode for fallback
+            const latexToReadable = (tex: string): string => {
+              let s = cleanLatex(tex);
+              // Replace common LaTeX commands with Unicode
+              s = s.replace(/\\hbar/g, "ℏ");
+              s = s.replace(/\\psi/g, "ψ");
+              s = s.replace(/\\Psi/g, "Ψ");
+              s = s.replace(/\\phi/g, "φ");
+              s = s.replace(/\\pi/g, "π");
+              s = s.replace(/\\alpha/g, "α");
+              s = s.replace(/\\beta/g, "β");
+              s = s.replace(/\\gamma/g, "γ");
+              s = s.replace(/\\delta/g, "δ");
+              s = s.replace(/\\Delta/g, "Δ");
+              s = s.replace(/\\omega/g, "ω");
+              s = s.replace(/\\theta/g, "θ");
+              s = s.replace(/\\sigma/g, "σ");
+              s = s.replace(/\\lambda/g, "λ");
+              s = s.replace(/\\mu/g, "μ");
+              s = s.replace(/\\epsilon/g, "ε");
+              s = s.replace(/\\infty/g, "∞");
+              s = s.replace(/\\nabla/g, "∇");
+              s = s.replace(/\\partial/g, "∂");
+              s = s.replace(/\\int/g, "∫");
+              s = s.replace(/\\sum/g, "∑");
+              s = s.replace(/\\prod/g, "∏");
+              s = s.replace(/\\sqrt\{([^}]+)\}/g, "√($1)");
+              s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, "($1)/($2)");
+              s = s.replace(/\\left[|(]/g, "(");
+              s = s.replace(/\\right[|)]/g, ")");
+              s = s.replace(/\\left\\\{/g, "{");
+              s = s.replace(/\\right\\\}/g, "}");
+              s = s.replace(/\\cdot/g, "·");
+              s = s.replace(/\\times/g, "×");
+              s = s.replace(/\\leq/g, "≤");
+              s = s.replace(/\\geq/g, "≥");
+              s = s.replace(/\\neq/g, "≠");
+              s = s.replace(/\\approx/g, "≈");
+              s = s.replace(/\\pm/g, "±");
+              s = s.replace(/\\sin/g, "sin");
+              s = s.replace(/\\cos/g, "cos");
+              s = s.replace(/\\tan/g, "tan");
+              s = s.replace(/\\ln/g, "ln");
+              s = s.replace(/\\log/g, "log");
+              s = s.replace(/\\exp/g, "exp");
+              s = s.replace(/\^2/g, "²");
+              s = s.replace(/\^3/g, "³");
+              s = s.replace(/\^n/g, "ⁿ");
+              s = s.replace(/_0/g, "₀");
+              s = s.replace(/_1/g, "₁");
+              s = s.replace(/_n/g, "ₙ");
+              // Remove remaining LaTeX commands
+              s = s.replace(/\\[a-zA-Z]+/g, "");
+              // Clean up braces and extra whitespace
+              s = s.replace(/[{}]/g, "");
+              s = s.replace(/\s+/g, " ").trim();
+              return s;
+            };
+
             try {
               const rendered = await renderLatexToImage(block.text);
               if (rendered) {
-                // Scale image to fit PDF width (max 70% of page width)
-                const imgWidthMm = Math.min(maxWidth * 0.7, rendered.width / 3 * 0.264583);
-                const imgHeightMm = imgWidthMm * (rendered.height / rendered.width);
+                // Scale image to fit PDF width (max 70% of page width), min height 4mm
+                let imgWidthMm = Math.min(maxWidth * 0.7, rendered.width / 3 * 0.264583);
+                let imgHeightMm = imgWidthMm * (rendered.height / rendered.width);
+                // Ensure minimum readable height
+                if (imgHeightMm < 4) {
+                  imgHeightMm = 4;
+                  imgWidthMm = imgHeightMm * (rendered.width / rendered.height);
+                }
                 ensureSpace(imgHeightMm + 6);
                 y += 2;
                 const imgX = margin + (maxWidth - imgWidthMm) / 2; // center
                 doc.addImage(rendered.dataUrl, "PNG", imgX, y, imgWidthMm, imgHeightMm);
                 y += imgHeightMm + 4;
               } else {
-                // Fallback: render as plain text
-                doc.setFontSize(10.5);
+                // Fallback: render as readable Unicode text (not raw LaTeX)
+                doc.setFontSize(11);
                 doc.setFont(pdfFont, "normal");
                 doc.setTextColor(30, 30, 30);
-                const fallbackText = sanitizeForPdf(block.text);
-                const lines = doc.splitTextToSize(fallbackText, maxWidth);
+                const fallbackText = sanitizeForPdf(latexToReadable(block.text));
+                const lines = doc.splitTextToSize(fallbackText, maxWidth - 20);
+                ensureSpace(8);
+                y += 2;
                 for (const line of lines) {
                   ensureSpace(6);
-                  doc.text(line, margin, y);
+                  doc.text(line, margin + 10, y); // slightly indented, centered
                   y += 5.5;
                 }
                 y += 2;
@@ -1472,17 +1564,19 @@ export default function SourceSummariesPage() {
               }
             } catch (err) {
               console.warn("[PDF] LaTeX block render failed:", err);
-              // Fallback: render as text
-              doc.setFontSize(10.5);
+              // Fallback: readable Unicode
+              doc.setFontSize(11);
               doc.setFont(pdfFont, "normal");
-              const fallbackText = sanitizeForPdf(block.text);
-              const lines = doc.splitTextToSize(fallbackText, maxWidth);
+              doc.setTextColor(30, 30, 30);
+              const fallbackText = sanitizeForPdf(latexToReadable(block.text));
+              const lines = doc.splitTextToSize(fallbackText, maxWidth - 20);
               for (const line of lines) {
                 ensureSpace(6);
-                doc.text(line, margin, y);
+                doc.text(line, margin + 10, y);
                 y += 5.5;
               }
               y += 2;
+              doc.setTextColor(0);
             }
             break;
           }
