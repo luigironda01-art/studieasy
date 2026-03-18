@@ -249,6 +249,17 @@ export default function SourceSummariesPage() {
       return `[IMMAGINE: ${single}]`;
     });
 
+    // 1a2. Ensure $$...$$ LaTeX blocks are on their own lines
+    // This prevents formulas with | (absolute value) from being parsed as table rows
+    // Handle both single-line $$...$$ and multi-line $$ ... $$
+    cleaned = cleaned.replace(/^(.+?)(\$\$(?:[^$]|\$(?!\$))+\$\$)(.*)$/gm, (_m, before: string, formula: string, after: string) => {
+      let result = "";
+      if (before.trim()) result += before.trimEnd() + "\n";
+      result += formula;
+      if (after.trim()) result += "\n" + after.trimStart();
+      return result;
+    });
+
     // 1b. Remove markdown code fences
     cleaned = cleaned.replace(/```(?:markdown|text)?\s*/gi, "");
 
@@ -581,7 +592,7 @@ export default function SourceSummariesPage() {
         blocks.push({ type: "latex", text: latexSingleMatch[1].trim() });
         continue;
       }
-      if (line === "$$") {
+      if (line === "$$" || line === "$ $") {
         // End any open table
         if (inTable && tableRows.length > 0) {
           blocks.push({ type: "table", text: "", rows: [...tableRows] });
@@ -1301,23 +1312,39 @@ export default function SourceSummariesPage() {
           const container = document.createElement("div");
           container.innerHTML = html;
           container.style.position = "fixed";
-          container.style.left = "-2000px";
+          container.style.left = "0";
           container.style.top = "0";
+          container.style.zIndex = "99999";
           container.style.fontSize = "22px";
           container.style.color = "#000000";
           container.style.background = "#ffffff";
           container.style.padding = "10px 16px";
           container.style.display = "inline-block";
+          // Force black color on ALL child elements (KaTeX uses nested spans)
+          const style = document.createElement("style");
+          style.textContent = `
+            .katex-formula-capture, .katex-formula-capture * {
+              color: #000000 !important;
+              opacity: 1 !important;
+              -webkit-text-fill-color: #000000 !important;
+            }
+          `;
+          container.classList.add("katex-formula-capture");
+          document.head.appendChild(style);
           document.body.appendChild(container);
 
           // Wait for CSS to apply
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await new Promise(resolve => setTimeout(resolve, 100));
 
           const canvas = await html2canvas(container, {
             scale: 3,
             backgroundColor: "#ffffff",
             logging: false,
+            useCORS: true,
           });
+
+          // Cleanup style tag
+          document.head.removeChild(style);
 
           const dataUrl = canvas.toDataURL("image/png");
           const w = canvas.width;
