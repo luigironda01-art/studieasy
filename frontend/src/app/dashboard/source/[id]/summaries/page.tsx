@@ -1509,37 +1509,9 @@ export default function SourceSummariesPage() {
         }
       };
 
-      // ── KaTeX formula rendering helper ──
-      // Load KaTeX CSS once for all formulas
-      let katexCssLoaded = !!document.querySelector('style[data-katex-inline]');
-      const ensureKatexCss = async () => {
-        if (katexCssLoaded) return;
-        // Remove any cross-origin <link> tags for KaTeX (html2canvas can't read them)
-        document.querySelectorAll('link[href*="katex"]').forEach(el => el.remove());
-        try {
-          // Fetch CSS content and inject as inline <style> so html2canvas can read it
-          // (html2canvas cannot read cross-origin <link> stylesheets)
-          const res = await fetch("https://cdn.jsdelivr.net/npm/katex@0.16.38/dist/katex.min.css");
-          const cssText = await res.text();
-          const style = document.createElement("style");
-          style.setAttribute("data-katex-inline", "true");
-          style.textContent = cssText;
-          document.head.appendChild(style);
-        } catch {
-          // Fallback to link tag if fetch fails
-          const link = document.createElement("link");
-          link.rel = "stylesheet";
-          link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.38/dist/katex.min.css";
-          document.head.appendChild(link);
-          await new Promise<void>(resolve => {
-            link.onload = () => resolve();
-            setTimeout(resolve, 1500);
-          });
-        }
-        katexCssLoaded = true;
-      };
+      // ── Formula rendering helpers ──
 
-      // Clean up LaTeX string before passing to KaTeX
+      // Clean up LaTeX string before passing to MathJax
       const cleanLatex = (raw: string): string => {
         if (!raw || raw === "undefined") return "";
         let s = raw.trim();
@@ -1572,122 +1544,92 @@ export default function SourceSummariesPage() {
         return s;
       };
 
+      // Load MathJax once (SVG output — self-contained vector paths, no CSS/font issues)
+      let mathjaxReady = !!(window as unknown as Record<string, unknown>).MathJax?.hasOwnProperty("tex2svg");
+      const ensureMathJax = async () => {
+        if (mathjaxReady) return;
+        await new Promise<void>((resolve, reject) => {
+          const w = window as unknown as Record<string, unknown>;
+          w.MathJax = {
+            tex: { packages: { "[+]": ["ams"] } },
+            svg: { fontCache: "global" },
+            startup: {
+              ready: () => {
+                const MJ = (window as unknown as Record<string, unknown>).MathJax as Record<string, { defaultReady: () => void }>;
+                MJ.startup.defaultReady();
+                mathjaxReady = true;
+                resolve();
+              },
+            },
+          };
+          const script = document.createElement("script");
+          script.src = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js";
+          script.async = true;
+          script.onerror = () => reject(new Error("Failed to load MathJax"));
+          document.head.appendChild(script);
+        });
+      };
+
       const renderLatexToImage = async (latex: string): Promise<{ dataUrl: string; width: number; height: number } | null> => {
         try {
-          const katex = (await import("katex")).default;
-          const html2canvas = (await import("html2canvas")).default;
-          await ensureKatexCss();
-
+          await ensureMathJax();
           const cleaned = cleanLatex(latex);
 
-          // Render LaTeX to HTML
-          const html = katex.renderToString(cleaned, {
-            displayMode: true,
-            throwOnError: false,
-            output: "html",
+          // MathJax renders LaTeX → SVG with vector paths (no fonts, no CSS needed)
+          const MJ = (window as unknown as Record<string, { tex2svg: (tex: string, opts: Record<string, boolean>) => HTMLElement }>).MathJax;
+          const wrapper = MJ.tex2svg(cleaned, { display: true });
+          const svgEl = wrapper.querySelector("svg");
+          if (!svgEl) return null;
+
+          // Convert MathJax 'ex' units to pixels for consistent sizing
+          const exToPx = 12; // 1ex = 12px gives good quality
+          const wEx = parseFloat(svgEl.getAttribute("width")?.replace("ex", "") || "10");
+          const hEx = parseFloat(svgEl.getAttribute("height")?.replace("ex", "") || "3");
+          const pxW = Math.ceil(wEx * exToPx);
+          const pxH = Math.ceil(hEx * exToPx);
+
+          // Set pixel dimensions (viewBox stays the same, SVG scales perfectly)
+          const scale = 3;
+          svgEl.setAttribute("width", `${pxW * scale}px`);
+          svgEl.setAttribute("height", `${pxH * scale}px`);
+
+          // Force black color (MathJax uses currentColor)
+          svgEl.setAttribute("color", "#000000");
+          svgEl.style.color = "#000000";
+
+          // Serialize SVG
+          let svgString = new XMLSerializer().serializeToString(svgEl);
+          // Ensure xmlns is present
+          if (!svgString.includes('xmlns="http://www.w3.org/2000/svg"')) {
+            svgString = svgString.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+          }
+          // Replace currentColor with explicit black
+          svgString = svgString.replace(/currentColor/g, "#000000");
+
+          // SVG → Image → Canvas → PNG
+          const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+          const url = URL.createObjectURL(svgBlob);
+          const img = new Image();
+          img.src = url;
+          await new Promise<void>((res, rej) => {
+            img.onload = () => res();
+            img.onerror = () => rej(new Error("SVG load failed"));
           });
 
-          // Create container offscreen for html2canvas capture
-          const container = document.createElement("div");
-          container.innerHTML = html;
-          container.style.position = "fixed";
-          container.style.left = "-9999px";
-          container.style.top = "-9999px";
-          container.style.zIndex = "-9999";
-          container.style.pointerEvents = "none";
-          container.style.fontSize = "32px";
-          container.style.color = "#000000";
-          container.style.backgroundColor = "#ffffff";
-          container.style.padding = "16px 20px";
-          container.style.display = "inline-block";
-          container.style.overflow = "visible";
-          document.body.appendChild(container);
-
-          // Wait for KaTeX CSS + fonts to fully apply
-          await document.fonts.ready;
-          await new Promise(resolve => setTimeout(resolve, 150));
-
-          // CRITICAL: Inline ALL computed styles on every element so html2canvas
-          // doesn't need to interpret KaTeX's complex CSS (vlist, pstrut, frac-line, etc.)
-          const inlineComputedStyles = (el: HTMLElement) => {
-            const cs = window.getComputedStyle(el);
-            // All properties that affect KaTeX fraction/vertical positioning
-            const props = [
-              "position", "top", "left", "right", "bottom",
-              "display", "width", "height", "min-width", "min-height", "max-width",
-              "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
-              "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
-              "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
-              "border-top-style", "border-right-style", "border-bottom-style", "border-left-style",
-              "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
-              "vertical-align", "line-height", "text-align",
-              "font-family", "font-size", "font-weight", "font-style",
-              "color", "background-color", "opacity",
-              "transform", "transform-origin",
-              "box-sizing", "overflow",
-            ];
-            for (const prop of props) {
-              const val = cs.getPropertyValue(prop);
-              if (val) el.style.setProperty(prop, val);
-            }
-            // Force black text
-            el.style.setProperty("color", "#000000");
-            el.style.setProperty("opacity", "1");
-            // Recurse into children
-            Array.from(el.children).forEach(child => {
-              if (child instanceof HTMLElement) inlineComputedStyles(child);
-            });
-          };
-          inlineComputedStyles(container);
-
-          const rawCanvas = await html2canvas(container, {
-            scale: 4,
-            backgroundColor: "#ffffff",
-            logging: false,
-            useCORS: true,
-          });
-
-          // Cleanup
-          document.body.removeChild(container);
-
-          // Auto-crop: remove white rows from top and bottom
-          const ctx = rawCanvas.getContext("2d");
+          const canvas = document.createElement("canvas");
+          canvas.width = pxW * scale;
+          canvas.height = pxH * scale;
+          const ctx = canvas.getContext("2d");
           if (!ctx) return null;
-          const imgData = ctx.getImageData(0, 0, rawCanvas.width, rawCanvas.height);
-          const { data, width, height } = imgData;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
 
-          const isWhiteRow = (row: number) => {
-            for (let x = 0; x < width; x++) {
-              const i = (row * width + x) * 4;
-              if (data[i] < 240 || data[i + 1] < 240 || data[i + 2] < 240) return false;
-            }
-            return true;
-          };
-
-          let topCrop = 0;
-          while (topCrop < height && isWhiteRow(topCrop)) topCrop++;
-          let bottomCrop = height - 1;
-          while (bottomCrop > topCrop && isWhiteRow(bottomCrop)) bottomCrop--;
-
-          // Add padding (8px)
-          topCrop = Math.max(0, topCrop - 8);
-          bottomCrop = Math.min(height - 1, bottomCrop + 8);
-          const croppedHeight = bottomCrop - topCrop + 1;
-
-          // Create cropped canvas
-          const croppedCanvas = document.createElement("canvas");
-          croppedCanvas.width = width;
-          croppedCanvas.height = croppedHeight;
-          const croppedCtx = croppedCanvas.getContext("2d");
-          if (!croppedCtx) return null;
-          croppedCtx.fillStyle = "#ffffff";
-          croppedCtx.fillRect(0, 0, width, croppedHeight);
-          croppedCtx.drawImage(rawCanvas, 0, topCrop, width, croppedHeight, 0, 0, width, croppedHeight);
-
-          const dataUrl = croppedCanvas.toDataURL("image/png");
-          return { dataUrl, width, height: croppedHeight };
+          const dataUrl = canvas.toDataURL("image/png");
+          return { dataUrl, width: canvas.width, height: canvas.height };
         } catch (err) {
-          console.warn("[PDF] KaTeX render failed for:", latex, err);
+          console.warn("[PDF] MathJax render failed for:", latex, err);
           return null;
         }
       };
