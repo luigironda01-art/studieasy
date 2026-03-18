@@ -9,7 +9,7 @@ import { supabase, Source, Chapter } from "@/lib/supabase";
 
 // PDF block types
 interface PdfBlock {
-  type: "h1" | "h2" | "h3" | "paragraph" | "list" | "empty" | "table" | "image";
+  type: "h1" | "h2" | "h3" | "paragraph" | "list" | "empty" | "table" | "image" | "latex";
   text: string;
   rows?: string[][];
 }
@@ -600,6 +600,27 @@ export default function SourceSummariesPage() {
         continue;
       }
 
+      // LaTeX formula blocks: $$...$$ (single line) or $$ on its own line (start multi-line)
+      const latexSingleMatch = line.match(/^\$\$(.*)\$\$$/);
+      if (latexSingleMatch) {
+        blocks.push({ type: "latex", text: latexSingleMatch[1].trim() });
+        continue;
+      }
+      if (line === "$$") {
+        // Multi-line LaTeX: collect until closing $$
+        let latexContent = "";
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() !== "$$") {
+          latexContent += (latexContent ? " " : "") + lines[j].trim();
+          j++;
+        }
+        if (j < lines.length) {
+          blocks.push({ type: "latex", text: latexContent.trim() });
+          i = j; // skip to closing $$
+          continue;
+        }
+      }
+
       // [IMMAGINE: description] or [Vedi figura: description] tags
       const imageMatch = line.match(/\[(?:IMMAGINE|Vedi figura):\s*(.*?)\]/i);
       if (imageMatch) {
@@ -1122,6 +1143,7 @@ export default function SourceSummariesPage() {
 
       // ── Sanitize all block text for PDF font compatibility ──
       for (const block of blocks) {
+        if (block.type === "latex") continue; // Keep LaTeX raw for KaTeX rendering
         block.text = sanitizeForPdf(block.text);
         if (block.rows) {
           block.rows = block.rows.map(row => row.map(cell => sanitizeForPdf(cell)));
@@ -1233,6 +1255,72 @@ export default function SourceSummariesPage() {
         }
       };
 
+      // ── KaTeX formula rendering helper ──
+      // Load KaTeX CSS once for all formulas
+      let katexCssLoaded = !!document.querySelector('link[href*="katex"]');
+      const ensureKatexCss = async () => {
+        if (katexCssLoaded) return;
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://cdn.jsdelivr.net/npm/katex@0.16.38/dist/katex.min.css";
+        document.head.appendChild(link);
+        await new Promise<void>(resolve => {
+          link.onload = () => resolve();
+          setTimeout(resolve, 1500); // fallback timeout
+        });
+        katexCssLoaded = true;
+      };
+
+      const renderLatexToImage = async (latex: string): Promise<{ dataUrl: string; width: number; height: number } | null> => {
+        try {
+          const katex = (await import("katex")).default;
+          const html2canvas = (await import("html2canvas")).default;
+          await ensureKatexCss();
+
+          // Render LaTeX to HTML
+          const html = katex.renderToString(latex, {
+            displayMode: true,
+            throwOnError: false,
+            output: "html",
+          });
+
+          // Create container (needs to be in DOM for html2canvas)
+          const container = document.createElement("div");
+          container.innerHTML = html;
+          container.style.position = "fixed";
+          container.style.left = "0";
+          container.style.top = "0";
+          container.style.zIndex = "-9999";
+          container.style.opacity = "0.01";
+          container.style.fontSize = "22px";
+          container.style.color = "#000000";
+          container.style.background = "#ffffff";
+          container.style.padding = "10px 16px";
+          container.style.display = "inline-block";
+          document.body.appendChild(container);
+
+          // Wait for CSS to apply
+          await new Promise(resolve => setTimeout(resolve, 50));
+
+          const canvas = await html2canvas(container, {
+            scale: 3,
+            backgroundColor: "#ffffff",
+            logging: false,
+          });
+
+          const dataUrl = canvas.toDataURL("image/png");
+          const w = canvas.width;
+          const h = canvas.height;
+
+          document.body.removeChild(container);
+
+          return { dataUrl, width: w, height: h };
+        } catch (err) {
+          console.warn("[PDF] KaTeX render failed for:", latex, err);
+          return null;
+        }
+      };
+
       // ── Render blocks ──
       let currentBlockIdx = 0;
       for (const block of blocks) {
@@ -1314,6 +1402,50 @@ export default function SourceSummariesPage() {
             }
             y += 1;
             doc.setTextColor(0);
+            break;
+          }
+
+          case "latex": {
+            try {
+              const rendered = await renderLatexToImage(block.text);
+              if (rendered) {
+                // Scale image to fit PDF width (max 70% of page width)
+                const imgWidthMm = Math.min(maxWidth * 0.7, rendered.width / 3 * 0.264583);
+                const imgHeightMm = imgWidthMm * (rendered.height / rendered.width);
+                ensureSpace(imgHeightMm + 6);
+                y += 2;
+                const imgX = margin + (maxWidth - imgWidthMm) / 2; // center
+                doc.addImage(rendered.dataUrl, "PNG", imgX, y, imgWidthMm, imgHeightMm);
+                y += imgHeightMm + 4;
+              } else {
+                // Fallback: render as plain text
+                doc.setFontSize(10.5);
+                doc.setFont(pdfFont, "normal");
+                doc.setTextColor(30, 30, 30);
+                const fallbackText = sanitizeForPdf(block.text);
+                const lines = doc.splitTextToSize(fallbackText, maxWidth);
+                for (const line of lines) {
+                  ensureSpace(6);
+                  doc.text(line, margin, y);
+                  y += 5.5;
+                }
+                y += 2;
+                doc.setTextColor(0);
+              }
+            } catch (err) {
+              console.warn("[PDF] LaTeX block render failed:", err);
+              // Fallback: render as text
+              doc.setFontSize(10.5);
+              doc.setFont(pdfFont, "normal");
+              const fallbackText = sanitizeForPdf(block.text);
+              const lines = doc.splitTextToSize(fallbackText, maxWidth);
+              for (const line of lines) {
+                ensureSpace(6);
+                doc.text(line, margin, y);
+                y += 5.5;
+              }
+              y += 2;
+            }
             break;
           }
 
