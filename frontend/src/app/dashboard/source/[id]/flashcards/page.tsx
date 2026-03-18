@@ -135,20 +135,54 @@ export default function SourceFlashcardsPage() {
 
     setGenerating(true);
     try {
-      const response = await fetch("/api/flashcards/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chapterId: generateChapterId,
-          userId: user.id,
-          numCards: generateCount,
-          difficulty: generateDifficulty,
-          language: "it",
-        }),
-      });
+      if (generateChapterId === "__all__") {
+        // Distribute cards evenly across all chapters
+        const total = generateCount;
+        const numChapters = chapters.length;
+        const basePerChapter = Math.floor(total / numChapters);
+        const remainder = total % numChapters;
 
-      if (!response.ok) {
-        throw new Error("Generazione fallita");
+        // Build array: [cardsForCh0, cardsForCh1, ...] — first 'remainder' chapters get +1
+        const distribution = chapters.map((_, i) => basePerChapter + (i < remainder ? 1 : 0));
+
+        // Fire all requests in parallel
+        const requests = chapters.map((ch, i) => {
+          if (distribution[i] <= 0) return Promise.resolve();
+          return fetch("/api/flashcards/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chapterId: ch.id,
+              userId: user.id,
+              numCards: distribution[i],
+              difficulty: generateDifficulty,
+              language: "it",
+            }),
+          });
+        });
+
+        const results = await Promise.all(requests);
+        const failed = results.filter(r => r && !r.ok);
+        if (failed.length === results.length) {
+          throw new Error("Generazione fallita");
+        }
+      } else {
+        // Single chapter generation
+        const response = await fetch("/api/flashcards/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chapterId: generateChapterId,
+            userId: user.id,
+            numCards: generateCount,
+            difficulty: generateDifficulty,
+            language: "it",
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Generazione fallita");
+        }
       }
 
       setShowGenerateModal(false);
@@ -761,6 +795,9 @@ export default function SourceFlashcardsPage() {
                   onChange={(e) => setGenerateChapterId(e.target.value)}
                   className="w-full bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
+                  {chapters.length > 1 && (
+                    <option value="__all__">📚 Intero Libro ({chapters.length} capitoli)</option>
+                  )}
                   {chapters.map(ch => (
                     <option key={ch.id} value={ch.id}>{ch.title}</option>
                   ))}
