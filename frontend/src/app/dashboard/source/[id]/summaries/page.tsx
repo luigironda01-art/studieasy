@@ -249,6 +249,48 @@ export default function SourceSummariesPage() {
       return `[IMMAGINE: ${single}]`;
     });
 
+    // 1a1b. Convert single-dollar inline LaTeX $\command$ to Unicode
+    // AI sometimes uses $\omega$, $\lambda$, $\hbar$ inline in prose text
+    const inlineLatexMap: Record<string, string> = {
+      "\\alpha": "α", "\\beta": "β", "\\gamma": "γ", "\\delta": "δ", "\\epsilon": "ε",
+      "\\zeta": "ζ", "\\eta": "η", "\\theta": "θ", "\\iota": "ι", "\\kappa": "κ",
+      "\\lambda": "λ", "\\mu": "μ", "\\nu": "ν", "\\xi": "ξ", "\\pi": "π",
+      "\\rho": "ρ", "\\sigma": "σ", "\\tau": "τ", "\\phi": "φ", "\\chi": "χ",
+      "\\psi": "ψ", "\\omega": "ω",
+      "\\Gamma": "Γ", "\\Delta": "Δ", "\\Theta": "Θ", "\\Lambda": "Λ",
+      "\\Xi": "Ξ", "\\Pi": "Π", "\\Sigma": "Σ", "\\Phi": "Φ", "\\Psi": "Ψ", "\\Omega": "Ω",
+      "\\hbar": "ℏ", "\\infty": "∞", "\\nabla": "∇", "\\partial": "∂",
+      "\\leq": "≤", "\\geq": "≥", "\\neq": "≠", "\\approx": "≈", "\\pm": "±",
+      "\\times": "×", "\\cdot": "·", "\\sqrt": "√", "\\int": "∫", "\\sum": "∑",
+    };
+    // Replace $\command$ with Unicode (single symbol references)
+    // Negative lookbehind/lookahead: don't match $$...$$ (display math)
+    cleaned = cleaned.replace(/(?<!\$)\$([^$]+)\$(?!\$)/g, (_m, inner: string) => {
+      const trimmed2 = inner.trim();
+      // Direct lookup for simple commands like $\omega$
+      if (inlineLatexMap[trimmed2]) return inlineLatexMap[trimmed2];
+      // Handle compound expressions like $\hbar = h/2\pi$
+      let result = trimmed2;
+      // Sort by length desc to replace longer commands first (\lambda before \la)
+      const sortedCmds = Object.entries(inlineLatexMap).sort((a, b) => b[0].length - a[0].length);
+      for (const [cmd, unicode] of sortedCmds) {
+        result = result.split(cmd).join(unicode);
+      }
+      // Handle \mathbf{X} → X, \textbf{X} → X, \text{X} → X
+      result = result.replace(/\\mathbf\{([^}]+)\}/g, "$1");
+      result = result.replace(/\\textbf\{([^}]+)\}/g, "$1");
+      result = result.replace(/\\text\{([^}]+)\}/g, "$1");
+      // Strip remaining backslash commands
+      result = result.replace(/\\[a-zA-Z]+/g, "");
+      // Clean braces
+      result = result.replace(/[{}]/g, "");
+      return result;
+    });
+
+    // Also handle \mathbf{X} outside of $...$ (raw in text)
+    cleaned = cleaned.replace(/\\mathbf\{([^}]+)\}/g, "$1");
+    cleaned = cleaned.replace(/\\textbf\{([^}]+)\}/g, "$1");
+
     // 1a2. Ensure $$...$$ LaTeX blocks are on their own lines
     // This prevents formulas with | (absolute value) from being parsed as table rows
     // Handle both single-line $$...$$ and multi-line $$ ... $$
