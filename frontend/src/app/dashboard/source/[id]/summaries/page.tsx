@@ -2597,6 +2597,27 @@ export default function SourceSummariesPage() {
     );
   }
 
+  // Compute proportional page ranges for each chapter
+  const chapterPageRanges = (() => {
+    const completed = chapters.filter(c => c.processing_status === "completed");
+    if (completed.length <= 1) return {} as Record<string, { start: number; end: number }>;
+    const totalPages = completed[0].page_count || 0;
+    if (!totalPages) return {} as Record<string, { start: number; end: number }>;
+    const totalChars = completed.reduce((acc, c) => acc + (c.chars_extracted || 1), 0);
+    const ranges: Record<string, { start: number; end: number }> = {};
+    let currentPage = 1;
+    completed.forEach((ch, i) => {
+      const proportion = (ch.chars_extracted || 1) / totalChars;
+      const isLast = i === completed.length - 1;
+      const endPage = isLast
+        ? totalPages
+        : Math.min(totalPages - 1, currentPage + Math.max(1, Math.round(proportion * totalPages)) - 1);
+      ranges[ch.id] = { start: currentPage, end: endPage };
+      currentPage = endPage + 1;
+    });
+    return ranges;
+  })();
+
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto">
       {/* Header */}
@@ -2841,6 +2862,11 @@ export default function SourceSummariesPage() {
                 <div key={chapter.id} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/5 transition-colors">
                   <span className="text-slate-500 text-sm font-mono w-6">{idx + 1}.</span>
                   <span className="text-slate-300 text-sm flex-1">{chapter.title}</span>
+                  {chapterPageRanges[chapter.id] && (
+                    <span className="text-slate-500 text-xs">
+                      Slide {chapterPageRanges[chapter.id].start}–{chapterPageRanges[chapter.id].end}
+                    </span>
+                  )}
                   {chapterSummaries[chapter.id] ? (
                     <span className="text-emerald-400 text-xs">Riassunto pronto</span>
                   ) : (
@@ -2883,11 +2909,15 @@ export default function SourceSummariesPage() {
                   <div className="min-w-0">
                     <h3 className="text-white font-semibold text-lg truncate">{chapter.title}</h3>
                     <div className="flex items-center gap-3 mt-1">
-                      {chapter.page_count && (
+                      {chapterPageRanges[chapter.id] ? (
+                        <span className="text-slate-500 text-sm">
+                          Slide {chapterPageRanges[chapter.id].start}–{chapterPageRanges[chapter.id].end}
+                        </span>
+                      ) : chapter.page_count ? (
                         <span className="text-slate-500 text-sm">
                           {chapter.page_count} pagine
                         </span>
-                      )}
+                      ) : null}
                       {chapter.extraction_method && chapter.extraction_method !== "text" && (
                         <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
                           Vision AI

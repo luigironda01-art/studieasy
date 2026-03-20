@@ -177,6 +177,19 @@ export default function SourceDetailPage() {
     }
   }, [chapters, user]);
 
+  // Supabase Realtime: auto-refresh when any chapter changes (status updates, new chapters from splitting)
+  useEffect(() => {
+    if (!sourceId || !user) return;
+    const channel = supabase
+      .channel(`chapters-source-${sourceId}`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on("postgres_changes" as any, { event: "*", schema: "public", table: "chapters", filter: `source_id=eq.${sourceId}` }, () => {
+        fetchSourceDetails();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [sourceId, user]);
+
   // Poll for chapters in "pending" state - detect when processing starts
   useEffect(() => {
     const hasPending = chapters.some(c => c.processing_status === "pending");
@@ -741,6 +754,27 @@ export default function SourceDetailPage() {
 
   if (!source) return null;
 
+  // Compute proportional page ranges for each chapter (client-side estimation from chars_extracted)
+  const chapterPageRanges = (() => {
+    const completed = chapters.filter(c => c.processing_status === "completed");
+    if (completed.length <= 1) return {} as Record<string, { start: number; end: number }>;
+    const totalPages = completed[0].page_count || 0;
+    if (!totalPages) return {} as Record<string, { start: number; end: number }>;
+    const totalChars = completed.reduce((acc, c) => acc + (c.chars_extracted || 1), 0);
+    const ranges: Record<string, { start: number; end: number }> = {};
+    let currentPage = 1;
+    completed.forEach((ch, i) => {
+      const proportion = (ch.chars_extracted || 1) / totalChars;
+      const isLast = i === completed.length - 1;
+      const endPage = isLast
+        ? totalPages
+        : Math.min(totalPages - 1, currentPage + Math.max(1, Math.round(proportion * totalPages)) - 1);
+      ranges[ch.id] = { start: currentPage, end: endPage };
+      currentPage = endPage + 1;
+    });
+    return ranges;
+  })();
+
   return (
     <div className="p-6 md:p-8">
       {/* Back button */}
@@ -912,8 +946,10 @@ export default function SourceDetailPage() {
                         <h3 className="text-white font-medium">{chapter.title}</h3>
                         {chapter.processing_status === "completed" && (
                           <p className="text-slate-400 text-sm mt-1">
-                            {chapter.page_count
-                              ? `${chapter.page_count} ${chapter.page_count === 1 ? 'pagina' : 'pagine'} elaborate`
+                            {chapterPageRanges[chapter.id]
+                              ? `Slide ${chapterPageRanges[chapter.id].start}–${chapterPageRanges[chapter.id].end}`
+                              : chapter.page_count
+                              ? `${chapter.page_count} ${chapter.page_count === 1 ? 'pagina' : 'pagine'}`
                               : "Pronto per generare flashcard"
                             }
                           </p>
