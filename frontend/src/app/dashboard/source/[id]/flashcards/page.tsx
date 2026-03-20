@@ -146,6 +146,9 @@ export default function SourceFlashcardsPage() {
         // Build array: [cardsForCh0, cardsForCh1, ...] — first 'remainder' chapters get +1
         const distribution = chapters.map((_, i) => basePerChapter + (i < remainder ? 1 : 0));
 
+        // Shared batch_id so all cards appear as one group
+        const sharedBatchId = crypto.randomUUID();
+
         // Process sequentially to avoid API overload
         let completed = 0;
         let failed = 0;
@@ -162,6 +165,7 @@ export default function SourceFlashcardsPage() {
                 numCards: distribution[i],
                 difficulty: generateDifficulty,
                 language: "it",
+                batchId: sharedBatchId,
               }),
             });
             if (res.ok) completed++;

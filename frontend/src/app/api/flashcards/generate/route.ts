@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   );
 
   try {
-    const { chapterId, userId, numCards = 10, difficulty = "medium", language = "it" } = await request.json();
+    const { chapterId, userId, numCards = 10, difficulty = "medium", language = "it", batchId: externalBatchId } = await request.json();
     console.log("Request data:", { chapterId, userId, numCards, difficulty, language });
 
     if (!chapterId || !userId) {
@@ -118,8 +118,8 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
 
     const flashcards = JSON.parse(responseText.trim());
 
-    // Generate batch_id for this generation session
-    const batchId = crypto.randomUUID();
+    // Use external batch_id if provided (for "Intero Libro" grouping), else generate new
+    const batchId = externalBatchId || crypto.randomUUID();
 
     // Save flashcards to database
     let createdCount = 0;
