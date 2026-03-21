@@ -52,28 +52,9 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
   const rfNodes: Node[] = [];
   const rfEdges: Edge[] = [];
 
-  const centerX = 0;
-  const centerY = 0;
-
-  // Central node
-  rfNodes.push({
-    id: "center",
-    type: "default",
-    position: { x: centerX, y: centerY },
-    data: { label: data.centralTopic },
-    style: {
-      background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
-      color: "#fff",
-      border: "none",
-      borderRadius: "16px",
-      padding: "12px 20px",
-      fontWeight: 700,
-      fontSize: "15px",
-      minWidth: "160px",
-      textAlign: "center",
-      boxShadow: "0 0 30px rgba(139, 92, 246, 0.4)",
-    },
-  });
+  // ── Left-to-right tree layout (NotebookLM style) ──────────────────────────
+  const H_STEP = 300; // horizontal gap per level
+  const V_STEP = 80;  // vertical gap between leaf slots
 
   // Group by parent
   const rootNodes = data.nodes.filter(n => !n.parent);
@@ -83,19 +64,21 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
     childMap[n.parent!].push(n);
   });
 
-  const rootRadius = 300;
-  const childRadius = 180;
+  // Total leaf slots = sum of max(1, children.length) per root node
+  const leafSlots = rootNodes.reduce((acc, n) => acc + Math.max(1, (childMap[n.id] || []).length), 0);
+  let slot = 0;
 
-  rootNodes.forEach((node, i) => {
-    const angle = (2 * Math.PI * i) / rootNodes.length - Math.PI / 2;
-    const x = centerX + rootRadius * Math.cos(angle);
-    const y = centerY + rootRadius * Math.sin(angle);
+  rootNodes.forEach((node) => {
+    const children = childMap[node.id] || [];
+    const weight = Math.max(1, children.length);
+    const nodeCenterSlot = slot + (weight - 1) / 2;
+    const nodeY = (nodeCenterSlot - (leafSlots - 1) / 2) * V_STEP;
     const colors = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.concept;
 
     rfNodes.push({
       id: node.id,
       type: "default",
-      position: { x, y },
+      position: { x: H_STEP, y: nodeY },
       data: { label: node.label },
       style: {
         background: colors.bg,
@@ -105,10 +88,9 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
         padding: "10px 16px",
         fontWeight: 600,
         fontSize: "13px",
-        minWidth: "120px",
-        maxWidth: "180px",
+        minWidth: "130px",
+        maxWidth: "190px",
         textAlign: "center",
-        backdropFilter: "blur(8px)",
       },
     });
 
@@ -116,23 +98,20 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
       id: `e-center-${node.id}`,
       source: "center",
       target: node.id,
-      style: { stroke: colors.border, strokeWidth: 2, opacity: 0.7 },
-      animated: false,
+      type: "smoothstep",
+      style: { stroke: colors.border, strokeWidth: 2, opacity: 0.6 },
     });
 
     // Children
-    const children = childMap[node.id] || [];
     children.forEach((child, j) => {
-      const spread = Math.PI / 3;
-      const childAngle = angle - spread / 2 + (spread / Math.max(children.length - 1, 1)) * j;
-      const cx = x + childRadius * Math.cos(childAngle);
-      const cy = y + childRadius * Math.sin(childAngle);
+      const childSlot = slot + j;
+      const cy = (childSlot - (leafSlots - 1) / 2) * V_STEP;
       const childColors = CATEGORY_COLORS[child.category] || CATEGORY_COLORS.concept;
 
       rfNodes.push({
         id: child.id,
         type: "default",
-        position: { x: cx, y: cy },
+        position: { x: H_STEP * 2, y: cy },
         data: { label: child.label },
         style: {
           background: childColors.bg,
@@ -141,8 +120,8 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
           borderRadius: "10px",
           padding: "8px 12px",
           fontSize: "11px",
-          minWidth: "90px",
-          maxWidth: "150px",
+          minWidth: "100px",
+          maxWidth: "160px",
           textAlign: "center",
           opacity: 0.9,
         },
@@ -152,9 +131,32 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
         id: `e-${node.id}-${child.id}`,
         source: node.id,
         target: child.id,
+        type: "smoothstep",
         style: { stroke: childColors.border, strokeWidth: 1.5, opacity: 0.5 },
       });
     });
+
+    slot += weight;
+  });
+
+  // Central node (leftmost)
+  rfNodes.push({
+    id: "center",
+    type: "default",
+    position: { x: 0, y: 0 },
+    data: { label: data.centralTopic },
+    style: {
+      background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
+      color: "#fff",
+      border: "none",
+      borderRadius: "16px",
+      padding: "14px 22px",
+      fontWeight: 700,
+      fontSize: "15px",
+      minWidth: "160px",
+      textAlign: "center",
+      boxShadow: "0 0 30px rgba(139, 92, 246, 0.4)",
+    },
   });
 
   return { nodes: rfNodes, edges: rfEdges };
