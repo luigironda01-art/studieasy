@@ -76,9 +76,9 @@ const TOOLS = [
   { id: "quiz" as TabType, label: "Quiz", icon: "📝", available: true, description: "Metti alla prova le tue conoscenze" },
   { id: "summaries" as TabType, label: "Riassunti", icon: "📄", available: true, description: "Riassunti AI dei capitoli" },
   { id: "ai-focus" as TabType, label: "AI Focus", icon: "🔍", available: true, description: "Approfondimenti e risorse correlate suggerite dall'AI" },
-  { id: "maps" as TabType, label: "Mappe", icon: "🗺️", available: false, description: "Mappe concettuali visive" },
+  { id: "maps" as TabType, label: "Mappe", icon: "🗺️", available: true, description: "Mappe concettuali visive" },
   { id: "infographics" as TabType, label: "Infografiche", icon: "📊", available: false, description: "Visualizzazioni dei concetti" },
-  { id: "presentations" as TabType, label: "Slides", icon: "🎬", available: false, description: "Presentazioni generate" },
+  { id: "presentations" as TabType, label: "Slides", icon: "🎬", available: true, description: "Presentazioni generate" },
 ];
 
 const GENERATION_LABELS: Record<TabType, string> = {
@@ -1285,6 +1285,48 @@ export default function StudyHubPage() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  ) : selectedTool === "maps" ? (
+                    /* MAPPE: link per source */
+                    <div className="divide-y divide-slate-700/50">
+                      {source.chapters.some(c => c.processing_status === "completed") ? (
+                        <div className="p-4 flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-medium">Mappa Concettuale</p>
+                            <p className="text-slate-400 text-sm mt-0.5">Visualizza o genera la mappa interattiva</p>
+                          </div>
+                          <a
+                            href={`/dashboard/source/${source.id}/mindmap`}
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
+                          >
+                            <span>🗺️</span>
+                            Apri Mappa
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="p-4 text-slate-500 text-sm">Nessun capitolo elaborato</div>
+                      )}
+                    </div>
+                  ) : selectedTool === "presentations" ? (
+                    /* SLIDES: link per source */
+                    <div className="divide-y divide-slate-700/50">
+                      {source.chapters.some(c => c.processing_status === "completed") ? (
+                        <div className="p-4 flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-medium">Presentazione AI</p>
+                            <p className="text-slate-400 text-sm mt-0.5">Visualizza o genera le slides</p>
+                          </div>
+                          <a
+                            href={`/dashboard/source/${source.id}/slides`}
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
+                          >
+                            <span>🎯</span>
+                            Apri Slides
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="p-4 text-slate-500 text-sm">Nessun capitolo elaborato</div>
+                      )}
                     </div>
                   ) : (
                     /* Coming Soon */

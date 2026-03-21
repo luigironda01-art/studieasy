@@ -527,6 +527,38 @@ export function Sidebar() {
                         <span className="text-green-500 text-xs">✓</span>
                       )}
                     </Link>
+
+                    {/* Mappa */}
+                    {source.hasCompletedChapters && (
+                      <Link
+                        href={`/dashboard/source/${source.id}/mindmap`}
+                        onClick={() => isMobile && setSidebarOpen(false)}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-all duration-200 ${
+                          pathname === `/dashboard/source/${source.id}/mindmap`
+                            ? "bg-emerald-500/20 text-emerald-300"
+                            : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-300"
+                        }`}
+                      >
+                        <span>🗺️</span>
+                        <span className="flex-1">Mappa</span>
+                      </Link>
+                    )}
+
+                    {/* Slides */}
+                    {source.hasCompletedChapters && (
+                      <Link
+                        href={`/dashboard/source/${source.id}/slides`}
+                        onClick={() => isMobile && setSidebarOpen(false)}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-all duration-200 ${
+                          pathname === `/dashboard/source/${source.id}/slides`
+                            ? "bg-amber-500/20 text-amber-300"
+                            : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-300"
+                        }`}
+                      >
+                        <span>🎯</span>
+                        <span className="flex-1">Slides</span>
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>
