@@ -46,17 +46,17 @@ const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string
   process:    { bg: "#06B6D420", border: "#06B6D4", text: "#67E8F9" },
 };
 
-// ─── Layout: radial from center ───────────────────────────────────────────────
+// ─── Layout: LR tree with expand/collapse (NotebookLM style) ─────────────────
 
-function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] } {
+function buildVisibleGraph(
+  data: MindmapData,
+  expandedNodes: Set<string>,
+): { nodes: Node[]; edges: Edge[] } {
   const rfNodes: Node[] = [];
   const rfEdges: Edge[] = [];
+  const H_STEP = 300;
+  const V_STEP = 80;
 
-  // ── Left-to-right tree layout (NotebookLM style) ──────────────────────────
-  const H_STEP = 300; // horizontal gap per level
-  const V_STEP = 80;  // vertical gap between leaf slots
-
-  // Group by parent
   const rootNodes = data.nodes.filter(n => !n.parent);
   const childMap: Record<string, MindmapNode[]> = {};
   data.nodes.filter(n => n.parent).forEach(n => {
@@ -64,22 +64,31 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
     childMap[n.parent!].push(n);
   });
 
-  // Total leaf slots = sum of max(1, children.length) per root node
-  const leafSlots = rootNodes.reduce((acc, n) => acc + Math.max(1, (childMap[n.id] || []).length), 0);
+  // Weight = how many vertical slots this node takes
+  const getWeight = (id: string) => {
+    if (!expandedNodes.has(id)) return 1;
+    return Math.max(1, (childMap[id] || []).length);
+  };
+
+  const totalSlots = rootNodes.reduce((acc, n) => acc + getWeight(n.id), 0);
   let slot = 0;
 
   rootNodes.forEach((node) => {
+    const isExpanded = expandedNodes.has(node.id);
     const children = childMap[node.id] || [];
-    const weight = Math.max(1, children.length);
+    const hasChildren = children.length > 0;
+    const weight = getWeight(node.id);
     const nodeCenterSlot = slot + (weight - 1) / 2;
-    const nodeY = (nodeCenterSlot - (leafSlots - 1) / 2) * V_STEP;
+    const nodeY = (nodeCenterSlot - (totalSlots - 1) / 2) * V_STEP;
     const colors = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.concept;
+
+    const expandIcon = hasChildren ? (isExpanded ? " ▾" : " ▸") : "";
 
     rfNodes.push({
       id: node.id,
       type: "default",
       position: { x: H_STEP, y: nodeY },
-      data: { label: node.label },
+      data: { label: node.label + expandIcon },
       style: {
         background: colors.bg,
         border: `2px solid ${colors.border}`,
@@ -89,8 +98,9 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
         fontWeight: 600,
         fontSize: "13px",
         minWidth: "130px",
-        maxWidth: "190px",
-        textAlign: "center",
+        maxWidth: "200px",
+        textAlign: "center" as const,
+        cursor: hasChildren ? "pointer" : "default",
       },
     });
 
@@ -102,39 +112,40 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
       style: { stroke: colors.border, strokeWidth: 2, opacity: 0.6 },
     });
 
-    // Children
-    children.forEach((child, j) => {
-      const childSlot = slot + j;
-      const cy = (childSlot - (leafSlots - 1) / 2) * V_STEP;
-      const childColors = CATEGORY_COLORS[child.category] || CATEGORY_COLORS.concept;
+    // Show children only if expanded
+    if (isExpanded && hasChildren) {
+      children.forEach((child, j) => {
+        const childSlot = slot + j;
+        const cy = (childSlot - (totalSlots - 1) / 2) * V_STEP;
+        const childColors = CATEGORY_COLORS[child.category] || CATEGORY_COLORS.concept;
 
-      rfNodes.push({
-        id: child.id,
-        type: "default",
-        position: { x: H_STEP * 2, y: cy },
-        data: { label: child.label },
-        style: {
-          background: childColors.bg,
-          border: `1.5px solid ${childColors.border}`,
-          color: childColors.text,
-          borderRadius: "10px",
-          padding: "8px 12px",
-          fontSize: "11px",
-          minWidth: "100px",
-          maxWidth: "160px",
-          textAlign: "center",
-          opacity: 0.9,
-        },
-      });
+        rfNodes.push({
+          id: child.id,
+          type: "default",
+          position: { x: H_STEP * 2, y: cy },
+          data: { label: child.label },
+          style: {
+            background: childColors.bg,
+            border: `1.5px solid ${childColors.border}`,
+            color: childColors.text,
+            borderRadius: "10px",
+            padding: "8px 12px",
+            fontSize: "11px",
+            minWidth: "100px",
+            maxWidth: "160px",
+            textAlign: "center" as const,
+          },
+        });
 
-      rfEdges.push({
-        id: `e-${node.id}-${child.id}`,
-        source: node.id,
-        target: child.id,
-        type: "smoothstep",
-        style: { stroke: childColors.border, strokeWidth: 1.5, opacity: 0.5 },
+        rfEdges.push({
+          id: `e-${node.id}-${child.id}`,
+          source: node.id,
+          target: child.id,
+          type: "smoothstep",
+          style: { stroke: childColors.border, strokeWidth: 1.5, opacity: 0.5 },
+        });
       });
-    });
+    }
 
     slot += weight;
   });
@@ -154,8 +165,9 @@ function buildReactFlowGraph(data: MindmapData): { nodes: Node[]; edges: Edge[] 
       fontWeight: 700,
       fontSize: "15px",
       minWidth: "160px",
-      textAlign: "center",
+      textAlign: "center" as const,
       boxShadow: "0 0 30px rgba(139, 92, 246, 0.4)",
+      cursor: "pointer",
     },
   });
 
@@ -171,24 +183,53 @@ function MindmapInner({
   mindmap: MindmapData;
   onExport: (fn: () => void) => void;
 }) {
-  const { nodes: initNodes, edges: initEdges } = buildReactFlowGraph(mindmap);
-  const [nodes, , onNodesChange] = useNodesState(initNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initEdges);
-  const { fitView, getNodes } = useReactFlow();
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const { nodes: initNodes, edges: initEdges } = buildVisibleGraph(mindmap, expandedNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initEdges);
+  const { fitView } = useReactFlow();
   const rfRef = useRef<HTMLDivElement>(null);
 
+  // Rebuild graph when expandedNodes changes
   useEffect(() => {
-    setTimeout(() => fitView({ padding: 0.15 }), 100);
-  }, [fitView]);
+    const { nodes: newNodes, edges: newEdges } = buildVisibleGraph(mindmap, expandedNodes);
+    setNodes(newNodes);
+    setEdges(newEdges);
+    setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+  }, [expandedNodes, mindmap, setNodes, setEdges, fitView]);
 
-  // Export as PNG using html2canvas on the flow viewport
+  // Click handler: toggle expand/collapse on root nodes, expand all on center
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    const rootIds = new Set(mindmap.nodes.filter(n => !n.parent).map(n => n.id));
+
+    if (node.id === "center") {
+      // Toggle all: if any expanded → collapse all, else expand all
+      setExpandedNodes(prev => {
+        const anyExpanded = rootIds.size > 0 && Array.from(rootIds).some(id => prev.has(id));
+        return anyExpanded ? new Set() : new Set(rootIds);
+      });
+      return;
+    }
+
+    if (!rootIds.has(node.id)) return; // Only level-1 nodes are expandable
+
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(node.id)) next.delete(node.id);
+      else next.add(node.id);
+      return next;
+    });
+  }, [mindmap]);
+
+  // Export as PNG
   const exportPng = useCallback(async () => {
     if (!rfRef.current) return;
-    const h2c = (await import("html2canvas")).default;
-    const viewport = rfRef.current.querySelector(".react-flow__viewport") as HTMLElement;
-    if (!viewport) return;
+    // Expand all for export
+    const rootIds = new Set(mindmap.nodes.filter(n => !n.parent).map(n => n.id));
+    setExpandedNodes(rootIds);
+    await new Promise(r => setTimeout(r, 500));
 
-    // Temporarily show full graph
+    const h2c = (await import("html2canvas")).default;
     const wrapper = rfRef.current.querySelector(".react-flow__renderer") as HTMLElement;
     const canvas = await h2c(wrapper || rfRef.current, {
       backgroundColor: "#0F172A",
@@ -201,8 +242,7 @@ function MindmapInner({
     a.href = url;
     a.download = `${mindmap.centralTopic.replace(/\s+/g, "_")}_mappa.png`;
     a.click();
-    void getNodes; // suppress unused warning
-  }, [mindmap.centralTopic, getNodes]);
+  }, [mindmap]);
 
   useEffect(() => {
     onExport(exportPng);
@@ -215,6 +255,9 @@ function MindmapInner({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        nodesDraggable={false}
+        nodesConnectable={false}
         fitView
         fitViewOptions={{ padding: 0.15 }}
         minZoom={0.3}
