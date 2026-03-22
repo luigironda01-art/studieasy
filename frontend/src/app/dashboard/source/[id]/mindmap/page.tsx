@@ -54,8 +54,10 @@ function buildVisibleGraph(
 ): { nodes: Node[]; edges: Edge[] } {
   const rfNodes: Node[] = [];
   const rfEdges: Edge[] = [];
-  const H_STEP = 300;
-  const V_STEP = 80;
+  const H_STEP = 380;
+  const CHILD_H = 70;   // height per child node
+  const GROUP_GAP = 40;  // gap between root node groups
+  const NODE_H = 60;     // estimated height of a root node
 
   const rootNodes = data.nodes.filter(n => !n.parent);
   const childMap: Record<string, MindmapNode[]> = {};
@@ -64,25 +66,33 @@ function buildVisibleGraph(
     childMap[n.parent!].push(n);
   });
 
-  // Weight = how many vertical slots this node takes
-  const getWeight = (id: string) => {
-    if (!expandedNodes.has(id)) return 1;
-    return Math.max(1, (childMap[id] || []).length);
-  };
-
-  const totalSlots = rootNodes.reduce((acc, n) => acc + getWeight(n.id), 0);
-  let slot = 0;
+  // First pass: calculate total height and each group's height
+  const groups: { node: MindmapNode; children: MindmapNode[]; isExpanded: boolean; height: number }[] = [];
+  let totalHeight = 0;
 
   rootNodes.forEach((node) => {
     const isExpanded = expandedNodes.has(node.id);
     const children = childMap[node.id] || [];
-    const hasChildren = children.length > 0;
-    const weight = getWeight(node.id);
-    const nodeCenterSlot = slot + (weight - 1) / 2;
-    const nodeY = (nodeCenterSlot - (totalSlots - 1) / 2) * V_STEP;
-    const colors = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.concept;
+    // Group height: if expanded, max of (node height, children * CHILD_H); else just node height
+    const childrenHeight = isExpanded && children.length > 0 ? children.length * CHILD_H : 0;
+    const groupHeight = Math.max(NODE_H, childrenHeight);
+    groups.push({ node, children, isExpanded, height: groupHeight });
+    totalHeight += groupHeight;
+  });
 
+  // Add gaps between groups
+  totalHeight += (groups.length - 1) * GROUP_GAP;
+
+  // Second pass: position nodes using cumulative Y
+  let currentY = -totalHeight / 2;
+
+  groups.forEach(({ node, children, isExpanded, height }) => {
+    const hasChildren = children.length > 0;
+    const colors = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.concept;
     const expandIcon = hasChildren ? (isExpanded ? " ▾" : " ▸") : "";
+
+    // Root node centered in its group
+    const nodeY = currentY + height / 2;
 
     rfNodes.push({
       id: node.id,
@@ -97,8 +107,8 @@ function buildVisibleGraph(
         padding: "10px 16px",
         fontWeight: 600,
         fontSize: "13px",
-        minWidth: "130px",
-        maxWidth: "200px",
+        minWidth: "140px",
+        maxWidth: "210px",
         textAlign: "center" as const,
         cursor: hasChildren ? "pointer" : "default",
       },
@@ -114,9 +124,11 @@ function buildVisibleGraph(
 
     // Show children only if expanded
     if (isExpanded && hasChildren) {
+      const childrenTotalH = children.length * CHILD_H;
+      const childStartY = currentY + (height - childrenTotalH) / 2;
+
       children.forEach((child, j) => {
-        const childSlot = slot + j;
-        const cy = (childSlot - (totalSlots - 1) / 2) * V_STEP;
+        const cy = childStartY + j * CHILD_H + CHILD_H / 2;
         const childColors = CATEGORY_COLORS[child.category] || CATEGORY_COLORS.concept;
 
         rfNodes.push({
@@ -129,10 +141,10 @@ function buildVisibleGraph(
             border: `1.5px solid ${childColors.border}`,
             color: childColors.text,
             borderRadius: "10px",
-            padding: "8px 12px",
-            fontSize: "11px",
-            minWidth: "100px",
-            maxWidth: "160px",
+            padding: "8px 14px",
+            fontSize: "12px",
+            minWidth: "110px",
+            maxWidth: "180px",
             textAlign: "center" as const,
           },
         });
@@ -147,7 +159,7 @@ function buildVisibleGraph(
       });
     }
 
-    slot += weight;
+    currentY += height + GROUP_GAP;
   });
 
   // Central node (leftmost)
