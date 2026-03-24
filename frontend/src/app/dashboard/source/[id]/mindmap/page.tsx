@@ -54,9 +54,9 @@ function buildVisibleGraph(
 ): { nodes: Node[]; edges: Edge[] } {
   const rfNodes: Node[] = [];
   const rfEdges: Edge[] = [];
-  const H_STEP = 320;
-  const LEAF_H = 65;
-  const GROUP_GAP = 30;
+  const H_STEP = 350;
+  const LEAF_H = 90;
+  const GROUP_GAP = 60;
 
   // Build child map for ALL nodes (not just level 1)
   const childMap: Record<string, MindmapNode[]> = {};
