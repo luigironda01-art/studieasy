@@ -54,112 +54,96 @@ function buildVisibleGraph(
 ): { nodes: Node[]; edges: Edge[] } {
   const rfNodes: Node[] = [];
   const rfEdges: Edge[] = [];
-  const H_STEP = 380;
-  const CHILD_H = 70;   // height per child node
-  const GROUP_GAP = 40;  // gap between root node groups
-  const NODE_H = 60;     // estimated height of a root node
+  const H_STEP = 320;
+  const LEAF_H = 65;
+  const GROUP_GAP = 30;
 
-  const rootNodes = data.nodes.filter(n => !n.parent);
+  // Build child map for ALL nodes (not just level 1)
   const childMap: Record<string, MindmapNode[]> = {};
   data.nodes.filter(n => n.parent).forEach(n => {
     if (!childMap[n.parent!]) childMap[n.parent!] = [];
     childMap[n.parent!].push(n);
   });
+  const rootNodes = data.nodes.filter(n => !n.parent);
 
-  // First pass: calculate total height and each group's height
-  const groups: { node: MindmapNode; children: MindmapNode[]; isExpanded: boolean; height: number }[] = [];
-  let totalHeight = 0;
+  // Recursive: count visible leaf slots for a node
+  const countLeaves = (nodeId: string): number => {
+    const children = childMap[nodeId] || [];
+    if (children.length === 0 || !expandedNodes.has(nodeId)) return 1;
+    return children.reduce((acc, c) => acc + countLeaves(c.id), 0);
+  };
 
-  rootNodes.forEach((node) => {
-    const isExpanded = expandedNodes.has(node.id);
+  // Recursive: place a node and its visible children
+  const placeNode = (
+    node: MindmapNode,
+    depth: number,
+    startY: number,
+    parentId: string | null,
+  ) => {
     const children = childMap[node.id] || [];
-    // Group height: if expanded, max of (node height, children * CHILD_H); else just node height
-    const childrenHeight = isExpanded && children.length > 0 ? children.length * CHILD_H : 0;
-    const groupHeight = Math.max(NODE_H, childrenHeight);
-    groups.push({ node, children, isExpanded, height: groupHeight });
-    totalHeight += groupHeight;
-  });
-
-  // Add gaps between groups
-  totalHeight += (groups.length - 1) * GROUP_GAP;
-
-  // Second pass: position nodes using cumulative Y
-  let currentY = -totalHeight / 2;
-
-  groups.forEach(({ node, children, isExpanded, height }) => {
     const hasChildren = children.length > 0;
+    const isExpanded = expandedNodes.has(node.id);
+    const leaves = countLeaves(node.id);
+    const nodeY = startY + (leaves * LEAF_H) / 2;
     const colors = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.concept;
     const expandIcon = hasChildren ? (isExpanded ? " ▾" : " ▸") : "";
 
-    // Root node centered in its group
-    const nodeY = currentY + height / 2;
+    // Scale style by depth
+    const fontSize = depth === 0 ? 13 : depth === 1 ? 12 : 11;
+    const padding = depth <= 1 ? "10px 16px" : "7px 12px";
+    const minW = depth === 0 ? 140 : depth === 1 ? 120 : 100;
+    const maxW = depth === 0 ? 210 : depth === 1 ? 180 : 160;
+    const borderW = depth === 0 ? 2 : 1.5;
 
     rfNodes.push({
       id: node.id,
       type: "default",
-      position: { x: H_STEP, y: nodeY },
+      position: { x: (depth + 1) * H_STEP, y: nodeY },
       data: { label: node.label + expandIcon },
       style: {
         background: colors.bg,
-        border: `2px solid ${colors.border}`,
+        border: `${borderW}px solid ${colors.border}`,
         color: colors.text,
-        borderRadius: "12px",
-        padding: "10px 16px",
-        fontWeight: 600,
-        fontSize: "13px",
-        minWidth: "140px",
-        maxWidth: "210px",
+        borderRadius: depth === 0 ? "12px" : "10px",
+        padding,
+        fontWeight: depth === 0 ? 600 : 500,
+        fontSize: `${fontSize}px`,
+        minWidth: `${minW}px`,
+        maxWidth: `${maxW}px`,
         textAlign: "center" as const,
         cursor: hasChildren ? "pointer" : "default",
       },
     });
 
-    rfEdges.push({
-      id: `e-center-${node.id}`,
-      source: "center",
-      target: node.id,
-      type: "smoothstep",
-      style: { stroke: colors.border, strokeWidth: 2, opacity: 0.6 },
-    });
-
-    // Show children only if expanded
-    if (isExpanded && hasChildren) {
-      const childrenTotalH = children.length * CHILD_H;
-      const childStartY = currentY + (height - childrenTotalH) / 2;
-
-      children.forEach((child, j) => {
-        const cy = childStartY + j * CHILD_H + CHILD_H / 2;
-        const childColors = CATEGORY_COLORS[child.category] || CATEGORY_COLORS.concept;
-
-        rfNodes.push({
-          id: child.id,
-          type: "default",
-          position: { x: H_STEP * 2, y: cy },
-          data: { label: child.label },
-          style: {
-            background: childColors.bg,
-            border: `1.5px solid ${childColors.border}`,
-            color: childColors.text,
-            borderRadius: "10px",
-            padding: "8px 14px",
-            fontSize: "12px",
-            minWidth: "110px",
-            maxWidth: "180px",
-            textAlign: "center" as const,
-          },
-        });
-
-        rfEdges.push({
-          id: `e-${node.id}-${child.id}`,
-          source: node.id,
-          target: child.id,
-          type: "smoothstep",
-          style: { stroke: childColors.border, strokeWidth: 1.5, opacity: 0.5 },
-        });
+    if (parentId) {
+      rfEdges.push({
+        id: `e-${parentId}-${node.id}`,
+        source: parentId,
+        target: node.id,
+        type: "smoothstep",
+        style: { stroke: colors.border, strokeWidth: depth <= 1 ? 2 : 1.5, opacity: 0.5 },
       });
     }
 
-    currentY += height + GROUP_GAP;
+    // Place children recursively
+    if (isExpanded && hasChildren) {
+      let childY = startY;
+      children.forEach((child) => {
+        placeNode(child, depth + 1, childY, node.id);
+        childY += countLeaves(child.id) * LEAF_H;
+      });
+    }
+  };
+
+  // Place all root nodes with gaps between groups
+  const totalLeaves = rootNodes.reduce((acc, n) => acc + countLeaves(n.id), 0);
+  const totalH = totalLeaves * LEAF_H + (rootNodes.length - 1) * GROUP_GAP;
+  let y = -totalH / 2;
+
+  rootNodes.forEach((node) => {
+    const leaves = countLeaves(node.id);
+    placeNode(node, 0, y, "center");
+    y += leaves * LEAF_H + GROUP_GAP;
   });
 
   // Central node (leftmost)
@@ -181,6 +165,18 @@ function buildVisibleGraph(
       boxShadow: "0 0 30px rgba(139, 92, 246, 0.4)",
       cursor: "pointer",
     },
+  });
+
+  // Edge from center to each root node
+  rootNodes.forEach((node) => {
+    const colors = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.concept;
+    rfEdges.push({
+      id: `e-center-${node.id}`,
+      source: "center",
+      target: node.id,
+      type: "smoothstep",
+      style: { stroke: colors.border, strokeWidth: 2, opacity: 0.6 },
+    });
   });
 
   return { nodes: rfNodes, edges: rfEdges };
@@ -210,35 +206,53 @@ function MindmapInner({
     setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
   }, [expandedNodes, mindmap, setNodes, setEdges, fitView]);
 
-  // Click handler: toggle expand/collapse on root nodes, expand all on center
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    const rootIds = new Set(mindmap.nodes.filter(n => !n.parent).map(n => n.id));
+  // Build set of nodes that have children (expandable at any depth)
+  const nodesWithChildren = new Set(
+    mindmap.nodes.filter(n => n.parent).map(n => n.parent!)
+  );
 
+  // Click handler: toggle expand/collapse on ANY node with children
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     if (node.id === "center") {
-      // Toggle all: if any expanded → collapse all, else expand all
+      // Toggle all root nodes
+      const rootIds = mindmap.nodes.filter(n => !n.parent).map(n => n.id);
       setExpandedNodes(prev => {
-        const anyExpanded = rootIds.size > 0 && Array.from(rootIds).some(id => prev.has(id));
-        return anyExpanded ? new Set() : new Set(rootIds);
+        const anyExpanded = rootIds.some(id => prev.has(id));
+        if (anyExpanded) return new Set<string>();
+        return new Set<string>(rootIds);
       });
       return;
     }
 
-    if (!rootIds.has(node.id)) return; // Only level-1 nodes are expandable
+    if (!nodesWithChildren.has(node.id)) return;
 
     setExpandedNodes(prev => {
       const next = new Set(prev);
-      if (next.has(node.id)) next.delete(node.id);
-      else next.add(node.id);
+      if (next.has(node.id)) {
+        // Collapse this node and all its descendants
+        next.delete(node.id);
+        const removeDescendants = (parentId: string) => {
+          mindmap.nodes.filter(n => n.parent === parentId).forEach(child => {
+            next.delete(child.id);
+            removeDescendants(child.id);
+          });
+        };
+        removeDescendants(node.id);
+      } else {
+        next.add(node.id);
+      }
       return next;
     });
-  }, [mindmap]);
+  }, [mindmap, nodesWithChildren]);
 
   // Export as PNG
   const exportPng = useCallback(async () => {
     if (!rfRef.current) return;
-    // Expand all for export
-    const rootIds = new Set(mindmap.nodes.filter(n => !n.parent).map(n => n.id));
-    setExpandedNodes(rootIds);
+    // Expand ALL nodes that have children for export
+    const allExpandable = new Set<string>(
+      mindmap.nodes.filter(n => n.parent).map(n => n.parent!)
+    );
+    setExpandedNodes(allExpandable);
     await new Promise(r => setTimeout(r, 500));
 
     const h2c = (await import("html2canvas")).default;

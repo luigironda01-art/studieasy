@@ -53,15 +53,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ mindmap: existing.content, id: existing.id });
     }
 
-    const prompt = `Analizza il seguente testo e genera una mappa concettuale strutturata in formato JSON.
+    const prompt = `Analizza il seguente testo e genera una mappa concettuale PROFONDA e DETTAGLIATA in formato JSON.
 
 REGOLE:
 - centralTopic: il titolo principale dell'argomento
 - nodes: array di nodi. Ogni nodo ha: id (stringa univoca), label (testo breve max 6 parole), category (concept|principle|formula|example|definition|process), e opzionalmente parent (id del nodo padre)
-- Crea 1 livello centrale + massimo 2 livelli di profondità
-- Massimo 8 nodi principali (figli diretti del centro), massimo 3 sotto-nodi per nodo principale
+- Crea una struttura ad ALBERO PROFONDO con 3-4 livelli di profondità:
+  - Livello 1: 6-10 macro-argomenti (figli del centro)
+  - Livello 2: 2-4 sotto-argomenti per ogni nodo di livello 1
+  - Livello 3: 1-3 dettagli specifici per ogni nodo di livello 2 (formule, esempi, definizioni)
+  - Livello 4 (opzionale): dettagli ulteriori dove serve
+- Genera almeno 40-60 nodi totali per coprire bene il materiale
 - Usa l'italiano
 - Le label devono essere concise e descrittive
+- Assicurati che ogni nodo con parent faccia riferimento a un id esistente
 
 TESTO:
 ${text}
@@ -71,7 +76,8 @@ Rispondi SOLO con JSON valido, senza markdown o testo extra:
   "centralTopic": "${title}",
   "nodes": [
     { "id": "n1", "label": "...", "category": "concept" },
-    { "id": "n1_1", "label": "...", "category": "definition", "parent": "n1" }
+    { "id": "n1_1", "label": "...", "category": "definition", "parent": "n1" },
+    { "id": "n1_1_1", "label": "...", "category": "formula", "parent": "n1_1" }
   ]
 }`;
 
