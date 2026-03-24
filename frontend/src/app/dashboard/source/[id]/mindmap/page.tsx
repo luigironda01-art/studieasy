@@ -123,7 +123,7 @@ function buildVisibleGraph(
         id: `e-${parentId}-${node.id}`,
         source: parentId,
         target: node.id,
-        type: "smoothstep",
+        type: "bezier",
         style: { stroke: colors.border, strokeWidth: depth <= 1 ? 2 : 1.5, opacity: 0.5 },
       });
     }
@@ -179,7 +179,7 @@ function buildVisibleGraph(
       id: `e-center-${node.id}`,
       source: "center",
       target: node.id,
-      type: "smoothstep",
+      type: "bezier",
       style: { stroke: colors.border, strokeWidth: 2, opacity: 0.6 },
     });
   });
@@ -197,18 +197,24 @@ function MindmapInner({
   onExport: (fn: () => void) => void;
 }) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
-  const { nodes: initNodes, edges: initEdges } = buildVisibleGraph(mindmap, expandedNodes);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initEdges);
+  const graphRef = useRef({ nodes: [] as Node[], edges: [] as Edge[] });
+
+  // Always compute fresh graph from current state
+  const currentGraph = buildVisibleGraph(mindmap, expandedNodes);
+  graphRef.current = currentGraph;
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(currentGraph.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(currentGraph.edges);
   const { fitView } = useReactFlow();
   const rfRef = useRef<HTMLDivElement>(null);
 
   // Rebuild graph when expandedNodes changes
   useEffect(() => {
-    const { nodes: newNodes, edges: newEdges } = buildVisibleGraph(mindmap, expandedNodes);
-    setNodes(newNodes);
-    setEdges(newEdges);
-    setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+    const g = buildVisibleGraph(mindmap, expandedNodes);
+    setNodes(g.nodes);
+    setEdges(g.edges);
+    const timer = setTimeout(() => fitView({ padding: 0.2, duration: 250 }), 60);
+    return () => clearTimeout(timer);
   }, [expandedNodes, mindmap, setNodes, setEdges, fitView]);
 
   // Build set of nodes that have children (expandable at any depth)
