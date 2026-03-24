@@ -287,6 +287,7 @@ function MindmapInner({
 
   return (
     <div ref={rfRef} style={{ width: "100%", height: "100%" }}>
+      <style>{`.react-flow__handle { opacity: 0 !important; width: 1px !important; height: 1px !important; min-width: 0 !important; min-height: 0 !important; border: none !important; }`}</style>
       <ReactFlow
         nodes={nodes}
         edges={edges}
