@@ -172,14 +172,14 @@ function buildVisibleGraph(
     },
   });
 
-  // Edge from center to each root node
+  // Edge from center to each root node — straight lines to avoid bezier ghost segments
   rootNodes.forEach((node) => {
     const colors = CATEGORY_COLORS[node.category] || CATEGORY_COLORS.concept;
     rfEdges.push({
       id: `e-center-${node.id}`,
       source: "center",
       target: node.id,
-      type: "bezier",
+      type: "straight",
       style: { stroke: colors.border, strokeWidth: 2, opacity: 0.6 },
     });
   });
