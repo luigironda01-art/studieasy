@@ -18,6 +18,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   BackgroundVariant,
+  Position,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -99,6 +100,8 @@ function buildVisibleGraph(
       id: node.id,
       type: "default",
       position: { x: (depth + 1) * H_STEP, y: nodeY },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
       data: { label: node.label + expandIcon },
       style: {
         background: colors.bg,
@@ -151,6 +154,8 @@ function buildVisibleGraph(
     id: "center",
     type: "default",
     position: { x: 0, y: 0 },
+    sourcePosition: Position.Right,
+    targetPosition: Position.Left,
     data: { label: data.centralTopic },
     style: {
       background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
