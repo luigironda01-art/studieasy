@@ -19,6 +19,7 @@ import {
   useReactFlow,
   BackgroundVariant,
   Position,
+  Handle,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -46,6 +47,30 @@ const CATEGORY_COLORS: Record<string, { bg: string; border: string; text: string
   definition: { bg: "#EC489920", border: "#EC4899", text: "#F9A8D4" },
   process:    { bg: "#06B6D420", border: "#06B6D4", text: "#67E8F9" },
 };
+
+// ─── Custom node: zero-footprint handles, no ghost artifacts ─────────────────
+
+const HIDDEN_HANDLE: React.CSSProperties = {
+  visibility: "hidden",
+  width: 0,
+  height: 0,
+  minWidth: 0,
+  minHeight: 0,
+  padding: 0,
+  border: "none",
+};
+
+function MindmapNode({ data }: { data: Record<string, unknown> }) {
+  return (
+    <>
+      <Handle type="target" position={Position.Left} style={HIDDEN_HANDLE} />
+      {String(data.label ?? "")}
+      <Handle type="source" position={Position.Right} style={HIDDEN_HANDLE} />
+    </>
+  );
+}
+
+const nodeTypes = { mindmapNode: MindmapNode };
 
 // ─── Layout: LR tree with expand/collapse (NotebookLM style) ─────────────────
 
@@ -98,7 +123,7 @@ function buildVisibleGraph(
 
     rfNodes.push({
       id: node.id,
-      type: "default",
+      type: "mindmapNode",
       position: { x: (depth + 1) * H_STEP, y: nodeY },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
@@ -118,12 +143,12 @@ function buildVisibleGraph(
       },
     });
 
-    if (parentId) {
+    if (parentId && parentId !== "center") {
       rfEdges.push({
         id: `e-${parentId}-${node.id}`,
         source: parentId,
         target: node.id,
-        type: "bezier",
+        type: "straight",
         style: { stroke: colors.border, strokeWidth: depth <= 1 ? 2 : 1.5, opacity: 0.5 },
       });
     }
@@ -152,7 +177,7 @@ function buildVisibleGraph(
   // Central node (leftmost)
   rfNodes.push({
     id: "center",
-    type: "default",
+    type: "mindmapNode",
     position: { x: 0, y: 0 },
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
@@ -287,8 +312,8 @@ function MindmapInner({
 
   return (
     <div ref={rfRef} style={{ width: "100%", height: "100%" }}>
-      <style>{`.react-flow__handle { opacity: 0 !important; width: 1px !important; height: 1px !important; min-width: 0 !important; min-height: 0 !important; border: none !important; }`}</style>
       <ReactFlow
+        nodeTypes={nodeTypes}
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
