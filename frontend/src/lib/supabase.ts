@@ -140,3 +140,20 @@ export interface QuizQuestion {
   answered_at: string | null;
   created_at: string;
 }
+
+export interface Conversation {
+  id: string;
+  user_id: string;
+  source_id: string | null;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  created_at: string;
+}

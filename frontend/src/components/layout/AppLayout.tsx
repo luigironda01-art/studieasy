@@ -6,6 +6,7 @@ import { BreadcrumbProvider } from "@/contexts/BreadcrumbContext";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { BottomNav } from "./BottomNav";
+import { ChatSidebar } from "../chat/ChatSidebar";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -50,6 +51,9 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
       {/* Bottom nav - mobile only */}
       <BottomNav />
+
+      {/* Chat sidebar - right side */}
+      <ChatSidebar />
     </div>
   );
 }

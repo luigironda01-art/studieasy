@@ -10,6 +10,8 @@ interface LayoutContextType {
   isMobile: boolean;
   sidebarRefreshKey: number;
   refreshSidebar: () => void;
+  chatOpen: boolean;
+  setChatOpen: (open: boolean) => void;
 }
 
 const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
@@ -30,6 +32,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const [isMobile, setIsMobile] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+  const [chatOpen, setChatOpenState] = useState(false);
+
+  const setChatOpen = (open: boolean) => {
+    setChatOpenState(open);
+  };
 
   const refreshSidebar = () => {
     setSidebarRefreshKey(prev => prev + 1);
@@ -120,6 +127,8 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
         isMobile,
         sidebarRefreshKey,
         refreshSidebar,
+        chatOpen,
+        setChatOpen,
       }}
     >
       {children}
