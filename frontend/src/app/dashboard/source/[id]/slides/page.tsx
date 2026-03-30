@@ -16,8 +16,9 @@ interface FormulaSlide { type: "formula"; title: string; latex: string; explanat
 interface ComparisonSlide { type: "comparison"; title: string; left: { label: string; points: string[] }; right: { label: string; points: string[] } }
 interface TimelineSlide { type: "timeline"; title: string; steps: { label: string; description: string }[] }
 interface SummarySlide  { type: "summary"; title: string; points: string[] }
+interface DefinitionSlide { type: "definition"; term: string; definition: string; details: string[]; example?: string }
 
-type Slide = TitleSlide | ContentSlide | FormulaSlide | ComparisonSlide | TimelineSlide | SummarySlide;
+type Slide = TitleSlide | ContentSlide | FormulaSlide | ComparisonSlide | TimelineSlide | SummarySlide | DefinitionSlide;
 
 interface PresentationData { title: string; slides: Slide[] }
 
@@ -135,6 +136,41 @@ function SlideSummary({ slide }: { slide: SummarySlide }) {
   );
 }
 
+function SlideDefinition({ slide }: { slide: DefinitionSlide }) {
+  return (
+    <div className="flex flex-col h-full px-14 py-10">
+      <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/10">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center">
+          <span className="text-xl">📖</span>
+        </div>
+        <span className="text-sm font-medium text-amber-400 uppercase tracking-wider">Definizione</span>
+      </div>
+      <div className="flex-1 flex flex-col justify-center">
+        <h2 className="text-4xl font-bold text-white mb-4">{slide.term}</h2>
+        <p className="text-xl text-slate-300 leading-relaxed mb-6 border-l-4 border-amber-500/50 pl-5">
+          {slide.definition}
+        </p>
+        {slide.details && slide.details.length > 0 && (
+          <ul className="space-y-3 mb-6">
+            {slide.details.map((d, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <span className="w-2 h-2 rounded-full bg-amber-400 mt-2.5 shrink-0" />
+                <span className="text-slate-300 text-lg" dangerouslySetInnerHTML={{ __html: renderLatexInText(d) }} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {slide.example && (
+          <div className="bg-white/5 border border-amber-500/20 rounded-xl p-4 mt-auto">
+            <span className="text-amber-400 text-sm font-medium">Esempio: </span>
+            <span className="text-slate-300 text-sm" dangerouslySetInnerHTML={{ __html: renderLatexInText(slide.example) }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SlideRenderer({ slide }: { slide: Slide }) {
   switch (slide.type) {
     case "title":      return <SlideTitle slide={slide} />;
@@ -143,6 +179,7 @@ function SlideRenderer({ slide }: { slide: Slide }) {
     case "comparison": return <SlideComparison slide={slide} />;
     case "timeline":   return <SlideTimeline slide={slide} />;
     case "summary":    return <SlideSummary slide={slide} />;
+    case "definition": return <SlideDefinition slide={slide} />;
     default:           return null;
   }
 }
@@ -450,12 +487,13 @@ export default function SlidesPage() {
                   }`}
                 >
                   <div className="text-slate-500 text-xs mb-1">{i + 1}</div>
-                  <div className="text-slate-300 text-xs font-medium truncate">{s.title}</div>
+                  <div className="text-slate-300 text-xs font-medium truncate">{"title" in s ? s.title : "term" in s ? s.term : ""}</div>
                   <div className={`text-xs mt-1 ${
                     s.type === "title" ? "text-blue-400" :
                     s.type === "formula" ? "text-emerald-400" :
                     s.type === "comparison" ? "text-purple-400" :
                     s.type === "summary" ? "text-amber-400" :
+                    s.type === "definition" ? "text-orange-400" :
                     "text-slate-500"
                   }`}>{s.type}</div>
                 </button>
