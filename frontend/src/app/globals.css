@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* KaTeX formula rendering */
+@import "katex/dist/katex.min.css";
+
 /* Custom component styles */
 @layer components {
   /* Flashcard flip animation */

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { supabase, Source, Chapter, Quiz } from "@/lib/supabase";
+import { renderLatexInText } from "@/lib/latex";
 import Link from "next/link";
 
 // Batch of flashcards grouped by difficulty and batch_id
@@ -1697,21 +1698,21 @@ export default function StudyHubPage() {
                 <div
                   className="text-slate-200 leading-relaxed summary-content"
                   dangerouslySetInnerHTML={{
-                    __html: showSummaryReader.content
-                      // Headers - must be processed first (with extra spacing)
-                      .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-emerald-400 mt-8 mb-4 flex items-center gap-2"><span class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>$1</h3>')
-                      .replace(/^## (.*$)/gm, '<h2 class="text-xl font-bold text-white mt-10 mb-4 pb-3 border-b border-slate-700/50">$1</h2>')
-                      // Legacy format: bold text alone on line = section header
-                      .replace(/^\*\*([^*]+)\*\*$/gm, '<h2 class="text-xl font-bold text-white mt-10 mb-4 pb-3 border-b border-slate-700/50">$1</h2>')
-                      // Bold and italic (inline, not alone on line)
-                      .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
-                      .replace(/\*([^*]+)\*/g, '<em class="text-slate-300">$1</em>')
-                      // Lists with bullet or asterisk
-                      .replace(/^\* (.*)/gm, '<li class="ml-6 mb-2 text-slate-300 flex items-start gap-2"><span class="text-emerald-500 mt-1.5">•</span><span>$1</span></li>')
-                      .replace(/^- (.*)/gm, '<li class="ml-6 mb-2 text-slate-300 flex items-start gap-2"><span class="text-emerald-500 mt-1.5">•</span><span>$1</span></li>')
-                      .replace(/^• (.*)/gm, '<li class="ml-6 mb-2 text-slate-300 flex items-start gap-2"><span class="text-emerald-500 mt-1.5">•</span><span>$1</span></li>')
-                      // Paragraphs with spacing
-                      .replace(/\n\n/g, '</p><p class="mb-5 text-slate-300">')
+                    __html: (() => {
+                      // First render LaTeX, then apply markdown formatting
+                      let html = renderLatexInText(showSummaryReader.content);
+                      return html
+                        // Headers
+                        .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-emerald-400 mt-8 mb-4 flex items-center gap-2"><span class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>$1</h3>')
+                        .replace(/^## (.*$)/gm, '<h2 class="text-xl font-bold text-white mt-10 mb-4 pb-3 border-b border-slate-700/50">$1</h2>')
+                        .replace(/^\*\*([^*]+)\*\*$/gm, '<h2 class="text-xl font-bold text-white mt-10 mb-4 pb-3 border-b border-slate-700/50">$1</h2>')
+                        .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
+                        .replace(/\*([^*]+)\*/g, '<em class="text-slate-300">$1</em>')
+                        .replace(/^\* (.*)/gm, '<li class="ml-6 mb-2 text-slate-300 flex items-start gap-2"><span class="text-emerald-500 mt-1.5">•</span><span>$1</span></li>')
+                        .replace(/^- (.*)/gm, '<li class="ml-6 mb-2 text-slate-300 flex items-start gap-2"><span class="text-emerald-500 mt-1.5">•</span><span>$1</span></li>')
+                        .replace(/^• (.*)/gm, '<li class="ml-6 mb-2 text-slate-300 flex items-start gap-2"><span class="text-emerald-500 mt-1.5">•</span><span>$1</span></li>')
+                        .replace(/\n\n/g, '</p><p class="mb-5 text-slate-300">');
+                    })()
                   }}
                 />
               </div>

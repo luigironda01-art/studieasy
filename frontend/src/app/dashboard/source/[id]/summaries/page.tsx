@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { supabase, Source, Chapter } from "@/lib/supabase";
+import { renderLatexInText } from "@/lib/latex";
 
 // PDF block types
 interface PdfBlock {
@@ -232,6 +233,9 @@ export default function SourceSummariesPage() {
 
   const formatProcessedText = (text: string) => {
     let formatted = formatTables(text);
+
+    // Render LaTeX formulas first (before other transformations break them)
+    formatted = renderLatexInText(formatted);
 
     return formatted
       .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-white mt-8 mb-4 pb-2 border-b border-slate-700">$1</h1>')

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { supabase, Source, Chapter } from "@/lib/supabase";
+import { renderLatex, renderLatexInText } from "@/lib/latex";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ function SlideContent({ slide }: { slide: ContentSlide }) {
             <span className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold shrink-0 mt-0.5">
               {i + 1}
             </span>
-            <span className="text-slate-200 text-xl leading-relaxed">{b}</span>
+            <span className="text-slate-200 text-xl leading-relaxed [&_.katex]:text-slate-200" dangerouslySetInnerHTML={{ __html: renderLatexInText(b) }} />
           </li>
         ))}
       </ul>
@@ -60,7 +61,10 @@ function SlideFormula({ slide }: { slide: FormulaSlide }) {
       <h2 className="text-3xl font-bold text-white mb-8 pb-4 border-b border-white/10">{slide.title}</h2>
       <div className="flex-1 flex flex-col items-center justify-center gap-8">
         <div className="bg-white/5 border border-emerald-500/30 rounded-2xl px-10 py-8 text-center w-full max-w-2xl">
-          <p className="text-emerald-300 font-mono text-3xl tracking-wide">{slide.latex}</p>
+          <div
+            className="text-emerald-300 text-3xl [&_.katex]:text-emerald-300"
+            dangerouslySetInnerHTML={{ __html: renderLatex(slide.latex) }}
+          />
         </div>
         <p className="text-slate-300 text-xl text-center max-w-2xl leading-relaxed">{slide.explanation}</p>
       </div>
@@ -80,7 +84,7 @@ function SlideComparison({ slide }: { slide: ComparisonSlide }) {
               {side.points.map((p, i) => (
                 <li key={i} className="flex items-start gap-2 text-slate-300 text-lg">
                   <span className={`mt-2 w-2 h-2 rounded-full shrink-0 ${idx === 0 ? "bg-blue-400" : "bg-purple-400"}`} />
-                  {p}
+                  <span dangerouslySetInnerHTML={{ __html: renderLatexInText(p) }} />
                 </li>
               ))}
             </ul>
@@ -106,7 +110,7 @@ function SlideTimeline({ slide }: { slide: TimelineSlide }) {
             </div>
             <div>
               <p className="text-white font-semibold text-lg">{step.label}</p>
-              <p className="text-slate-400 text-base">{step.description}</p>
+              <p className="text-slate-400 text-base" dangerouslySetInnerHTML={{ __html: renderLatexInText(step.description) }} />
             </div>
           </div>
         ))}
@@ -123,7 +127,7 @@ function SlideSummary({ slide }: { slide: SummarySlide }) {
         {slide.points.map((p, i) => (
           <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-start gap-3">
             <span className="text-2xl">✓</span>
-            <p className="text-slate-200 text-lg leading-relaxed">{p}</p>
+            <p className="text-slate-200 text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: renderLatexInText(p) }} />
           </div>
         ))}
       </div>
