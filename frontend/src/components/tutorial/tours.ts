@@ -233,7 +233,7 @@ export const studyTour: Tour = {
       target: "study-due",
       title: "I tuoi Strumenti di Studio",
       description:
-        "Scegli lo strumento che preferisci: Flashcard per la memorizzazione, Quiz per metterti alla prova, Riassunti, AI Focus, Mappe concettuali e Slides. Ogni strumento mostra i tuoi materiali organizzati per libro.",
+        "Scegli lo strumento che preferisci: Flashcard, Quiz, Riassunti, Mappe, Slides e AI Guida. Ogni strumento mostra i tuoi materiali organizzati per libro.",
       placement: "bottom",
       icon: "🎓",
     },

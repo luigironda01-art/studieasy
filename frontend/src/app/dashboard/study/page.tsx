@@ -57,7 +57,7 @@ interface ChapterWithContent extends Chapter {
   summary: Summary | null;
 }
 
-type TabType = "flashcards" | "quiz" | "summaries" | "ai-focus" | "maps" | "infographics" | "presentations";
+type TabType = "flashcards" | "quiz" | "summaries" | "ai-focus" | "maps" | "presentations";
 
 interface GeneratePopover {
   chapterId: string;
@@ -75,10 +75,9 @@ const TOOLS = [
   { id: "flashcards" as TabType, label: "Flashcard", icon: "🎴", available: true, description: "Ripassa con spaced repetition" },
   { id: "quiz" as TabType, label: "Quiz", icon: "📝", available: true, description: "Metti alla prova le tue conoscenze" },
   { id: "summaries" as TabType, label: "Riassunti", icon: "📄", available: true, description: "Riassunti AI dei capitoli" },
-  { id: "ai-focus" as TabType, label: "AI Focus", icon: "🔍", available: true, description: "Approfondimenti e risorse correlate suggerite dall'AI" },
   { id: "maps" as TabType, label: "Mappe", icon: "🗺️", available: true, description: "Mappe concettuali visive" },
-  { id: "infographics" as TabType, label: "Infografiche", icon: "📊", available: false, description: "Visualizzazioni dei concetti" },
   { id: "presentations" as TabType, label: "Slides", icon: "🎬", available: true, description: "Presentazioni generate" },
+  { id: "ai-focus" as TabType, label: "AI Guida", icon: "🧭", available: true, description: "Percorso di studio e risorse suggerite dall'AI" },
 ];
 
 const GENERATION_LABELS: Record<TabType, string> = {
@@ -87,7 +86,6 @@ const GENERATION_LABELS: Record<TabType, string> = {
   summaries: "parole (x50)",
   "ai-focus": "suggerimenti",
   maps: "nodi",
-  infographics: "sezioni",
   presentations: "slide",
 };
 
@@ -542,7 +540,7 @@ export default function StudyHubPage() {
       // For summaries, generateCount represents target words (multiplied by 50 for word count)
       handleGenerateSummary(chapterId, generateCount * 50);
     }
-    // Future: maps, infographics, presentations
+    // Future: maps, presentations
   };
 
   const handleDeleteFlashcards = async (chapterId: string) => {
