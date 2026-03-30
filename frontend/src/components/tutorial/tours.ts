@@ -231,18 +231,18 @@ export const studyTour: Tour = {
     {
       id: "study-due",
       target: "study-due",
-      title: "Carte da Ripassare",
+      title: "I tuoi Strumenti di Studio",
       description:
-        "Qui vedi quante flashcard devi ripassare oggi. Il numero si aggiorna in base all'algoritmo FSRS che ottimizza la tua memorizzazione.",
+        "Scegli lo strumento che preferisci: Flashcard per la memorizzazione, Quiz per metterti alla prova, Riassunti, AI Focus, Mappe concettuali e Slides. Ogni strumento mostra i tuoi materiali organizzati per libro.",
       placement: "bottom",
-      icon: "🔥",
+      icon: "🎓",
     },
     {
       id: "study-start",
       target: "study-start",
-      title: "Inizia a Studiare",
+      title: "Ripassa Tutto",
       description:
-        'Clicca "Inizia Sessione" per iniziare il ripasso. Vedrai la domanda, prova a rispondere mentalmente, poi gira la carta e valuta quanto bene hai risposto.',
+        "Clicca per iniziare una sessione di ripasso con tutte le flashcard in scadenza. Il sistema FSRS sceglie automaticamente le carte al momento ottimale per la memorizzazione.",
       placement: "bottom",
       icon: "▶️",
     },
