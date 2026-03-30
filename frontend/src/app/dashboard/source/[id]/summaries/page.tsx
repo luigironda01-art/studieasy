@@ -28,6 +28,10 @@ export default function SourceSummariesPage() {
   const [viewMode, setViewMode] = useState<"list" | "read">("list");
   const [summaryView, setSummaryView] = useState<"full" | "chapters">("chapters");
 
+  // Feedback rating
+  const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
+  const [feedbackSaved, setFeedbackSaved] = useState(false);
+
   // PDF generation progress
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [pdfProgress, setPdfProgress] = useState("");
@@ -2325,6 +2329,8 @@ export default function SourceSummariesPage() {
   const openReadMode = (chapter: Chapter) => {
     setSelectedChapter(chapter);
     setViewMode("read");
+    setFeedbackRating(null);
+    setFeedbackSaved(false);
   };
 
   if (authLoading || loading) {
@@ -2409,6 +2415,54 @@ export default function SourceSummariesPage() {
           ) : (
             <div className="text-center py-12 text-slate-400">
               Contenuto non disponibile
+            </div>
+          )}
+
+          {/* Feedback Rating Card */}
+          {selectedChapter.processed_text && (
+            <div className="mt-8 border-t border-white/10 pt-6">
+              {feedbackSaved ? (
+                <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                  <span className="text-xl">✅</span>
+                  <p className="text-emerald-300 text-sm font-medium">Feedback salvato! Il coach ne terrà conto.</p>
+                </div>
+              ) : (
+                <div className="p-5 bg-white/5 border border-white/10 rounded-xl">
+                  <h4 className="text-white font-medium text-sm mb-3">Quanto hai capito di questo capitolo?</h4>
+                  <div className="flex gap-3">
+                    {[
+                      { value: 1, emoji: "😕", label: "Poco", color: "from-red-500/20 to-orange-500/20 border-red-500/30 hover:border-red-500/50" },
+                      { value: 2, emoji: "😐", label: "Abbastanza", color: "from-yellow-500/20 to-amber-500/20 border-yellow-500/30 hover:border-yellow-500/50" },
+                      { value: 3, emoji: "😊", label: "Tutto chiaro", color: "from-emerald-500/20 to-green-500/20 border-emerald-500/30 hover:border-emerald-500/50" },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={async () => {
+                          setFeedbackRating(opt.value);
+                          setFeedbackSaved(true);
+                          try {
+                            await supabase.from("study_feedback").insert({
+                              user_id: user!.id,
+                              chapter_id: selectedChapter.id,
+                              source_id: sourceId,
+                              feedback_type: "summary_rating",
+                              rating: opt.value,
+                            });
+                          } catch (err) {
+                            console.error("Feedback save error:", err);
+                          }
+                        }}
+                        className={`flex-1 flex flex-col items-center gap-2 py-4 rounded-xl bg-gradient-to-br ${opt.color} border transition-all ${
+                          feedbackRating === opt.value ? "ring-2 ring-white/30 scale-105" : ""
+                        }`}
+                      >
+                        <span className="text-2xl">{opt.emoji}</span>
+                        <span className="text-slate-300 text-xs font-medium">{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

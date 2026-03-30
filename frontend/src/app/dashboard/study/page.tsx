@@ -101,6 +101,15 @@ export default function StudyHubPage() {
   const [batchSortBy, setBatchSortBy] = useState<'date' | 'count'>('date');
   const [isLoading, setIsLoading] = useState(true);
   const [totalDue, setTotalDue] = useState(0);
+
+  // Coach AI state
+  const [coachSuggestion, setCoachSuggestion] = useState<{
+    message: string;
+    actions: Array<{ label: string; type: string; chapterId: string; chapterTitle: string }>;
+    insight?: string;
+  } | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachDismissed, setCoachDismissed] = useState(false);
   const [generatingFlashcardsId, setGeneratingFlashcardsId] = useState<string | null>(null);
   const [generatingQuizId, setGeneratingQuizId] = useState<string | null>(null);
   const [generatingSummaryId, setGeneratingSummaryId] = useState<string | null>(null);
@@ -356,6 +365,35 @@ export default function StudyHubPage() {
       setIsLoading(false);
     }
   };
+
+  // Fetch coach suggestion
+  const fetchCoachSuggestion = async () => {
+    if (!user || coachLoading) return;
+    setCoachLoading(true);
+    try {
+      const res = await fetch("/api/coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCoachSuggestion(data.suggestion);
+      }
+    } catch (err) {
+      console.error("Coach error:", err);
+    } finally {
+      setCoachLoading(false);
+    }
+  };
+
+  // Load coach on mount (after main data)
+  useEffect(() => {
+    if (!isLoading && user && !coachSuggestion && !coachDismissed) {
+      fetchCoachSuggestion();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, user]);
 
   const handleGenerateFlashcards = async (chapterId: string, count: number, difficulty: string) => {
     if (!user) return;
@@ -791,6 +829,80 @@ export default function StudyHubPage() {
             </Link>
           )}
         </div>
+
+        {/* Coach AI Card */}
+        {!coachDismissed && (coachLoading || coachSuggestion) && (
+          <div className="mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-purple-500/20 rounded-2xl p-5 relative">
+            {coachLoading ? (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">
+                  <span className="text-lg">🧠</span>
+                </div>
+                <div className="flex-1">
+                  <div className="h-4 w-48 bg-white/10 rounded animate-pulse mb-2" />
+                  <div className="h-3 w-72 bg-white/5 rounded animate-pulse" />
+                </div>
+              </div>
+            ) : coachSuggestion && (
+              <>
+                {/* Dismiss button */}
+                <button
+                  onClick={() => setCoachDismissed(true)}
+                  className="absolute top-3 right-3 p-1 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-lg">🧠</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-semibold text-sm mb-1">Il tuo Coach</h3>
+                    <p className="text-slate-300 text-sm leading-relaxed mb-3">
+                      {coachSuggestion.message}
+                    </p>
+
+                    {/* Insight */}
+                    {coachSuggestion.insight && (
+                      <p className="text-slate-400 text-xs mb-3 italic">
+                        💡 {coachSuggestion.insight}
+                      </p>
+                    )}
+
+                    {/* Action buttons */}
+                    {coachSuggestion.actions && coachSuggestion.actions.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {coachSuggestion.actions.map((action, i) => (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              if (action.type === "flashcards") {
+                                router.push("/dashboard/study/session");
+                              } else if (action.type === "quiz") {
+                                setSelectedTool("quiz");
+                              } else if (action.type === "summary") {
+                                setSelectedTool("summaries");
+                              }
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/15 border border-white/10 rounded-lg text-xs font-medium text-white transition-colors"
+                          >
+                            <span>
+                              {action.type === "flashcards" ? "🔥" : action.type === "quiz" ? "📝" : "📖"}
+                            </span>
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Tools Tabs */}
         <div className="bg-slate-800 rounded-xl border border-slate-700 p-2 mb-6" data-tutorial="study-due">

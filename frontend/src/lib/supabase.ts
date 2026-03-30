@@ -157,3 +157,14 @@ export interface Message {
   content: string;
   created_at: string;
 }
+
+export interface StudyFeedback {
+  id: string;
+  user_id: string;
+  chapter_id: string;
+  source_id: string;
+  feedback_type: "summary_rating" | "quiz_score" | "session_complete";
+  rating: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
