@@ -69,32 +69,50 @@ export function ChatSidebar() {
     setLoadingMessages(false);
   }, [user]);
 
-  // Load conversations on open
+  // Load conversations on open (only when chatOpen transitions to true)
+  const prevChatOpen = useRef(false);
   useEffect(() => {
-    if (chatOpen && user) {
+    if (chatOpen && !prevChatOpen.current && user) {
       fetchConversations();
     }
-  }, [chatOpen, user, fetchConversations]);
+    prevChatOpen.current = chatOpen;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatOpen, user]);
 
   // Load messages when active conversation changes
+  const prevConvId = useRef<string | null>(null);
   useEffect(() => {
-    if (activeConvId) {
+    if (activeConvId && activeConvId !== prevConvId.current) {
       fetchMessages(activeConvId);
       setShowConvList(false);
     }
-  }, [activeConvId, fetchMessages]);
+    prevConvId.current = activeConvId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConvId]);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom (debounced during streaming to avoid jank)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const streamChunkRef = useRef(0);
+  const currentChunk = Math.floor(streamingText.length / 80);
+  if (currentChunk !== streamChunkRef.current) {
+    streamChunkRef.current = currentChunk;
+  }
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingText]);
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+    return () => { if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, streamChunkRef.current]);
 
   // Focus input when chat opens
   useEffect(() => {
     if (chatOpen && !streaming) {
       setTimeout(() => inputRef.current?.focus(), 300);
     }
-  }, [chatOpen, streaming]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatOpen]);
 
   // ─── Send message ───────────────────────────────────────────────────────────
 
@@ -204,8 +222,10 @@ export function ChatSidebar() {
         setMessages(prev => [...prev, assistantMsg]);
       }
 
-      // Refresh conversation list (title may have been set)
-      fetchConversations();
+      // Refresh conversation list only if this was a new conversation
+      if (!activeConvId) {
+        fetchConversations();
+      }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         console.error("Send error:", err);

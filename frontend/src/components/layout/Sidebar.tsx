@@ -146,19 +146,20 @@ export function Sidebar() {
 
         setSources(sourcesWithChapters);
 
-        // Auto-expand sources with due cards
-        const toExpand = new Set<string>();
-        sourcesWithChapters.forEach(s => {
-          if (s.dueCount > 0) {
-            toExpand.add(s.id);
+        // Auto-expand only on FIRST load — never overwrite user's manual expand/collapse
+        if (isInitial) {
+          const toExpand = new Set<string>();
+          sourcesWithChapters.forEach(s => {
+            if (s.dueCount > 0) {
+              toExpand.add(s.id);
+            }
+          });
+          const sourceMatch = pathname.match(/\/dashboard\/source\/([^/]+)/);
+          if (sourceMatch) {
+            toExpand.add(sourceMatch[1]);
           }
-        });
-        // Also expand current source if viewing a source page
-        const sourceMatch = pathname.match(/\/dashboard\/source\/([^/]+)/);
-        if (sourceMatch) {
-          toExpand.add(sourceMatch[1]);
+          setExpandedSources(toExpand);
         }
-        setExpandedSources(toExpand);
 
       } catch (error) {
         console.error("Error fetching sidebar data:", error);
@@ -170,18 +171,38 @@ export function Sidebar() {
     // Show loading only on first load (no sources yet)
     fetchData(sources.length === 0);
 
-    // Refresh every 30 seconds (silent, no loading state)
-    const interval = setInterval(() => fetchData(false), 30000);
+    // Refresh every 60 seconds (silent, no loading state)
+    const interval = setInterval(() => fetchData(false), 60000);
 
-    // Also refresh when window regains focus (silent)
-    const handleFocus = () => fetchData(false);
-    window.addEventListener("focus", handleFocus);
+    // Refresh on focus only if tab was hidden for >5 seconds
+    let lastHidden = 0;
+    const handleVisibility = () => {
+      if (document.hidden) {
+        lastHidden = Date.now();
+      } else if (Date.now() - lastHidden > 5000) {
+        fetchData(false);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [user, pathname, sidebarRefreshKey]);
+  }, [user, sidebarRefreshKey]);
+
+  // Auto-expand current source when navigating (no data re-fetch)
+  useEffect(() => {
+    const sourceMatch = pathname.match(/\/dashboard\/source\/([^/]+)/);
+    if (sourceMatch) {
+      setExpandedSources(prev => {
+        if (prev.has(sourceMatch[1])) return prev;
+        const next = new Set(prev);
+        next.add(sourceMatch[1]);
+        return next;
+      });
+    }
+  }, [pathname]);
 
   // Handle resize
   const startResizing = (e: React.MouseEvent) => {
