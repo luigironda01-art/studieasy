@@ -41,7 +41,7 @@ export const dashboardTour: Tour = {
       target: "sidebar-study",
       title: "Studia Ora",
       description:
-        "Qui trovi le flashcard da ripassare oggi. Il sistema usa la ripetizione spaziata (FSRS) per ottimizzare la memorizzazione.",
+        "Il tuo centro di studio! Qui trovi flashcard da ripassare, quiz, mappe concettuali e presentazioni. Tutto organizzato per libro e capitolo.",
       placement: "right",
       icon: "🔥",
     },
