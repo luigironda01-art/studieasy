@@ -916,7 +916,7 @@ export default function SourceDetailPage() {
         {chapters.some(c => c.processing_status === "completed") && (
           <div className="mb-8">
             <h2 className="text-lg font-semibold text-white mb-4">Strumenti AI</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tutorial="source-tools">
               <Link
                 href={`/dashboard/source/${sourceId}/summaries`}
                 className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl hover:border-blue-500/40 hover:bg-blue-500/5 transition-all group"
@@ -969,7 +969,7 @@ export default function SourceDetailPage() {
           </div>
         )}
 
-        <div className="mb-8">
+        <div className="mb-8" data-tutorial="source-chapters">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Capitoli</h2>
           </div>
@@ -1043,7 +1043,7 @@ export default function SourceDetailPage() {
                       )}
 
                       {chapter.processing_status === "completed" && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" data-tutorial="source-chapter-actions">
                           {flashcardCounts[chapter.id] > 0 && (
                             <button
                               onClick={() => setShowDeleteModal({

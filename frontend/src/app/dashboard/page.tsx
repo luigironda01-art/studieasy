@@ -496,6 +496,7 @@ export default function DashboardPage() {
           </div>
 
           <button
+            data-tutorial="dashboard-add"
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-full text-white font-medium shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 hover:scale-105 transition-all duration-300"
           >

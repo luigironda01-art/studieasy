@@ -499,6 +499,7 @@ export default function MindmapPage() {
 
           {/* Generate / Regenerate */}
           <button
+            data-tutorial="mindmap-generate"
             onClick={handleGenerate}
             disabled={generating || chapters.length === 0}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium disabled:opacity-50"
@@ -547,7 +548,7 @@ export default function MindmapPage() {
       )}
 
       {/* Canvas */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative" data-tutorial="mindmap-interact">
         {!mindmap && !generating ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
             <div className="w-24 h-24 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-3xl flex items-center justify-center">

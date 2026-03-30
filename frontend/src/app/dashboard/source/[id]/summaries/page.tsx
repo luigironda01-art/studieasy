@@ -2642,7 +2642,7 @@ export default function SourceSummariesPage() {
       {/* Segmented Control */}
       {completedChapters.length > 1 && (
         <div className="mb-6">
-          <div className="inline-flex bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-1">
+          <div className="inline-flex bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-1" data-tutorial="summaries-segmented">
             <button
               onClick={() => setSummaryView("full")}
               className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -2927,7 +2927,7 @@ export default function SourceSummariesPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0" data-tutorial="summaries-generate">
                   <button
                     onClick={() => openReadMode(chapter)}
                     className="flex items-center justify-center gap-2 w-[100px] py-2.5 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm font-medium"

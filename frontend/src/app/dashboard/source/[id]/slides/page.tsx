@@ -378,6 +378,7 @@ export default function SlidesPage() {
           )}
 
           <button
+            data-tutorial="slides-generate"
             onClick={handleGenerate}
             disabled={generating || chapters.length === 0}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:opacity-90 transition-opacity text-sm font-medium disabled:opacity-50"
@@ -432,7 +433,7 @@ export default function SlidesPage() {
           <p className="text-slate-300">Generando la presentazione con Gemini...</p>
         </div>
       ) : (
-        <div className="flex-1 flex gap-0 overflow-hidden">
+        <div className="flex-1 flex gap-0 overflow-hidden" data-tutorial="slides-navigate">
           {/* Slide thumbnails sidebar */}
           {!fullscreen && (
             <div className="w-48 border-r border-white/10 overflow-y-auto shrink-0 bg-slate-950/50">

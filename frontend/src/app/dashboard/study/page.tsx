@@ -785,6 +785,7 @@ export default function StudyHubPage() {
           {totalDue > 0 && (
             <Link
               href="/dashboard/study/session"
+              data-tutorial="study-start"
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
             >
               <span>🎯</span>
@@ -794,7 +795,7 @@ export default function StudyHubPage() {
         </div>
 
         {/* Tools Tabs */}
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-2 mb-6">
+        <div className="bg-slate-800 rounded-xl border border-slate-700 p-2 mb-6" data-tutorial="study-due">
           <div className="flex gap-1 overflow-x-auto">
             {TOOLS.map((tool) => (
               <button

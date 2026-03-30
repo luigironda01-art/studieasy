@@ -7,6 +7,7 @@ import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { BottomNav } from "./BottomNav";
 import { ChatSidebar } from "../chat/ChatSidebar";
+import { TutorialOverlay } from "../tutorial/TutorialOverlay";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -54,6 +55,9 @@ function AppLayoutInner({ children }: AppLayoutProps) {
 
       {/* Chat sidebar - right side */}
       <ChatSidebar />
+
+      {/* Tutorial system */}
+      <TutorialOverlay />
     </div>
   );
 }

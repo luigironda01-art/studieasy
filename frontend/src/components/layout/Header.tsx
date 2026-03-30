@@ -64,6 +64,7 @@ export function Header() {
 
           {/* AI Buddy chat toggle */}
           <button
+            data-tutorial="header-chat"
             onClick={() => setChatOpen(!chatOpen)}
             className={`p-2 rounded-lg transition-colors ${
               chatOpen

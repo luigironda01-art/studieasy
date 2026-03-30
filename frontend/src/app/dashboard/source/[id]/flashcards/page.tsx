@@ -429,6 +429,7 @@ export default function SourceFlashcardsPage() {
             <p className="text-slate-400 mt-1">{source?.title}</p>
           </div>
           <button
+            data-tutorial="flashcards-generate"
             onClick={() => setShowGenerateModal(true)}
             disabled={chapters.length === 0}
             className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
