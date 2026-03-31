@@ -7,8 +7,14 @@ import katex from "katex";
 export function renderLatexInText(text: string): string {
   if (!text) return text;
 
+  // Pre-process: convert [FORMULA: ...] tags to $$...$$ LaTeX
+  const preprocessed = text.replace(
+    /\[FORMULA:\s*(.*?)\]/g,
+    (_, formula) => `$$${unicodeToLatex(formula.trim())}$$`
+  );
+
   // First: render display math $$...$$
-  let result = text.replace(
+  let result = preprocessed.replace(
     /\$\$([\s\S]*?)\$\$/g,
     (_, latex) => {
       try {
@@ -93,4 +99,71 @@ function cleanLatexInput(latex: string): string {
   }
 
   return cleaned;
+}
+
+/**
+ * Convert Unicode math notation to LaTeX
+ * e.g. "ħ²/2m d²ψ(x)/dx²" → "\hbar^2 / 2m \frac{d^2 \psi(x)}{dx^2}"
+ */
+function unicodeToLatex(text: string): string {
+  let latex = text;
+
+  // Unicode superscripts → ^{}
+  const superscripts: Record<string, string> = {
+    "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+    "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+    "⁺": "+", "⁻": "-", "ⁿ": "n",
+  };
+  for (const [uni, repl] of Object.entries(superscripts)) {
+    latex = latex.replace(new RegExp(uni, "g"), `^{${repl}}`);
+  }
+
+  // Unicode subscripts → _{}
+  const subscripts: Record<string, string> = {
+    "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4",
+    "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9",
+    "ₙ": "n", "ₘ": "m", "ₓ": "x", "ₖ": "k",
+  };
+  for (const [uni, repl] of Object.entries(subscripts)) {
+    latex = latex.replace(new RegExp(uni, "g"), `_{${repl}}`);
+  }
+
+  // Greek letters
+  const greeks: Record<string, string> = {
+    "α": "\\alpha", "β": "\\beta", "γ": "\\gamma", "δ": "\\delta",
+    "ε": "\\epsilon", "ζ": "\\zeta", "η": "\\eta", "θ": "\\theta",
+    "λ": "\\lambda", "μ": "\\mu", "ν": "\\nu", "π": "\\pi",
+    "ρ": "\\rho", "σ": "\\sigma", "τ": "\\tau", "φ": "\\phi",
+    "χ": "\\chi", "ψ": "\\psi", "ω": "\\omega",
+    "Δ": "\\Delta", "Σ": "\\Sigma", "Ω": "\\Omega", "Φ": "\\Phi",
+    "Ψ": "\\Psi", "Γ": "\\Gamma", "Λ": "\\Lambda", "Π": "\\Pi",
+  };
+  for (const [uni, repl] of Object.entries(greeks)) {
+    latex = latex.replace(new RegExp(uni, "g"), `${repl} `);
+  }
+
+  // Special symbols
+  latex = latex.replace(/ħ/g, "\\hbar");
+  latex = latex.replace(/∞/g, "\\infty");
+  latex = latex.replace(/→/g, "\\rightarrow");
+  latex = latex.replace(/←/g, "\\leftarrow");
+  latex = latex.replace(/≤/g, "\\leq");
+  latex = latex.replace(/≥/g, "\\geq");
+  latex = latex.replace(/≠/g, "\\neq");
+  latex = latex.replace(/≈/g, "\\approx");
+  latex = latex.replace(/±/g, "\\pm");
+  latex = latex.replace(/×/g, "\\times");
+  latex = latex.replace(/÷/g, "\\div");
+  latex = latex.replace(/·/g, "\\cdot");
+  latex = latex.replace(/√/g, "\\sqrt");
+  latex = latex.replace(/∫/g, "\\int");
+  latex = latex.replace(/∑/g, "\\sum");
+  latex = latex.replace(/∂/g, "\\partial");
+  latex = latex.replace(/∇/g, "\\nabla");
+
+  // Merge consecutive superscripts: ^{2}^{3} → ^{23}
+  latex = latex.replace(/\^\{([^}]+)\}\^\{([^}]+)\}/g, "^{$1$2}");
+  latex = latex.replace(/_\{([^}]+)\}_\{([^}]+)\}/g, "_{$1$2}");
+
+  return latex;
 }
