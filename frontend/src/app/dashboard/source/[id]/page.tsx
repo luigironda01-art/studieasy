@@ -7,6 +7,7 @@ import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { supabase, Source, Chapter, Quiz } from "@/lib/supabase";
+import { renderLatexInText } from "@/lib/latex";
 import Link from "next/link";
 
 export default function SourceDetailPage() {
@@ -1565,14 +1566,17 @@ export default function SourceDetailPage() {
                   <div
                     className="whitespace-pre-wrap text-slate-300 leading-relaxed"
                     dangerouslySetInnerHTML={{
-                      __html: viewingChapter.processed_text
-                        .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-white mt-6 mb-3">$1</h1>')
-                        .replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-white mt-5 mb-2">$1</h2>')
-                        .replace(/^### (.*$)/gm, '<h3 class="text-lg font-medium text-white mt-4 mb-2">$1</h3>')
-                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
-                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                        .replace(/^- (.*$)/gm, '<li class="ml-4">$1</li>')
-                        .replace(/\n\n/g, '</p><p class="mb-4">')
+                      __html: (() => {
+                        let html = renderLatexInText(viewingChapter.processed_text);
+                        return html
+                          .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-white mt-6 mb-3">$1</h1>')
+                          .replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-white mt-5 mb-2">$1</h2>')
+                          .replace(/^### (.*$)/gm, '<h3 class="text-lg font-medium text-white mt-4 mb-2">$1</h3>')
+                          .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
+                          .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                          .replace(/^- (.*$)/gm, '<li class="ml-4">$1</li>')
+                          .replace(/\n\n/g, '</p><p class="mb-4">');
+                      })()
                     }}
                   />
                 </div>
