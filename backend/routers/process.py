@@ -110,7 +110,7 @@ async def process_pdf(request: ProcessRequest):
     # Check if user is admin (no limits)
     source_data = supabase.table("sources").select("user_id").eq("id", request.source_id).single().execute()
     is_admin = source_data.data and source_data.data.get("user_id") in ADMIN_USER_IDS
-    max_vision_pages = 200  # No limits for now (small user base)
+    max_vision_pages = 1000  # No limits for now (small user base)
 
     # Quality tracking variables
     extraction_quality = 0
