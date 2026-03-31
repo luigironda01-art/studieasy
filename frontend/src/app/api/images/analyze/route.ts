@@ -8,7 +8,7 @@ interface ImageSuggestion {
   reason: "formula" | "diagram" | "structure" | "poor_text" | "table";
 }
 
-const MAX_IMAGES = 5;
+const MAX_IMAGES = 10;
 
 export async function POST(request: NextRequest) {
   try {

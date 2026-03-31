@@ -1117,13 +1117,13 @@ export default function SourceSummariesPage() {
 
       // Image generation logic (skip if withImages is false):
       // Dynamic limits based on text length:
-      // - Short text (<3000 chars, single chapter): max 3 images
-      // - Medium text (3000-8000 chars): max 5 images
-      // - Long text (8000-20000 chars): max 7 images
-      // - Very long text (>20000 chars, full summary): max 10 images
+      // - Short text (<3000 chars): max 5 images
+      // - Medium text (3000-8000 chars): max 8 images
+      // - Long text (8000-20000 chars): max 12 images
+      // - Very long text (>20000 chars, full book): max 20 images
       const textLen = freshText.length;
       const MIN_IMAGES = textLen > 8000 ? 5 : textLen > 3000 ? 3 : 2;
-      const MAX_IMAGES = textLen > 20000 ? 10 : textLen > 8000 ? 7 : textLen > 3000 ? 5 : 3;
+      const MAX_IMAGES = textLen > 20000 ? 20 : textLen > 8000 ? 12 : textLen > 3000 ? 8 : 5;
       console.log(`[PDF] Text length: ${textLen}, image limits: min=${MIN_IMAGES}, max=${MAX_IMAGES}`);
       const imageMap: Record<string, string> = {};
       const anchorImageMap: Record<string, { base64: string; description: string }> = {};
