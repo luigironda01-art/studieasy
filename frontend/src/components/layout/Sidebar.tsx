@@ -581,6 +581,22 @@ export function Sidebar() {
                         <span className="flex-1">Slides</span>
                       </Link>
                     )}
+
+                    {/* Infografiche */}
+                    {source.hasCompletedChapters && (
+                      <Link
+                        href={`/dashboard/source/${source.id}/infographics`}
+                        onClick={() => isMobile && setSidebarOpen(false)}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-all duration-200 ${
+                          pathname === `/dashboard/source/${source.id}/infographics`
+                            ? "bg-cyan-500/20 text-cyan-300"
+                            : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-300"
+                        }`}
+                      >
+                        <span>📊</span>
+                        <span className="flex-1">Infografica</span>
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>

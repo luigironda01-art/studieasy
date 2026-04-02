@@ -58,7 +58,7 @@ interface ChapterWithContent extends Chapter {
   summary: Summary | null;
 }
 
-type TabType = "flashcards" | "quiz" | "summaries" | "ai-focus" | "maps" | "presentations";
+type TabType = "flashcards" | "quiz" | "summaries" | "ai-focus" | "maps" | "presentations" | "infographics";
 
 interface GeneratePopover {
   chapterId: string;
@@ -78,6 +78,7 @@ const TOOLS = [
   { id: "summaries" as TabType, label: "Riassunti", icon: "📄", available: true, description: "Riassunti AI dei capitoli" },
   { id: "maps" as TabType, label: "Mappe", icon: "🗺️", available: true, description: "Mappe concettuali visive" },
   { id: "presentations" as TabType, label: "Slides", icon: "🎬", available: true, description: "Presentazioni generate" },
+  { id: "infographics" as TabType, label: "Infografiche", icon: "📊", available: true, description: "Visualizzazioni grafiche dei concetti" },
   { id: "ai-focus" as TabType, label: "AI Guida", icon: "🧭", available: true, description: "Percorso di studio e risorse suggerite dall'AI" },
 ];
 
@@ -88,6 +89,7 @@ const GENERATION_LABELS: Record<TabType, string> = {
   "ai-focus": "suggerimenti",
   maps: "nodi",
   presentations: "slide",
+  infographics: "sezioni",
 };
 
 export default function StudyHubPage() {

@@ -966,6 +966,18 @@ export default function SourceDetailPage() {
                   <p className="text-slate-500 text-xs">Presentazione AI</p>
                 </div>
               </Link>
+              <Link
+                href={`/dashboard/source/${sourceId}/infographics`}
+                className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl hover:border-cyan-500/40 hover:bg-cyan-500/5 transition-all group"
+              >
+                <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <span className="text-xl">📊</span>
+                </div>
+                <div>
+                  <p className="text-white font-medium text-sm">Infografica</p>
+                  <p className="text-slate-500 text-xs">Visualizzazione concetti</p>
+                </div>
+              </Link>
             </div>
           </div>
         )}
