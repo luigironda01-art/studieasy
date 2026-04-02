@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   const openrouter = new OpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey: process.env.OPENROUTER_API_KEY! });
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .single();
 
-      text = summary?.content || chapter.processed_text.slice(0, 14000);
+      text = summary?.content || chapter.processed_text.slice(0, 10000);
     } else {
       const { data: source } = await supabase.from("sources").select("title").eq("id", sourceId).single();
       const { data: chapters } = await supabase
@@ -64,10 +65,10 @@ export async function POST(request: NextRequest) {
       text = chapters
         .map((c: { id: string; title: string; processed_text: string | null }) => {
           const summary = summaryMap.get(c.id);
-          return summary ? `## ${c.title}\n${summary}` : `## ${c.title}\n${c.processed_text || ""}`;
+          return summary ? `## ${c.title}\n${summary}` : `## ${c.title}\n${(c.processed_text || "").slice(0, 2000)}`;
         })
         .join("\n\n")
-        .slice(0, 18000);
+        .slice(0, 12000);
     }
 
     // Check existing
@@ -79,81 +80,117 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ infographic: existing.content, id: existing.id });
     }
 
-    const prompt = `Sei un designer di infografiche educative. Analizza il testo e crea un'infografica strutturata in JSON.
+    // Step 1: Extract key content with a fast text model
+    const extractPrompt = `Analizza questo testo di studio e crea un riassunto strutturato per un'infografica educativa.
+Estrai:
+1. Titolo principale
+2. 3-4 concetti chiave (termine + definizione breve)
+3. 2-3 formule importanti (scritte in notazione matematica chiara)
+4. Un processo/flusso in 4-5 step
+5. Un confronto tra 2 elementi (se presente)
+6. 4-5 punti chiave da ricordare
+7. Relazioni tra concetti
 
-REGOLE:
-- L'infografica deve riassumere visivamente i concetti chiave del testo
-- Usa sezioni diverse per rendere i dati visualmente ricchi e vari
-- Lingua: italiano
-- Formule in LaTeX puro (es: E = mc^2, NON $$...$$ e NON [FORMULA:])
-- Massimo 8-12 sezioni totali
-- Ogni sezione deve essere autonoma e informativa
-
-TIPI DI SEZIONE DISPONIBILI:
-
-1. "hero" — Header principale dell'infografica
-   { "type": "hero", "title": "...", "subtitle": "...", "icon": "emoji" }
-
-2. "stats" — Numeri chiave / fatti importanti (3-4 items)
-   { "type": "stats", "title": "...", "items": [{ "value": "...", "label": "...", "icon": "emoji" }] }
-
-3. "concepts" — Concetti chiave con spiegazione breve (3-6 items)
-   { "type": "concepts", "title": "...", "items": [{ "term": "...", "description": "...", "color": "blue|purple|emerald|amber|rose|cyan" }] }
-
-4. "flow" — Processo / flusso sequenziale (3-6 steps)
-   { "type": "flow", "title": "...", "steps": [{ "label": "...", "description": "..." }] }
-
-5. "comparison" — Confronto tra due elementi
-   { "type": "comparison", "title": "...", "left": { "label": "...", "points": ["..."], "color": "blue" }, "right": { "label": "...", "points": ["..."], "color": "purple" } }
-
-6. "formulas" — Formule chiave con spiegazione (2-4 items)
-   { "type": "formulas", "title": "...", "items": [{ "name": "...", "latex": "LaTeX puro", "meaning": "..." }] }
-
-7. "timeline" — Evoluzione / cronologia (3-6 items)
-   { "type": "timeline", "title": "...", "events": [{ "label": "...", "description": "..." }] }
-
-8. "keypoints" — Punti chiave finali / takeaway (4-6 items)
-   { "type": "keypoints", "title": "...", "points": ["..."] }
-
-9. "relationships" — Relazioni tra concetti (3-5 items)
-   { "type": "relationships", "title": "...", "items": [{ "from": "...", "to": "...", "relation": "..." }] }
-
-10. "categories" — Categorie con lista di elementi (2-4 categorie)
-    { "type": "categories", "title": "...", "groups": [{ "name": "...", "items": ["..."], "color": "blue|purple|emerald|amber" }] }
-
-STRUTTURA IDEALE:
-1. hero (sempre primo)
-2. stats o concepts
-3. formulas (se ci sono equazioni)
-4. flow o timeline
-5. comparison (se ci sono confronti)
-6. relationships o categories
-7. keypoints (sempre ultimo)
+Rispondi in italiano, in modo conciso. Max 800 parole.
 
 TESTO:
-${text}
+${text}`;
 
-Rispondi SOLO con JSON valido:
-{
-  "title": "${title}",
-  "sections": [...]
-}`;
-
-    const response = await openrouter.chat.completions.create({
+    const extractResponse = await openrouter.chat.completions.create({
       model: "google/gemini-2.0-flash-001",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.3,
+      messages: [{ role: "user", content: extractPrompt }],
+      temperature: 0.2,
+      max_tokens: 1500,
     });
 
-    let raw = response.choices[0]?.message?.content || "";
-    raw = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+    const extractedContent = extractResponse.choices[0]?.message?.content || "";
 
-    let infographicData;
-    try {
-      infographicData = JSON.parse(raw);
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON from AI" }, { status: 500 });
+    // Step 2: Generate infographic image with Gemini Image model
+    const imagePrompt = `Genera un'infografica educativa professionale in stile editoriale per il seguente argomento universitario.
+
+TITOLO: "${title}"
+
+CONTENUTO DA VISUALIZZARE:
+${extractedContent}
+
+STILE DELL'INFOGRAFICA:
+- Layout: orizzontale (landscape), diviso in 2-3 colonne principali
+- Sfondo: gradiente morbido da blu scuro a viola scuro
+- Tipografia: titoli grandi e chiari, testo leggibile
+- Colori: palette professionale (blu, viola, turchese, emerald su sfondo scuro)
+- Includere: diagrammi schematici, frecce di collegamento, box colorati per i concetti
+- Le formule matematiche devono essere scritte in modo chiaro e leggibile
+- Stile simile alle infografiche di NotebookLM di Google
+- Ogni sezione deve avere un'icona o illustrazione schematica
+- Tabelle comparative con bordi chiari
+- Flussi con frecce direzionali
+- NON includere testo troppo piccolo
+- L'infografica deve essere autoesplicativa e completa
+- Aspetto moderno, pulito, professionale`;
+
+    const imageResponse = await openrouter.chat.completions.create({
+      model: "google/gemini-2.5-flash-image",
+      messages: [{ role: "user", content: imagePrompt }],
+    });
+
+    // Extract image from response
+    const choice = imageResponse.choices[0];
+    let imageBase64 = "";
+    const msg = choice?.message;
+
+    // Check for inline_data in parts (Gemini image response format)
+    if (msg && Array.isArray((msg as unknown as Record<string, unknown>).content)) {
+      const parts = (msg as unknown as Record<string, unknown>).content as Array<Record<string, unknown>>;
+      for (const part of parts) {
+        if (part.type === "image_url" && part.image_url) {
+          const url = (part.image_url as Record<string, string>).url || "";
+          if (url.startsWith("data:image")) {
+            imageBase64 = url;
+          }
+        }
+      }
     }
+
+    // Also check if the content itself has base64 image data
+    if (!imageBase64 && msg?.content && typeof msg.content === "string") {
+      // Some models return base64 directly or as a URL
+      const b64Match = (msg.content as string).match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
+      if (b64Match) {
+        imageBase64 = b64Match[0];
+      }
+    }
+
+    if (!imageBase64) {
+      // Fallback: try to get URL from response
+      console.log("Image response structure:", JSON.stringify(choice, null, 2).slice(0, 2000));
+      return NextResponse.json({ error: "Image generation failed - no image in response" }, { status: 500 });
+    }
+
+    // Upload image to Supabase Storage
+    const imageBuffer = Buffer.from(imageBase64.replace(/^data:image\/[^;]+;base64,/, ""), "base64");
+    const fileName = `infographics/${userId}/${sourceId}/${chapterId || "full"}_${Date.now()}.png`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("files")
+      .upload(fileName, imageBuffer, {
+        contentType: "image/png",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      // Still save with base64 as fallback
+    }
+
+    const { data: publicUrlData } = supabase.storage.from("files").getPublicUrl(fileName);
+    const imageUrl = publicUrlData?.publicUrl || imageBase64;
+
+    const infographicData = {
+      title,
+      imageUrl,
+      extractedContent,
+      generatedAt: new Date().toISOString(),
+    };
 
     const insertData: Record<string, unknown> = {
       source_id: sourceId,
