@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { trackGeneration, updateGeneration } from "@/lib/generations";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -79,6 +80,8 @@ export async function POST(request: NextRequest) {
     if (existing) {
       return NextResponse.json({ infographic: existing.content, id: existing.id });
     }
+
+    const genId = await trackGeneration(userId, sourceId, "infographic", chapterId || null);
 
     // Step 1: Extract key content with a fast text model
     const extractPrompt = `Analizza questo testo di studio e crea un riassunto strutturato per un'infografica educativa.
@@ -206,6 +209,8 @@ STILE DELL'INFOGRAFICA:
       .single();
 
     if (saveError) console.error("Error saving infographic:", saveError);
+
+    if (genId) await updateGeneration(genId, { status: "completed", progress: 100, result_url: `/dashboard/source/${sourceId}/infographics` });
 
     return NextResponse.json({ infographic: infographicData, id: saved?.id });
   } catch (err) {

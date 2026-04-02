@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { logUsage, estimateTokens } from "@/lib/usage-logger";
+import { trackGeneration, updateGeneration } from "@/lib/generations";
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const genId = await trackGeneration(userId, chapter.source_id, "quiz", chapterId);
 
     // Calculate question distribution
     let multipleChoiceCount: number;
@@ -208,6 +211,8 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:`;
       durationMs,
       status: "success",
     });
+
+    if (genId) await updateGeneration(genId, { status: "completed", progress: 100, result_url: `/dashboard/source/${chapter.source_id}/quiz` });
 
     return NextResponse.json({
       success: true,

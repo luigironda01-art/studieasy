@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { trackGeneration, updateGeneration } from "@/lib/generations";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,8 @@ export async function POST(request: NextRequest) {
     if (existing) {
       return NextResponse.json({ mindmap: existing.content, id: existing.id });
     }
+
+    const genId = await trackGeneration(userId, sourceId, "mindmap", chapterId || null);
 
     const prompt = `Analizza il seguente testo e genera una mappa concettuale PROFONDA e DETTAGLIATA in formato JSON.
 
@@ -113,6 +116,8 @@ Rispondi SOLO con JSON valido, senza markdown o testo extra:
       .single();
 
     if (saveError) console.error("Error saving mindmap:", saveError);
+
+    if (genId) await updateGeneration(genId, { status: "completed", progress: 100, result_url: `/dashboard/source/${sourceId}/mindmap` });
 
     return NextResponse.json({ mindmap: mindmapData, id: saved?.id });
   } catch (err) {

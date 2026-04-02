@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { trackGeneration, updateGeneration } from "@/lib/generations";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ presentation: existing.content, id: existing.id });
     }
 
+    const genId = await trackGeneration(userId, sourceId, "slides", chapterId || null);
+
     const prompt = `Sei un docente universitario esperto. Crea una presentazione didattica COMPLETA e DETTAGLIATA in formato JSON dal seguente testo.
 
 REGOLE FONDAMENTALI:
@@ -154,6 +157,8 @@ Rispondi SOLO con JSON valido (nessun testo prima o dopo):
       .single();
 
     if (saveError) console.error("Error saving presentation:", saveError);
+
+    if (genId) await updateGeneration(genId, { status: "completed", progress: 100, result_url: `/dashboard/source/${sourceId}/slides` });
 
     return NextResponse.json({ presentation: presentationData, id: saved?.id });
   } catch (err) {

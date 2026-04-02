@@ -34,6 +34,22 @@ export function Sidebar() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
+  // Generations tracking
+  interface Generation {
+    id: string;
+    type: string;
+    status: string;
+    progress: number;
+    source_id: string;
+    chapter_id: string | null;
+    metadata: Record<string, string>;
+    result_url: string | null;
+    created_at: string;
+    completed_at: string | null;
+  }
+  const [generations, setGenerations] = useState<Generation[]>([]);
+  const [showGenerations, setShowGenerations] = useState(true);
+
   // Fetch sources with chapters and due counts
   useEffect(() => {
     if (!user) return;
@@ -171,8 +187,20 @@ export function Sidebar() {
     // Show loading only on first load (no sources yet)
     fetchData(sources.length === 0);
 
+    // Fetch generations
+    const fetchGenerations = async () => {
+      const { data } = await supabase
+        .from("generations")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (data) setGenerations(data as Generation[]);
+    };
+    fetchGenerations();
+
     // Refresh every 60 seconds (silent, no loading state)
-    const interval = setInterval(() => fetchData(false), 60000);
+    const interval = setInterval(() => { fetchData(false); fetchGenerations(); }, 60000);
 
     // Refresh on focus only if tab was hidden for >5 seconds
     let lastHidden = 0;
@@ -604,6 +632,95 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
+      {/* Generations Section */}
+      {generations.length > 0 && (
+        <div className="border-t border-white/10 px-3 py-2">
+          <button
+            onClick={() => setShowGenerations(!showGenerations)}
+            className="flex items-center justify-between w-full text-xs font-semibold text-slate-500 uppercase tracking-wider px-1 py-1 hover:text-slate-400 transition-colors"
+          >
+            <span>Generazioni</span>
+            <svg className={`w-3 h-3 transition-transform ${showGenerations ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showGenerations && (
+            <div className="mt-1 space-y-1 max-h-48 overflow-y-auto">
+              {generations.map((gen) => {
+                const isPending = gen.status === "pending" || gen.status === "generating";
+                const isFailed = gen.status === "failed";
+                const sourceName = sources.find(s => s.id === gen.source_id)?.title || "";
+                const typeIcons: Record<string, string> = {
+                  flashcards: "🎴", quiz: "📝", summary: "📄",
+                  mindmap: "🗺️", slides: "🎯", infographic: "📊",
+                };
+                const typeLabels: Record<string, string> = {
+                  flashcards: "Flashcard", quiz: "Quiz", summary: "Riassunto",
+                  mindmap: "Mappa", slides: "Slides", infographic: "Infografica",
+                };
+                const resultPath = gen.result_url || (gen.status === "completed" ? `/dashboard/source/${gen.source_id}/${
+                  gen.type === "flashcards" ? "flashcards" :
+                  gen.type === "quiz" ? "quiz" :
+                  gen.type === "summary" ? "summaries" :
+                  gen.type === "mindmap" ? "mindmap" :
+                  gen.type === "slides" ? "slides" :
+                  gen.type === "infographic" ? "infographics" : ""
+                }` : "");
+
+                const inner = (
+                  <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-all ${
+                    isPending ? "bg-amber-500/10 border border-amber-500/20" :
+                    isFailed ? "bg-red-500/10 border border-red-500/20" :
+                    "bg-white/5 hover:bg-white/10"
+                  }`}>
+                    <span className="text-sm">{typeIcons[gen.type] || "⚡"}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className={`font-medium truncate ${
+                          isPending ? "text-amber-300" : isFailed ? "text-red-400" : "text-slate-300"
+                        }`}>
+                          {typeLabels[gen.type] || gen.type}
+                        </span>
+                      </div>
+                      <div className="text-slate-500 truncate">{sourceName}</div>
+                      {isPending && gen.progress > 0 && (
+                        <div className="mt-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500"
+                            style={{ width: `${gen.progress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {isPending && (
+                      <div className="animate-spin w-3 h-3 border border-amber-400 border-t-transparent rounded-full shrink-0" />
+                    )}
+                    {isFailed && (
+                      <span className="text-red-400 shrink-0">!</span>
+                    )}
+                    {gen.status === "completed" && (
+                      <span className="text-emerald-400 shrink-0">✓</span>
+                    )}
+                  </div>
+                );
+
+                return gen.status === "completed" && resultPath ? (
+                  <Link
+                    key={gen.id}
+                    href={resultPath}
+                    onClick={() => isMobile && setSidebarOpen(false)}
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <div key={gen.id}>{inner}</div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bottom Section */}
       <div className="border-t border-white/10 px-3 py-3 space-y-1">

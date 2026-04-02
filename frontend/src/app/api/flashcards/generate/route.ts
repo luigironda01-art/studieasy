@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { logUsage, estimateTokens } from "@/lib/usage-logger";
+import { trackGeneration, updateGeneration } from "@/lib/generations";
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Track generation
+    const genId = await trackGeneration(userId, chapter.source_id, "flashcards", chapterId, { numCards: String(numCards), difficulty });
 
     // Generate flashcards using Claude via OpenRouter
     const langName = language === "it" ? "Italiano" : "English";
@@ -180,6 +184,8 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
       durationMs,
       status: "success",
     });
+
+    if (genId) await updateGeneration(genId, { status: "completed", progress: 100, result_url: `/dashboard/source/${chapter.source_id}/flashcards` });
 
     return NextResponse.json({
       success: true,
