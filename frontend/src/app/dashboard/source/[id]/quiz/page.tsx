@@ -34,6 +34,7 @@ export default function SourceQuizPage() {
   const [generateChapterId, setGenerateChapterId] = useState<string>("");
   const [generateCount, setGenerateCount] = useState(10);
   const [generateDifficulty, setGenerateDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [includeTrueFalse, setIncludeTrueFalse] = useState(true);
   const [generating, setGenerating] = useState(false);
 
   useBreadcrumb(
@@ -115,6 +116,7 @@ export default function SourceQuizPage() {
           numQuestions: generateCount,
           difficulty: generateDifficulty,
           language: "it",
+          includeTrueFalse,
         }),
       });
 
@@ -533,6 +535,27 @@ export default function SourceQuizPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className="text-slate-400 text-sm block mb-2">Includi Vero/Falso</label>
+                <button
+                  onClick={() => setIncludeTrueFalse(!includeTrueFalse)}
+                  className={`flex items-center gap-3 w-full py-3 px-4 rounded-xl border-2 transition-all ${
+                    includeTrueFalse
+                      ? "border-emerald-500 bg-emerald-500/20 text-white"
+                      : "border-slate-600 text-slate-400 hover:border-slate-500"
+                  }`}
+                >
+                  <div className={`w-10 h-6 rounded-full transition-colors flex items-center ${
+                    includeTrueFalse ? "bg-emerald-500 justify-end" : "bg-slate-600 justify-start"
+                  }`}>
+                    <div className="w-5 h-5 rounded-full bg-white mx-0.5 shadow" />
+                  </div>
+                  <span className="text-sm">
+                    {includeTrueFalse ? "Domande a scelta multipla + Vero/Falso" : "Solo scelta multipla"}
+                  </span>
+                </button>
               </div>
             </div>
 

@@ -60,6 +60,7 @@ export default function SourceFlashcardsPage() {
   const [generateDifficulty, setGenerateDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [generating, setGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState("");
+  const [perCapitolo, setPerCapitolo] = useState(true); // When __all__: true = N per chapter, false = N total
 
   useBreadcrumb(
     source
@@ -137,19 +138,19 @@ export default function SourceFlashcardsPage() {
     setGenerating(true);
     try {
       if (generateChapterId === "__all__") {
-        // Distribute cards evenly across all chapters
-        const total = generateCount;
         const numChapters = chapters.length;
-        const basePerChapter = Math.floor(total / numChapters);
-        const remainder = total % numChapters;
-
-        // Build array: [cardsForCh0, cardsForCh1, ...] — first 'remainder' chapters get +1
-        const distribution = chapters.map((_, i) => basePerChapter + (i < remainder ? 1 : 0));
-
-        // Shared batch_id so all cards appear as one group
         const sharedBatchId = crypto.randomUUID();
 
-        // Process sequentially to avoid API overload
+        // Per capitolo: N cards per each chapter. Totale: N cards split across chapters.
+        let distribution: number[];
+        if (perCapitolo) {
+          distribution = chapters.map(() => generateCount);
+        } else {
+          const basePerChapter = Math.floor(generateCount / numChapters);
+          const remainder = generateCount % numChapters;
+          distribution = chapters.map((_, i) => basePerChapter + (i < remainder ? 1 : 0));
+        }
+
         let completed = 0;
         let failed = 0;
         for (let i = 0; i < chapters.length; i++) {
@@ -828,6 +829,36 @@ export default function SourceFlashcardsPage() {
                   />
                   <span className="text-white font-bold w-8 text-center">{generateCount}</span>
                 </div>
+                {generateChapterId === "__all__" && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      onClick={() => setPerCapitolo(true)}
+                      className={`flex-1 py-2 text-sm rounded-lg border transition-all ${
+                        perCapitolo
+                          ? "border-purple-500 bg-purple-500/20 text-white"
+                          : "border-slate-600 text-slate-400 hover:border-slate-500"
+                      }`}
+                    >
+                      {generateCount} per capitolo
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        = {generateCount * chapters.length} totali
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setPerCapitolo(false)}
+                      className={`flex-1 py-2 text-sm rounded-lg border transition-all ${
+                        !perCapitolo
+                          ? "border-purple-500 bg-purple-500/20 text-white"
+                          : "border-slate-600 text-slate-400 hover:border-slate-500"
+                      }`}
+                    >
+                      {generateCount} in totale
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        distribuiti tra i capitoli
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -869,7 +900,9 @@ export default function SourceFlashcardsPage() {
                     {generateProgress || "Generando..."}
                   </>
                 ) : (
-                  `Genera ${generateCount}`
+                  generateChapterId === "__all__" && perCapitolo
+                    ? `Genera ${generateCount * chapters.length} (${generateCount}×${chapters.length})`
+                    : `Genera ${generateCount}`
                 )}
               </button>
             </div>

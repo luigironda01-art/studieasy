@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
       userId,
       numQuestions = 10,
       difficulty = "medium",
-      language = "it"
+      language = "it",
+      includeTrueFalse = true,
     } = await request.json();
 
     console.log("Request data:", { chapterId, userId, numQuestions, difficulty, language });
@@ -59,17 +60,28 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate question distribution
-    const multipleChoiceCount = Math.ceil(numQuestions * 0.6);
-    const trueFalseCount = Math.ceil(numQuestions * 0.2);
-    const openEndedCount = numQuestions - multipleChoiceCount - trueFalseCount;
+    let multipleChoiceCount: number;
+    let trueFalseCount: number;
+    let openEndedCount: number;
+
+    if (includeTrueFalse) {
+      multipleChoiceCount = Math.ceil(numQuestions * 0.6);
+      trueFalseCount = Math.ceil(numQuestions * 0.2);
+      openEndedCount = numQuestions - multipleChoiceCount - trueFalseCount;
+    } else {
+      multipleChoiceCount = Math.ceil(numQuestions * 0.75);
+      trueFalseCount = 0;
+      openEndedCount = numQuestions - multipleChoiceCount;
+    }
 
     const langName = language === "it" ? "Italiano" : "English";
 
     const prompt = `Sei un esperto educatore. Crea un quiz basato sul seguente testo.
 
 GENERA ESATTAMENTE:
-- ${multipleChoiceCount} domande a SCELTA MULTIPLA (4 opzioni, 1 corretta)
-- ${trueFalseCount} domande VERO/FALSO
+- ${multipleChoiceCount} domande a SCELTA MULTIPLA (4 opzioni, 1 corretta)${
+      trueFalseCount > 0 ? `\n- ${trueFalseCount} domande VERO/FALSO` : ""
+    }
 - ${openEndedCount} domande a RISPOSTA APERTA (breve)
 
 REGOLE:
