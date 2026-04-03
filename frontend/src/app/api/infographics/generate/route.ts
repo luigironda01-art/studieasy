@@ -136,36 +136,24 @@ STILE DELL'INFOGRAFICA:
       messages: [{ role: "user", content: imagePrompt }],
     });
 
-    // Extract image from response
-    const choice = imageResponse.choices[0];
+    // Extract image from response — OpenRouter returns images in msg.images[]
+    const msg = imageResponse.choices[0]?.message;
+    const msgAny = msg as unknown as Record<string, unknown>;
+    const images = msgAny?.images as Array<{ type: string; image_url: { url: string } }> | undefined;
     let imageBase64 = "";
-    const msg = choice?.message;
 
-    // Check for inline_data in parts (Gemini image response format)
-    if (msg && Array.isArray((msg as unknown as Record<string, unknown>).content)) {
-      const parts = (msg as unknown as Record<string, unknown>).content as Array<Record<string, unknown>>;
-      for (const part of parts) {
-        if (part.type === "image_url" && part.image_url) {
-          const url = (part.image_url as Record<string, string>).url || "";
-          if (url.startsWith("data:image")) {
-            imageBase64 = url;
-          }
-        }
-      }
+    if (images && images.length > 0) {
+      imageBase64 = images[0]?.image_url?.url || "";
     }
 
-    // Also check if the content itself has base64 image data
+    // Fallback: check content string for embedded base64
     if (!imageBase64 && msg?.content && typeof msg.content === "string") {
-      // Some models return base64 directly or as a URL
-      const b64Match = (msg.content as string).match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
-      if (b64Match) {
-        imageBase64 = b64Match[0];
-      }
+      const b64Match = msg.content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
+      if (b64Match) imageBase64 = b64Match[0];
     }
 
     if (!imageBase64) {
-      // Fallback: try to get URL from response
-      console.log("Image response structure:", JSON.stringify(choice, null, 2).slice(0, 2000));
+      if (genId) await updateGeneration(genId, { status: "failed" });
       return NextResponse.json({ error: "Image generation failed - no image in response" }, { status: 500 });
     }
 
