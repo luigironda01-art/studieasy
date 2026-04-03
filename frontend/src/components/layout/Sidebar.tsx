@@ -694,10 +694,38 @@ export function Sidebar() {
                       )}
                     </div>
                     {isPending && (
-                      <div className="animate-spin w-3 h-3 border border-amber-400 border-t-transparent rounded-full shrink-0" />
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          supabase.from("generations")
+                            .update({ status: "failed", completed_at: new Date().toISOString() })
+                            .eq("id", gen.id)
+                            .then(() => setGenerations(prev => prev.map(g => g.id === gen.id ? { ...g, status: "failed", completed_at: new Date().toISOString() } : g)));
+                        }}
+                        className="w-4 h-4 rounded-full bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center shrink-0 transition-colors"
+                        title="Annulla"
+                      >
+                        <svg className="w-2.5 h-2.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     )}
                     {isFailed && (
-                      <span className="text-red-400 shrink-0">!</span>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          supabase.from("generations").delete().eq("id", gen.id)
+                            .then(() => setGenerations(prev => prev.filter(g => g.id !== gen.id)));
+                        }}
+                        className="text-red-400 shrink-0 hover:text-red-300 transition-colors"
+                        title="Rimuovi"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     )}
                     {gen.status === "completed" && (
                       <span className="text-emerald-400 shrink-0">✓</span>
