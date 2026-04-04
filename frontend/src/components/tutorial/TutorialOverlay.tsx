@@ -415,20 +415,46 @@ export function TutorialOverlay() {
             </div>
           )}
 
-          {/* FAB button */}
+          {/* FAB button — single click starts page tour, long press opens menu */}
           <button
-            onClick={() => setShowHelpMenu(!showHelpMenu)}
+            onClick={() => {
+              if (showHelpMenu) {
+                setShowHelpMenu(false);
+                return;
+              }
+              // Try to start the tour for the current page
+              const pageTour = findTourForPath(pathname);
+              if (pageTour) {
+                startTour(pageTour);
+              } else {
+                // No tour for this page → show all tours menu
+                setShowHelpMenu(true);
+              }
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setShowHelpMenu(!showHelpMenu);
+            }}
             className={`w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all ${
               showHelpMenu
                 ? "bg-purple-600 text-white rotate-45"
                 : "bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:scale-110"
             }`}
-            title="Tutorial e guide"
+            title="Guida di questa pagina (tasto destro per tutti i tutorial)"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
+          {/* Show all tours link */}
+          {!showHelpMenu && findTourForPath(pathname) && (
+            <button
+              onClick={() => setShowHelpMenu(true)}
+              className="absolute -top-7 right-0 text-slate-500 hover:text-slate-300 text-[10px] whitespace-nowrap transition-colors"
+            >
+              Tutti i tutorial
+            </button>
+          )}
         </div>
       )}
     </>
