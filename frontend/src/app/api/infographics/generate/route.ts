@@ -161,8 +161,10 @@ STILE DELL'INFOGRAFICA:
     const imageBuffer = Buffer.from(imageBase64.replace(/^data:image\/[^;]+;base64,/, ""), "base64");
     const fileName = `infographics/${userId}/${sourceId}/${chapterId || "full"}_${Date.now()}.png`;
 
+    let imageUrl = imageBase64; // fallback to base64
+
     const { error: uploadError } = await supabase.storage
-      .from("files")
+      .from("summary-images")
       .upload(fileName, imageBuffer, {
         contentType: "image/png",
         upsert: true,
@@ -170,11 +172,10 @@ STILE DELL'INFOGRAFICA:
 
     if (uploadError) {
       console.error("Upload error:", uploadError);
-      // Still save with base64 as fallback
+    } else {
+      const { data: publicUrlData } = supabase.storage.from("summary-images").getPublicUrl(fileName);
+      if (publicUrlData?.publicUrl) imageUrl = publicUrlData.publicUrl;
     }
-
-    const { data: publicUrlData } = supabase.storage.from("files").getPublicUrl(fileName);
-    const imageUrl = publicUrlData?.publicUrl || imageBase64;
 
     const infographicData = {
       title,
