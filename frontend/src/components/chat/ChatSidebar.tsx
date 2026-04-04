@@ -337,7 +337,7 @@ export function ChatSidebar() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" data-tutorial="chat-conversations">
             {/* Conversation list toggle */}
             <button
               onClick={() => setShowConvList(!showConvList)}

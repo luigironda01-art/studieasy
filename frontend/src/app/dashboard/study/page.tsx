@@ -835,7 +835,7 @@ export default function StudyHubPage() {
 
         {/* Coach AI Card */}
         {!coachDismissed && (coachLoading || coachSuggestion) && (
-          <div className="mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-purple-500/20 rounded-2xl p-5 relative">
+          <div data-tutorial="study-coach" className="mb-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-purple-500/20 rounded-2xl p-5 relative">
             {coachLoading ? (
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shrink-0">

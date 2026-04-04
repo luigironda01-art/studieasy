@@ -22,7 +22,7 @@ interface DueCountByChapter {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { sidebarOpen, setSidebarOpen, sidebarWidth, setSidebarWidth, isMobile, sidebarRefreshKey } = useLayout();
+  const { sidebarOpen, setSidebarOpen, sidebarWidth, setSidebarWidth, isMobile, sidebarRefreshKey, chatOpen, setChatOpen } = useLayout();
   const { user, profile } = useAuth();
 
   const [sources, setSources] = useState<SourceWithChapters[]>([]);
@@ -417,6 +417,19 @@ export function Sidebar() {
             </span>
           )}
         </Link>
+
+        <button
+          onClick={() => setChatOpen(!chatOpen)}
+          data-tutorial="sidebar-chat"
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 mt-1 w-full text-left ${
+            chatOpen
+              ? "bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 text-white border border-emerald-500/30"
+              : "text-slate-400 hover:bg-white/5 hover:text-white hover:border-white/10 border border-transparent"
+          }`}
+        >
+          <span className="text-lg">💬</span>
+          <span className="font-medium">AI Buddy</span>
+        </button>
       </div>
 
       {/* Library Section */}
