@@ -108,31 +108,41 @@ ${text}`;
 
     const extractedContent = extractResponse.choices[0]?.message?.content || "";
 
-    // Step 2: Generate infographic image with Gemini Image model
-    const imagePrompt = `Genera un'infografica educativa professionale in stile editoriale per il seguente argomento universitario.
+    // Step 2: Generate infographic image with Nano Banana Pro (Gemini 3 Pro Image)
+    const imagePrompt = `Create a professional educational infographic in horizontal landscape format (16:9 aspect ratio, 2K resolution) about this university-level topic.
 
-TITOLO: "${title}"
+TITLE: "${title}"
 
-CONTENUTO DA VISUALIZZARE:
+CONTENT TO VISUALIZE (all text MUST be written in ITALIAN exactly as provided):
 ${extractedContent}
 
-STILE DELL'INFOGRAFICA:
-- Layout: orizzontale (landscape), diviso in 2-3 colonne principali
-- Sfondo: gradiente morbido da blu scuro a viola scuro
-- Tipografia: titoli grandi e chiari, testo leggibile
-- Colori: palette professionale (blu, viola, turchese, emerald su sfondo scuro)
-- Includere: diagrammi schematici, frecce di collegamento, box colorati per i concetti
-- Le formule matematiche devono essere scritte in modo chiaro e leggibile
-- Stile simile alle infografiche di NotebookLM di Google
-- Ogni sezione deve avere un'icona o illustrazione schematica
-- Tabelle comparative con bordi chiari
-- Flussi con frecce direzionali
-- NON includere testo troppo piccolo
-- L'infografica deve essere autoesplicativa e completa
-- Aspetto moderno, pulito, professionale`;
+CRITICAL TEXT RULES:
+- ALL text labels, headings, formulas, and explanations MUST be in Italian
+- Spell every word EXACTLY as written above — no inventing, no shortening, no translation
+- Mathematical formulas MUST be rendered with proper math typography (fractions, exponents, Greek letters, integrals)
+- Use the EXACT formulas provided, not approximations
+
+VISUAL STYLE:
+- Layout: editorial magazine-style infographic, 2-3 vertical columns of content
+- Background: dark navy blue gradient with subtle decorative elements
+- Color palette: navy/dark-blue background with electric blue, purple, cyan, and emerald accents
+- Typography: clear bold sans-serif headings, highly readable body text
+- Each section: rounded card with subtle border, clear icon or schematic diagram
+- Diagrams: schematic illustrations of the actual scientific concepts (energy levels, wave functions, particle in a box, etc.)
+- Connecting elements: arrows, lines, flow indicators between related concepts
+- Comparison tables: bordered cells with clear column headers
+- Mathematical formulas displayed in beautiful boxed equation blocks
+- Decorative scientific elements relevant to the topic (atoms, waves, graphs)
+
+QUALITY REQUIREMENTS:
+- Professional editorial design quality (NotebookLM-tier)
+- All Italian text must be perfectly spelled and grammatically correct
+- High information density but visually clean and organized
+- Self-explanatory: viewer should understand the topic from the infographic alone
+- Modern, premium look with refined typography and color use`;
 
     const imageResponse = await openrouter.chat.completions.create({
-      model: "google/gemini-2.5-flash-image",
+      model: "google/gemini-3-pro-image-preview",
       messages: [{ role: "user", content: imagePrompt }],
     });
 
