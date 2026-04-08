@@ -6,7 +6,7 @@ import { validateUserId } from "@/lib/auth-server";
 function getClients() {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
   const openrouter = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
@@ -232,6 +232,7 @@ Max 3 azioni. Sii specifico sui capitoli. Parla in italiano.`,
     }));
   } catch (error) {
     console.error("Coach API error:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: "Internal server error", details: message }), { status: 500 });
   }
 }
