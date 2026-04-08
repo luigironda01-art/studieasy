@@ -165,7 +165,7 @@ export default function StudyHubPage() {
     setIsLoading(true);
 
     try {
-      // Fetch sources
+      // First fetch sources (needed to filter chapters)
       const { data: sourcesData } = await supabase
         .from("sources")
         .select("*")
@@ -178,18 +178,24 @@ export default function StudyHubPage() {
         return;
       }
 
-      // Fetch chapters
-      const { data: chaptersData } = await supabase
-        .from("chapters")
-        .select("*")
-        .in("source_id", sourcesData.map(s => s.id))
-        .order("order_index", { ascending: true });
+      const sourceIds = sourcesData.map(s => s.id);
+      const now = new Date().toISOString();
 
-      // Fetch flashcards with difficulty and batch_id
-      const { data: flashcardsData } = await supabase
-        .from("flashcards")
-        .select("id, chapter_id, difficulty, batch_id, created_at")
-        .eq("user_id", user.id);
+      // Run all independent queries in PARALLEL (was 5+ sequential = N+1 problem)
+      const [
+        { data: chaptersData },
+        { data: flashcardsData },
+        { data: dueReviewsRaw },
+        { data: quizzesData },
+        { data: summariesData },
+      ] = await Promise.all([
+        supabase.from("chapters").select("*").in("source_id", sourceIds).order("order_index", { ascending: true }),
+        supabase.from("flashcards").select("id, chapter_id, difficulty, batch_id, created_at").eq("user_id", user.id),
+        supabase.from("reviews").select("id, flashcard_id, flashcards!inner(chapter_id)").eq("user_id", user.id).lte("due", now),
+        supabase.from("quizzes").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+        supabase.from("summaries").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      ]);
+      const dueReviews = dueReviewsRaw;
 
       // Get source_id for each chapter for grouping
       const chapterToSource: Record<string, string> = {};
@@ -202,19 +208,6 @@ export default function StudyHubPage() {
         fcCountByChapter[fc.chapter_id] = (fcCountByChapter[fc.chapter_id] || 0) + 1;
       });
 
-      // Fetch due counts
-      const now = new Date().toISOString();
-      const { data: dueReviews } = await supabase
-        .from("reviews")
-        .select(`
-          id,
-          flashcards!inner (
-            chapter_id
-          )
-        `)
-        .eq("user_id", user.id)
-        .lte("due", now);
-
       const dueByChapter: Record<string, number> = {};
       let totalDueCount = 0;
       dueReviews?.forEach((r: any) => {
@@ -226,13 +219,6 @@ export default function StudyHubPage() {
       });
       setTotalDue(totalDueCount);
 
-      // Fetch quizzes
-      const { data: quizzesData } = await supabase
-        .from("quizzes")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
       const quizzesByChapter: Record<string, Quiz[]> = {};
       quizzesData?.forEach((quiz: Quiz) => {
         if (!quizzesByChapter[quiz.chapter_id]) {
@@ -240,13 +226,6 @@ export default function StudyHubPage() {
         }
         quizzesByChapter[quiz.chapter_id].push(quiz);
       });
-
-      // Fetch summaries
-      const { data: summariesData } = await supabase
-        .from("summaries")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
 
       const summaryByChapter: Record<string, Summary> = {};
       summariesData?.forEach((summary: Summary) => {

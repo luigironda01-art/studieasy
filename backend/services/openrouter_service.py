@@ -6,9 +6,34 @@ import os
 import re
 import json
 import asyncio
-from typing import Optional
+from typing import Optional, Callable, Any
 from openai import AsyncOpenAI
 from config import get_settings
+
+
+async def with_retry(
+    fn: Callable[[], Any],
+    max_attempts: int = 3,
+    base_delay: float = 2.0,
+    operation_name: str = "AI call",
+) -> Any:
+    """
+    Retry an async function with exponential backoff.
+    Retries on timeouts and transient errors. Re-raises after max_attempts.
+    """
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await fn()
+        except (asyncio.TimeoutError, Exception) as e:
+            last_exc = e
+            if attempt == max_attempts:
+                print(f"[{operation_name}] Failed after {max_attempts} attempts: {e}")
+                raise
+            delay = base_delay * (2 ** (attempt - 1))
+            print(f"[{operation_name}] Attempt {attempt}/{max_attempts} failed ({e}), retrying in {delay}s...")
+            await asyncio.sleep(delay)
+    raise last_exc  # unreachable but satisfies type checker
 
 
 class OpenRouterService:
@@ -75,26 +100,20 @@ Restituisci SOLO il contenuto estratto, senza commenti o meta-testo."""
                 }
             })
 
-        try:
-            response = await asyncio.wait_for(
+        async def call():
+            return await asyncio.wait_for(
                 self.client.chat.completions.create(
                     model=self.vision_model,
                     max_tokens=16000,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": content
-                        }
-                    ]
+                    messages=[{"role": "user", "content": content}]
                 ),
                 timeout=300.0
             )
+        try:
+            response = await with_retry(call, max_attempts=3, operation_name="vision")
             return response.choices[0].message.content
-        except asyncio.TimeoutError:
-            print("Vision processing timed out after 300s")
-            raise Exception("Vision processing timed out (300s)")
         except Exception as e:
-            print(f"Vision processing error: {e}")
+            print(f"Vision processing error after retries: {e}")
             raise Exception(f"Failed to process document with vision: {e}")
 
     async def generate_ai_focus(self, processed_text: str, language: str = "it") -> dict:

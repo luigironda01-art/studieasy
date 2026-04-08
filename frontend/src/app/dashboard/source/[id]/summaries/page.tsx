@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBreadcrumb } from "@/contexts/BreadcrumbContext";
 import { supabase, Source, Chapter } from "@/lib/supabase";
 import { renderLatexInText } from "@/lib/latex";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 // PDF block types
 interface PdfBlock {
@@ -2412,7 +2413,7 @@ export default function SourceSummariesPage() {
               <div
                 className="text-slate-300 leading-relaxed text-[16px]"
                 dangerouslySetInnerHTML={{
-                  __html: formatProcessedText(selectedChapter.processed_text)
+                  __html: sanitizeHtml(formatProcessedText(selectedChapter.processed_text))
                 }}
               />
             </article>
@@ -2615,7 +2616,7 @@ export default function SourceSummariesPage() {
                     <div
                       className="text-slate-300 leading-relaxed"
                       dangerouslySetInnerHTML={{
-                        __html: formatProcessedText(generatedSummary)
+                        __html: sanitizeHtml(formatProcessedText(generatedSummary))
                       }}
                     />
                   </div>

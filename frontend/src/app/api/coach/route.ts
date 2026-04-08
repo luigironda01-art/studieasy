@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { validateUserId } from "@/lib/auth-server";
 
 function getClients() {
   const supabase = createClient(
@@ -30,10 +31,11 @@ interface ChapterStats {
 export async function POST(request: NextRequest) {
   try {
     const { supabase, openrouter } = getClients();
-    const { userId } = await request.json();
+    const { userId: bodyUserId } = await request.json();
 
+    const { userId, error: authError } = await validateUserId(request, bodyUserId);
     if (!userId) {
-      return new Response(JSON.stringify({ error: "Missing userId" }), { status: 400 });
+      return new Response(JSON.stringify({ error: authError || "Unauthorized" }), { status: 401 });
     }
 
     // 1. Fetch all user's flashcard review data

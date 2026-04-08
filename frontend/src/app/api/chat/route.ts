@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { validateUserId, getAuthenticatedUserId } from "@/lib/auth-server";
 
 // Initialize clients inside handler to avoid build-time errors
 function getClients() {
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     const {
       conversationId,
       message,
-      userId,
+      userId: bodyUserId,
       sourceId,
       webSearch = false,
     } = body as {
@@ -71,8 +72,13 @@ export async function POST(request: NextRequest) {
       webSearch: boolean;
     };
 
-    if (!message?.trim() || !userId) {
-      return new Response(JSON.stringify({ error: "Missing message or userId" }), { status: 400 });
+    if (!message?.trim()) {
+      return new Response(JSON.stringify({ error: "Missing message" }), { status: 400 });
+    }
+
+    const { userId, error: authError } = await validateUserId(request, bodyUserId);
+    if (!userId) {
+      return new Response(JSON.stringify({ error: authError || "Unauthorized" }), { status: 401 });
     }
 
     // 1. Get or create conversation
@@ -247,10 +253,16 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { supabase } = getClients();
-    const userId = request.nextUrl.searchParams.get("userId");
-    if (!userId) {
+    const queryUserId = request.nextUrl.searchParams.get("userId");
+    if (!queryUserId) {
       return new Response(JSON.stringify({ error: "Missing userId" }), { status: 400 });
     }
+    const sessionUserId = await getAuthenticatedUserId(request);
+    // If session present, must match query userId
+    if (sessionUserId && sessionUserId !== queryUserId) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+    }
+    const userId = sessionUserId || queryUserId;
 
     const { data, error } = await supabase
       .from("conversations")
@@ -273,10 +285,14 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { supabase } = getClients();
-    const { conversationId, userId } = await request.json();
+    const { conversationId, userId: bodyUserId } = await request.json();
 
-    if (!conversationId || !userId) {
-      return new Response(JSON.stringify({ error: "Missing params" }), { status: 400 });
+    if (!conversationId) {
+      return new Response(JSON.stringify({ error: "Missing conversationId" }), { status: 400 });
+    }
+    const { userId, error: authError } = await validateUserId(request, bodyUserId);
+    if (!userId) {
+      return new Response(JSON.stringify({ error: authError || "Unauthorized" }), { status: 401 });
     }
 
     // Messages cascade-delete via FK

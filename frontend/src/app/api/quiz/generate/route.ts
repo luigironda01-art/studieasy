@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { logUsage, estimateTokens } from "@/lib/usage-logger";
 import { trackGeneration, updateGeneration } from "@/lib/generations";
+import { validateUserId } from "@/lib/auth-server";
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,20 @@ export async function POST(request: NextRequest) {
   try {
     const {
       chapterId,
-      userId,
+      userId: bodyUserId,
       numQuestions = 10,
       difficulty = "medium",
       language = "it",
       includeTrueFalse = true,
     } = await request.json();
+
+    if (!chapterId) {
+      return NextResponse.json({ error: "Missing chapterId" }, { status: 400 });
+    }
+    const { userId, error: authError } = await validateUserId(request, bodyUserId);
+    if (!userId) {
+      return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
+    }
 
     console.log("Request data:", { chapterId, userId, numQuestions, difficulty, language });
 

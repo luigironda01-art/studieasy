@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { fsrs, Rating, State, createEmptyCard, Card } from "ts-fsrs";
+import { validateUserId } from "@/lib/auth-server";
 
 export const dynamic = 'force-dynamic';
 
@@ -14,13 +15,17 @@ const f = fsrs();
 
 export async function POST(request: NextRequest) {
   try {
-    const { reviewId, flashcardId, userId, rating } = await request.json();
+    const { reviewId, flashcardId, userId: bodyUserId, rating } = await request.json();
 
-    if (!reviewId || !flashcardId || !userId || rating === undefined) {
+    if (!reviewId || !flashcardId || rating === undefined) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
+    }
+    const { userId, error: authError } = await validateUserId(request, bodyUserId);
+    if (!userId) {
+      return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
     }
 
     if (rating < 1 || rating > 4) {

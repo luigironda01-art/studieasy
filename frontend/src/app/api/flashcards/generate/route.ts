@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { logUsage, estimateTokens } from "@/lib/usage-logger";
 import { trackGeneration, updateGeneration } from "@/lib/generations";
+import { validateUserId } from "@/lib/auth-server";
 
 export const dynamic = 'force-dynamic';
 
@@ -22,16 +23,17 @@ export async function POST(request: NextRequest) {
   );
 
   try {
-    const { chapterId, userId, numCards = 10, difficulty = "medium", language = "it", batchId: externalBatchId } = await request.json();
-    console.log("Request data:", { chapterId, userId, numCards, difficulty, language });
+    const { chapterId, userId: bodyUserId, numCards = 10, difficulty = "medium", language = "it", batchId: externalBatchId } = await request.json();
 
-    if (!chapterId || !userId) {
-      console.log("Missing required fields");
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+    if (!chapterId) {
+      return NextResponse.json({ error: "Missing chapterId" }, { status: 400 });
     }
+
+    const { userId, error: authError } = await validateUserId(request, bodyUserId);
+    if (!userId) {
+      return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
+    }
+    console.log("Request data:", { chapterId, userId, numCards, difficulty, language });
 
     // Get chapter with processed text
     console.log("Fetching chapter:", chapterId);

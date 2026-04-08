@@ -1,8 +1,10 @@
 import katex from "katex";
+import { sanitizeHtml } from "./sanitize";
 
 /**
  * Render all LaTeX blocks ($$...$$) and inline ($...$) in a string to KaTeX HTML.
  * Returns the string with LaTeX replaced by rendered HTML spans.
+ * Output is sanitized via DOMPurify to prevent XSS.
  */
 export function renderLatexInText(text: string): string {
   if (!text) return text;
@@ -49,7 +51,7 @@ export function renderLatexInText(text: string): string {
     }
   );
 
-  return result;
+  return sanitizeHtml(result);
 }
 
 /**
@@ -58,14 +60,14 @@ export function renderLatexInText(text: string): string {
 export function renderLatex(latex: string, displayMode = true): string {
   try {
     const cleaned = cleanLatexInput(latex.trim().replace(/^\$+|\$+$/g, ""));
-    return katex.renderToString(cleaned, {
+    return sanitizeHtml(katex.renderToString(cleaned, {
       displayMode,
       throwOnError: false,
       strict: false,
       trust: true,
-    });
+    }));
   } catch {
-    return `<code class="text-emerald-400">${latex}</code>`;
+    return sanitizeHtml(`<code class="text-emerald-400">${latex}</code>`);
   }
 }
 

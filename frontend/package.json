@@ -17,6 +17,7 @@
     "clsx": "^2.1.0",
     "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
+    "isomorphic-dompurify": "^3.7.1",
     "jspdf": "^4.2.0",
     "katex": "^0.16.38",
     "lucide-react": "^0.312.0",

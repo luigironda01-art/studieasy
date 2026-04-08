@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { trackGeneration, updateGeneration } from "@/lib/generations";
+import { validateUserId } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
 
@@ -9,9 +10,13 @@ export async function POST(request: NextRequest) {
   const openrouter = new OpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey: process.env.OPENROUTER_API_KEY! });
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
   try {
-    const { sourceId, chapterId, userId } = await request.json();
-    if (!sourceId || !userId) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    const { sourceId, chapterId, userId: bodyUserId } = await request.json();
+    if (!sourceId) {
+      return NextResponse.json({ error: "Missing sourceId" }, { status: 400 });
+    }
+    const { userId, error: authError } = await validateUserId(request, bodyUserId);
+    if (!userId) {
+      return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
     }
 
     // Fetch text — prefer summaries if available (richer, more concise)

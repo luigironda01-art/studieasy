@@ -5,6 +5,7 @@ Supports both text-based PDFs and image-based PDFs (slides, scanned documents)
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import asyncio
 import httpx
 import os
 import base64
@@ -43,10 +44,11 @@ else:
 supabase = create_client(supabase_url, supabase_key)
 
 
-# Admin users with no processing limits
-ADMIN_USER_IDS = {
-    "a0c920fe-6b40-47b7-8524-86f06c294afa",  # Luigi Rondanini
-}
+# Admin users with no processing limits — load from env var
+# Set ADMIN_USER_IDS env var as comma-separated UUIDs
+ADMIN_USER_IDS = set(
+    uid.strip() for uid in os.getenv("ADMIN_USER_IDS", "").split(",") if uid.strip()
+)
 
 def determine_preferred_model(text: str, extraction_method: str) -> str:
     """Analyze content to determine the best AI model for generation tasks.
@@ -447,33 +449,42 @@ async def process_pdf(request: ProcessRequest):
 
             if all_chapters.data:
                 openrouter = get_openrouter_service()
-                for ch_idx, ch in enumerate(all_chapters.data):
-                    if not ch.get("processed_text"):
-                        continue
-                    progress = 92 + int((ch_idx / len(all_chapters.data)) * 7)
-                    update_progress(progress, f"Riassunto capitolo {ch_idx+1}/{len(all_chapters.data)}...")
+                valid_chapters = [ch for ch in all_chapters.data if ch.get("processed_text")]
+                update_progress(93, f"Generando {len(valid_chapters)} riassunti in parallelo...")
+
+                async def gen_summary_safe(ch):
                     try:
-                        summary_text = await openrouter.generate_chapter_summary(
+                        return ch, await openrouter.generate_chapter_summary(
                             ch["processed_text"],
                             ch.get("preferred_model", "anthropic/claude-3.5-sonnet")
                         )
-                        if summary_text:
-                            # Check if summary already exists
-                            existing = supabase.table("summaries").select("id").eq("chapter_id", ch["id"]).execute()
-                            if existing.data:
-                                supabase.table("summaries").delete().eq("id", existing.data[0]["id"]).execute()
+                    except Exception as err:
+                        print(f"  Warning: summary generation failed for '{ch['title']}': {err}")
+                        return ch, None
 
-                            word_count = len(summary_text.strip().split())
-                            supabase.table("summaries").insert({
-                                "chapter_id": ch["id"],
-                                "user_id": source_data.data["user_id"],
-                                "content": summary_text,
-                                "word_count": word_count,
-                                "target_words": 500,
-                            }).execute()
-                            print(f"  Summary for '{ch['title']}': {word_count} words")
-                    except Exception as sum_err:
-                        print(f"  Warning: summary generation failed for '{ch['title']}': {sum_err}")
+                # Run all summary generations concurrently
+                results = await asyncio.gather(*[gen_summary_safe(ch) for ch in valid_chapters])
+
+                update_progress(98, "Salvataggio riassunti...")
+                for ch, summary_text in results:
+                    if not summary_text:
+                        continue
+                    try:
+                        existing = supabase.table("summaries").select("id").eq("chapter_id", ch["id"]).execute()
+                        if existing.data:
+                            supabase.table("summaries").delete().eq("id", existing.data[0]["id"]).execute()
+
+                        word_count = len(summary_text.strip().split())
+                        supabase.table("summaries").insert({
+                            "chapter_id": ch["id"],
+                            "user_id": source_data.data["user_id"],
+                            "content": summary_text,
+                            "word_count": word_count,
+                            "target_words": 500,
+                        }).execute()
+                        print(f"  Summary for '{ch['title']}': {word_count} words")
+                    except Exception as save_err:
+                        print(f"  Warning: failed to save summary for '{ch['title']}': {save_err}")
 
             update_progress(100, "Elaborazione completata!")
             print(f"[100%] Elaborazione completata! {len(chapters_data)} capitoli + riassunti")
