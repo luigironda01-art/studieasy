@@ -55,3 +55,33 @@ export async function validateUserId(
   // TODO: tighten this once frontend always sends auth headers
   return { userId: bodyUserId };
 }
+
+/**
+ * Returns the list of admin user IDs from the ADMIN_USER_IDS env var.
+ */
+export function getAdminUserIds(): Set<string> {
+  const raw = process.env.ADMIN_USER_IDS || "";
+  return new Set(
+    raw.split(",").map(id => id.trim()).filter(Boolean)
+  );
+}
+
+/**
+ * Validates that the request comes from an admin user.
+ * Returns the admin user ID, or null with error message.
+ *
+ * Checks both the session header AND that the user is in ADMIN_USER_IDS.
+ */
+export async function requireAdmin(
+  request: NextRequest,
+): Promise<{ userId: string | null; error?: string }> {
+  const sessionUserId = await getAuthenticatedUserId(request);
+  if (!sessionUserId) {
+    return { userId: null, error: "Unauthorized: missing session" };
+  }
+  const admins = getAdminUserIds();
+  if (!admins.has(sessionUserId)) {
+    return { userId: null, error: "Forbidden: admin only" };
+  }
+  return { userId: sessionUserId };
+}

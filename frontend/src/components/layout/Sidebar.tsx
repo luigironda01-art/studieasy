@@ -32,7 +32,26 @@ export function Sidebar() {
   const [isLoading, setIsLoading] = useState(true);
   const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // Check admin status once on mount
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch("/api/admin/check", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const data = await res.json();
+        setIsAdmin(!!data.isAdmin);
+      } catch {
+        setIsAdmin(false);
+      }
+    })();
+  }, [user]);
 
   // Generations tracking
   interface Generation {
@@ -430,6 +449,24 @@ export function Sidebar() {
           <span className="text-lg">💬</span>
           <span className="font-medium">AI Buddy</span>
         </button>
+
+        {isAdmin && (
+          <Link
+            href="/dashboard/admin"
+            onClick={() => isMobile && setSidebarOpen(false)}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 mt-1 ${
+              pathname.startsWith("/dashboard/admin")
+                ? "bg-gradient-to-r from-rose-600/20 to-amber-600/20 text-white border border-rose-500/30"
+                : "text-slate-400 hover:bg-white/5 hover:text-white hover:border-white/10 border border-transparent"
+            }`}
+          >
+            <span className="text-lg">🛡️</span>
+            <span className="font-medium">Admin</span>
+            <span className="ml-auto bg-rose-500/20 text-rose-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
+              ADMIN
+            </span>
+          </Link>
+        )}
       </div>
 
       {/* Library Section */}
