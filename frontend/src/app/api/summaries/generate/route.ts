@@ -175,7 +175,7 @@ ${chapter.processed_text}
 Scrivi il riassunto strutturato:`;
 
     // Use smart model selection if available, fallback to Claude
-    const modelToUse = chapter.preferred_model || "anthropic/claude-3.5-sonnet";
+    const modelToUse = chapter.preferred_model || "anthropic/claude-3-5-sonnet-20241022";
     console.log("Generating summary with model:", modelToUse);
 
     // Scale max_tokens based on target word count (roughly 1.5 tokens per word + buffer)

@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
       .join("\n");
 
     const aiResponse = await openrouter.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: "anthropic/claude-3-5-sonnet-20241022",
       max_tokens: 500,
       messages: [
         {

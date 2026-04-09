@@ -102,7 +102,7 @@ Rispondi SOLO con un array JSON valido, senza altri commenti:
 ]`;
 
     // Use smart model selection if available, fallback to Claude
-    const modelToUse = chapter.preferred_model || "anthropic/claude-3.5-sonnet";
+    const modelToUse = chapter.preferred_model || "anthropic/claude-3-5-sonnet-20241022";
     console.log("Using model:", modelToUse);
 
     const response = await openrouter.chat.completions.create({

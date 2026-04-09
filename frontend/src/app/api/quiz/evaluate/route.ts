@@ -85,7 +85,7 @@ Rispondi SOLO con questo JSON:
 }`;
 
     const response = await openrouter.chat.completions.create({
-      model: "anthropic/claude-3.5-sonnet",
+      model: "anthropic/claude-3-5-sonnet-20241022",
       max_tokens: 500,
       messages: [
         { role: "user", content: prompt }
