@@ -456,7 +456,7 @@ async def process_pdf(request: ProcessRequest):
                     try:
                         return ch, await openrouter.generate_chapter_summary(
                             ch["processed_text"],
-                            ch.get("preferred_model", "anthropic/claude-3.5-sonnet")
+                            ch.get("preferred_model", "anthropic/claude-sonnet-4")
                         )
                     except Exception as err:
                         print(f"  Warning: summary generation failed for '{ch['title']}': {err}")
@@ -519,7 +519,7 @@ async def process_pdf(request: ProcessRequest):
                 openrouter = get_openrouter_service()
                 summary_text = await openrouter.generate_chapter_summary(
                     processed_text,
-                    preferred_model or "anthropic/claude-3.5-sonnet"
+                    preferred_model or "anthropic/claude-sonnet-4"
                 )
                 if summary_text:
                     existing = supabase.table("summaries").select("id").eq("chapter_id", request.chapter_id).execute()

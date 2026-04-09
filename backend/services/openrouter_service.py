@@ -49,7 +49,7 @@ class OpenRouterService:
             api_key=api_key or "missing-key"
         )
         # Model selection - using stable model IDs
-        self.content_model = "anthropic/claude-3-5-sonnet-20241022"  # Claude 3.5 Sonnet
+        self.content_model = "anthropic/claude-sonnet-4"  # Claude 3.5 Sonnet
         self.vision_model = "google/gemini-2.0-flash-001"   # For PDF/image processing
 
     async def process_document_with_vision(self, images_base64: list[str]) -> str:
@@ -403,7 +403,7 @@ RIASSUNTO:"""
     async def generate_chapter_summary(
         self,
         processed_text: str,
-        model: str = "anthropic/claude-3.5-sonnet",
+        model: str = "anthropic/claude-sonnet-4",
         target_words: int = 500,
     ) -> str:
         """Generate a structured summary for a chapter, called automatically after processing."""

@@ -16,7 +16,7 @@ function getClients() {
   return { supabase, openrouter };
 }
 
-const CHAT_MODEL = "anthropic/claude-3-5-sonnet-20241022";
+const CHAT_MODEL = "anthropic/claude-sonnet-4";
 const WEB_SEARCH_MODEL = "perplexity/sonar-pro";
 const MAX_HISTORY_MESSAGES = 20;
 const MAX_CONTEXT_CHARS = 8000;

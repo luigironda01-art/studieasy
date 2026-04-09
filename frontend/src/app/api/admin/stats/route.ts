@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
   // Rough pricing per 1M tokens (approximation)
   const PRICING: Record<string, { input: number; output: number }> = {
     "anthropic/claude-3.5-sonnet": { input: 3, output: 15 },
-    "anthropic/claude-3-5-sonnet-20241022": { input: 3, output: 15 },
+    "anthropic/claude-sonnet-4": { input: 3, output: 15 },
     "google/gemini-2.0-flash-001": { input: 0.1, output: 0.4 },
     "google/gemini-2.5-flash-image": { input: 0.3, output: 30 },
     "google/gemini-3-pro-image-preview": { input: 2, output: 12 },

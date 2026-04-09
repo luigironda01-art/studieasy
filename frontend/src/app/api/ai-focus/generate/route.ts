@@ -92,7 +92,7 @@ Rispondi in JSON con questo formato esatto:
 }`;
 
     // Use smart model selection if available, fallback to Claude
-    const modelToUse = chapter.preferred_model || "anthropic/claude-3-5-sonnet-20241022";
+    const modelToUse = chapter.preferred_model || "anthropic/claude-sonnet-4";
     console.log("Generating AI Focus with model:", modelToUse);
 
     const response = await openrouter.chat.completions.create({
