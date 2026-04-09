@@ -111,11 +111,10 @@ function CircularProgress({
   );
 }
 
-// Card with gradient border
+// Card with solid dark background (AI Coach style)
 function GradientCard({ children, className = "", glow = false }: { children: React.ReactNode; className?: string; glow?: boolean }) {
   return (
-    <div className={`relative rounded-2xl border ${glow ? "border-purple-500/30" : "border-white/10"} bg-white/5 backdrop-blur-sm overflow-hidden ${className}`}>
-      {glow && <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-blue-500/5 pointer-events-none" />}
+    <div className={`relative rounded-2xl border ${glow ? "border-purple-500/30 shadow-lg shadow-purple-500/5" : "border-white/[0.06]"} bg-[#0d1220] overflow-hidden ${className}`}>
       <div className="relative h-full">
         {children}
       </div>
@@ -183,7 +182,7 @@ function StatCard({
         </div>
       </div>
 
-      <div className={`relative overflow-hidden rounded-2xl border ${c.border} bg-gradient-to-br ${c.gradient} p-5 hover:scale-[1.01] transition-transform cursor-help`}>
+      <div className={`relative overflow-hidden rounded-2xl border ${c.border} bg-[#0d1220] p-5 hover:scale-[1.01] transition-transform cursor-help`}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">{label}</p>
@@ -473,11 +472,7 @@ export default function DashboardPage() {
   const estimatedTime = Math.ceil(stats.dueToday * 0.5);
 
   return (
-    <div className="min-h-screen bg-[#080c14] relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[150px]" />
-      <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-cyan-900/15 rounded-full blur-[150px]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-indigo-900/10 rounded-full blur-[200px]" />
+    <div className="min-h-screen bg-[#080c14] relative">
 
       <div className="relative z-10 p-6 lg:p-8 max-w-7xl mx-auto">
         {/* Header */}
@@ -489,7 +484,7 @@ export default function DashboardPage() {
             <p className="text-slate-400 mt-1">
               {stats.dueToday > 0
                 ? `Hai ${stats.dueToday} carte da ripassare (~${estimatedTime} min)`
-                : "Sei in pari con lo studio! 🎉"
+                : "Sei in pari con lo studio!"
               }
             </p>
           </div>
@@ -497,7 +492,7 @@ export default function DashboardPage() {
           <button
             data-tutorial="dashboard-add"
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-full text-white font-medium shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 hover:scale-105 transition-all duration-300"
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl text-white font-medium shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 hover:scale-[1.02] transition-all duration-300"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -507,7 +502,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Stats Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
           <StatCard
             value={stats.dueToday}
             label="Da Ripassare"
@@ -550,7 +545,10 @@ export default function DashboardPage() {
             <GradientCard glow={stats.dueToday > 0}>
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-white">Progresso Giornaliero</h3>
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <span className="w-1 h-5 bg-gradient-to-b from-cyan-500 to-purple-500 rounded-full" />
+                    Progresso Giornaliero
+                  </h3>
                   {stats.dueToday > 0 && (
                     <Link
                       href="/dashboard/study"
@@ -607,7 +605,10 @@ export default function DashboardPage() {
             <GradientCard>
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-white">Attività Settimanale</h3>
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <span className="w-1 h-5 bg-gradient-to-b from-emerald-500 to-cyan-500 rounded-full" />
+                    Attività Settimanale
+                  </h3>
                   <span className="text-sm text-cyan-400 font-medium">
                     {totalWeeklyCards} carte studiate
                   </span>
@@ -650,7 +651,10 @@ export default function DashboardPage() {
             {/* Due Cards by Source */}
             <GradientCard>
               <div className="p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Da Completare</h3>
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-gradient-to-b from-amber-500 to-orange-500 rounded-full" />
+                  Da Completare
+                </h3>
 
                 {dueCards.length > 0 ? (
                   <div className="space-y-3">
@@ -689,7 +693,10 @@ export default function DashboardPage() {
             {/* Quick Stats Cards */}
             <GradientCard>
               <div className="p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Statistiche</h3>
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-gradient-to-b from-purple-500 to-rose-500 rounded-full" />
+                  Statistiche
+                </h3>
 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
