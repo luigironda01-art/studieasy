@@ -916,7 +916,10 @@ export default function SourceDetailPage() {
         {/* AI Tools row — shown when at least one chapter is completed */}
         {chapters.some(c => c.processing_status === "completed") && (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-white mb-4">Strumenti AI</h2>
+            <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+              <span className="w-1 h-5 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full" />
+              Strumenti AI
+            </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tutorial="source-tools">
               <Link
                 href={`/dashboard/source/${sourceId}/summaries`}
@@ -984,7 +987,10 @@ export default function SourceDetailPage() {
 
         <div className="mb-8" data-tutorial="source-chapters">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Capitoli</h2>
+            <h2 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+              <span className="w-1 h-5 bg-gradient-to-b from-emerald-500 to-cyan-500 rounded-full" />
+              Capitoli
+            </h2>
           </div>
 
           {chapters.length === 0 ? (

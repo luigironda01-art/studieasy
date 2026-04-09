@@ -114,12 +114,9 @@ function CircularProgress({
 // Card with gradient border
 function GradientCard({ children, className = "", glow = false }: { children: React.ReactNode; className?: string; glow?: boolean }) {
   return (
-    <div className={`relative group ${className}`}>
-      {/* Gradient border */}
-      <div className={`absolute -inset-[1px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 rounded-2xl ${glow ? 'opacity-60' : 'opacity-30'} group-hover:opacity-60 blur-sm transition-opacity duration-300`} />
-      <div className="absolute -inset-[1px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 rounded-2xl opacity-20" />
-      {/* Card content */}
-      <div className="relative bg-[#0d1525]/95 backdrop-blur-xl rounded-2xl h-full">
+    <div className={`relative rounded-2xl border ${glow ? "border-purple-500/30" : "border-white/10"} bg-white/5 backdrop-blur-sm overflow-hidden ${className}`}>
+      {glow && <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-blue-500/5 pointer-events-none" />}
+      <div className="relative h-full">
         {children}
       </div>
     </div>
@@ -147,11 +144,11 @@ function StatCard({
   const [showTooltip, setShowTooltip] = useState(false);
 
   const colors = {
-    cyan: "from-cyan-500 to-cyan-600",
-    purple: "from-purple-500 to-purple-600",
-    orange: "from-orange-500 to-orange-600",
-    green: "from-emerald-500 to-emerald-600",
-    pink: "from-pink-500 to-pink-600"
+    cyan:   { gradient: "from-cyan-500/10 to-cyan-600/5",       border: "border-cyan-500/20",    iconBg: "bg-cyan-500/15" },
+    purple: { gradient: "from-purple-500/10 to-purple-600/5",   border: "border-purple-500/20",  iconBg: "bg-purple-500/15" },
+    orange: { gradient: "from-amber-500/10 to-orange-600/5",    border: "border-amber-500/20",   iconBg: "bg-amber-500/15" },
+    green:  { gradient: "from-emerald-500/10 to-emerald-600/5", border: "border-emerald-500/20", iconBg: "bg-emerald-500/15" },
+    pink:   { gradient: "from-rose-500/10 to-pink-600/5",       border: "border-rose-500/20",    iconBg: "bg-rose-500/15" },
   };
 
   const tooltipPositionClasses = {
@@ -166,6 +163,8 @@ function StatCard({
     right: "right-4"
   };
 
+  const c = colors[color];
+
   return (
     <div
       className="relative group"
@@ -178,29 +177,29 @@ function StatCard({
           showTooltip ? "opacity-100 visible" : "opacity-0 invisible"
         }`}
       >
-        <div className="bg-[#1e293b] border border-white/10 rounded-lg px-3 py-2.5 shadow-xl w-64 max-w-[90vw]">
+        <div className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2.5 shadow-xl w-64 max-w-[90vw]">
           <p className="text-xs text-slate-200 leading-relaxed whitespace-normal">{tooltip}</p>
-          {/* Arrow */}
-          <div className={`absolute ${arrowPositionClasses[tooltipAlign]} -bottom-1.5 w-3 h-3 bg-[#1e293b] border-r border-b border-white/10 rotate-45`} />
+          <div className={`absolute ${arrowPositionClasses[tooltipAlign]} -bottom-1.5 w-3 h-3 bg-slate-900 border-r border-b border-white/10 rotate-45`} />
         </div>
       </div>
 
-      <div className={`absolute -inset-[1px] bg-gradient-to-r ${colors[color]} rounded-xl opacity-20 group-hover:opacity-40 transition-opacity`} />
-      <div className="relative bg-[#0d1525]/80 backdrop-blur-sm rounded-xl p-4 border border-white/5 cursor-help">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-3xl font-bold text-white">{value}</p>
-            <p className="text-sm text-slate-400 mt-1">{label}</p>
+      <div className={`relative overflow-hidden rounded-2xl border ${c.border} bg-gradient-to-br ${c.gradient} p-5 hover:scale-[1.01] transition-transform cursor-help`}>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">{label}</p>
           </div>
-          <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colors[color]} flex items-center justify-center opacity-80`}>
-            <span className="text-lg">{icon}</span>
+          <div className={`w-9 h-9 rounded-xl ${c.iconBg} flex items-center justify-center shrink-0`}>
+            <span className="text-base">{icon}</span>
           </div>
         </div>
-        {trend !== undefined && (
-          <div className={`mt-2 text-xs ${trend >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}% vs ieri
-          </div>
-        )}
+        <div className="flex items-baseline gap-2">
+          <p className="text-white font-bold text-3xl">{value}</p>
+          {trend !== undefined && (
+            <span className={`text-xs font-medium ${trend >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

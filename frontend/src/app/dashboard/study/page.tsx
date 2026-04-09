@@ -1435,33 +1435,48 @@ export default function StudyHubPage() {
 
         {/* Quick Stats */}
         <div className="mt-8 grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
-            <p className="text-3xl font-bold text-blue-400">
+          <div className="rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-5 text-center">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/15 flex items-center justify-center mx-auto mb-2">
+              <span className="text-sm">🎴</span>
+            </div>
+            <p className="text-3xl font-bold text-white">
               {sources.reduce((acc, s) => acc + s.chapters.reduce((a, c) => a + c.flashcardCount, 0), 0)}
             </p>
-            <p className="text-slate-400 text-sm">Flashcard</p>
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mt-1">Flashcard</p>
           </div>
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
-            <p className="text-3xl font-bold text-orange-400">{totalDue}</p>
-            <p className="text-slate-400 text-sm">Da ripassare</p>
+          <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-orange-600/5 p-5 text-center">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center mx-auto mb-2">
+              <span className="text-sm">📚</span>
+            </div>
+            <p className="text-3xl font-bold text-white">{totalDue}</p>
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mt-1">Da ripassare</p>
           </div>
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
-            <p className="text-3xl font-bold text-purple-400">
+          <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-5 text-center">
+            <div className="w-8 h-8 rounded-xl bg-purple-500/15 flex items-center justify-center mx-auto mb-2">
+              <span className="text-sm">📝</span>
+            </div>
+            <p className="text-3xl font-bold text-white">
               {sources.reduce((acc, s) => acc + s.chapters.reduce((a, c) => a + c.quizzes.length, 0), 0)}
             </p>
-            <p className="text-slate-400 text-sm">Quiz</p>
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mt-1">Quiz</p>
           </div>
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
-            <p className="text-3xl font-bold text-emerald-400">
+          <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 p-5 text-center">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center mx-auto mb-2">
+              <span className="text-sm">📄</span>
+            </div>
+            <p className="text-3xl font-bold text-white">
               {sources.reduce((acc, s) => acc + s.chapters.filter(c => c.summary !== null).length, 0)}
             </p>
-            <p className="text-slate-400 text-sm">Riassunti</p>
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mt-1">Riassunti</p>
           </div>
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
-            <p className="text-3xl font-bold text-green-400">
+          <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-cyan-600/5 p-5 text-center">
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/15 flex items-center justify-center mx-auto mb-2">
+              <span className="text-sm">📖</span>
+            </div>
+            <p className="text-3xl font-bold text-white">
               {sources.reduce((acc, s) => acc + s.chapters.filter(c => c.processing_status === "completed").length, 0)}
             </p>
-            <p className="text-slate-400 text-sm">Capitoli pronti</p>
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mt-1">Capitoli pronti</p>
           </div>
         </div>
       </div>
