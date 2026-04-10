@@ -124,7 +124,7 @@ export function Sidebar() {
           });
         }
 
-        setTotalDueCards(total);
+        setTotalDueCards(prev => prev === total ? prev : total);
 
         // Fetch flashcard counts per source
         const chapterIds = (chaptersData || []).map(c => c.id);
@@ -179,7 +179,12 @@ export function Sidebar() {
           };
         });
 
-        setSources(sourcesWithChapters);
+        // Only update state if data actually changed (prevents unnecessary re-renders / flickering)
+        setSources(prev => {
+          const prevJson = JSON.stringify(prev.map(s => ({ id: s.id, fc: s.flashcardCount, qc: s.quizCount, dc: s.dueCount, ch: s.chapters.length })));
+          const newJson = JSON.stringify(sourcesWithChapters.map(s => ({ id: s.id, fc: s.flashcardCount, qc: s.quizCount, dc: s.dueCount, ch: s.chapters.length })));
+          return prevJson === newJson ? prev : sourcesWithChapters;
+        });
 
         // Auto-expand only on FIRST load — never overwrite user's manual expand/collapse
         if (isInitial) {

@@ -97,7 +97,10 @@ export function ChatSidebar() {
   if (currentChunk !== streamChunkRef.current) {
     streamChunkRef.current = currentChunk;
   }
+  // Track whether scroll should happen (only after user sends a message, not on re-fetch)
+  const shouldScrollRef = useRef(false);
   useEffect(() => {
+    if (!shouldScrollRef.current) return;
     if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     scrollTimeoutRef.current = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -124,6 +127,7 @@ export function ChatSidebar() {
     setStreaming(true);
     setStreamingText("");
     streamingTextRef.current = "";
+    shouldScrollRef.current = true;
 
     // Optimistic: add user message to UI
     const tempUserMsg: Message = {
@@ -243,6 +247,8 @@ export function ChatSidebar() {
       setStreamingText("");
       streamingTextRef.current = "";
       abortRef.current = null;
+      // Stop auto-scrolling after streaming completes
+      setTimeout(() => { shouldScrollRef.current = false; }, 200);
     }
   };
 
