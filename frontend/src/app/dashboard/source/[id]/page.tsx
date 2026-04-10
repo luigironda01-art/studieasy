@@ -920,66 +920,51 @@ export default function SourceDetailPage() {
               <span className="w-1 h-5 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full" />
               Strumenti AI
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tutorial="source-tools">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" data-tutorial="source-tools">
               <Link
                 href={`/dashboard/source/${sourceId}/summaries`}
-                className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl hover:border-blue-500/40 hover:bg-blue-500/5 transition-all group"
+                className="flex flex-col items-center gap-2 p-4 bg-[#0d1220] border border-white/[0.06] rounded-2xl hover:border-blue-500/40 hover:bg-blue-500/5 transition-all group text-center"
               >
-                <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <span className="text-xl">📄</span>
+                <div className="w-12 h-12 bg-blue-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <span className="text-2xl">📄</span>
                 </div>
-                <div>
-                  <p className="text-white font-medium text-sm">Riassunti</p>
-                  <p className="text-slate-500 text-xs">Testo completo</p>
-                </div>
+                <p className="text-white font-medium text-sm">Riassunti</p>
               </Link>
               <Link
                 href={`/dashboard/source/${sourceId}/flashcards`}
-                className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl hover:border-purple-500/40 hover:bg-purple-500/5 transition-all group"
+                className="flex flex-col items-center gap-2 p-4 bg-[#0d1220] border border-white/[0.06] rounded-2xl hover:border-purple-500/40 hover:bg-purple-500/5 transition-all group text-center"
               >
-                <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <span className="text-xl">🃏</span>
+                <div className="w-12 h-12 bg-purple-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <span className="text-2xl">🃏</span>
                 </div>
-                <div>
-                  <p className="text-white font-medium text-sm">Flashcard</p>
-                  <p className="text-slate-500 text-xs">Spaced repetition</p>
-                </div>
+                <p className="text-white font-medium text-sm">Flashcard</p>
               </Link>
               <Link
                 href={`/dashboard/source/${sourceId}/mindmap`}
-                className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all group"
+                className="flex flex-col items-center gap-2 p-4 bg-[#0d1220] border border-white/[0.06] rounded-2xl hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all group text-center"
               >
-                <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <span className="text-xl">🗺️</span>
+                <div className="w-12 h-12 bg-emerald-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <span className="text-2xl">🗺️</span>
                 </div>
-                <div>
-                  <p className="text-white font-medium text-sm">Mappa</p>
-                  <p className="text-slate-500 text-xs">Mappa concettuale</p>
-                </div>
+                <p className="text-white font-medium text-sm">Mappa</p>
               </Link>
               <Link
                 href={`/dashboard/source/${sourceId}/slides`}
-                className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group"
+                className="flex flex-col items-center gap-2 p-4 bg-[#0d1220] border border-white/[0.06] rounded-2xl hover:border-amber-500/40 hover:bg-amber-500/5 transition-all group text-center"
               >
-                <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <span className="text-xl">🎯</span>
+                <div className="w-12 h-12 bg-amber-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <span className="text-2xl">🎯</span>
                 </div>
-                <div>
-                  <p className="text-white font-medium text-sm">Slides</p>
-                  <p className="text-slate-500 text-xs">Presentazione AI</p>
-                </div>
+                <p className="text-white font-medium text-sm">Slides</p>
               </Link>
               <Link
                 href={`/dashboard/source/${sourceId}/infographics`}
-                className="flex items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl hover:border-cyan-500/40 hover:bg-cyan-500/5 transition-all group"
+                className="flex flex-col items-center gap-2 p-4 bg-[#0d1220] border border-white/[0.06] rounded-2xl hover:border-cyan-500/40 hover:bg-cyan-500/5 transition-all group text-center"
               >
-                <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                  <span className="text-xl">📊</span>
+                <div className="w-12 h-12 bg-cyan-500/15 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <span className="text-2xl">📊</span>
                 </div>
-                <div>
-                  <p className="text-white font-medium text-sm">Infografica</p>
-                  <p className="text-slate-500 text-xs">Visualizzazione concetti</p>
-                </div>
+                <p className="text-white font-medium text-sm">Infografica</p>
               </Link>
             </div>
           </div>
@@ -1011,7 +996,7 @@ export default function SourceDetailPage() {
               {chapters.map((chapter, index) => (
                 <div
                   key={chapter.id}
-                  className="bg-slate-800 rounded-xl border border-slate-700 p-4"
+                  className="bg-[#0d1220] rounded-2xl border border-white/[0.06] p-4 hover:border-white/10 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
