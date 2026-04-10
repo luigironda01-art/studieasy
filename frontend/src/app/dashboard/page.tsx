@@ -38,6 +38,209 @@ interface Stats {
   reviewCards: number;
 }
 
+// Circular Progress Component with glow
+function CircularProgress({
+  percentage,
+  size = 180,
+  label,
+  sublabel
+}: {
+  percentage: number;
+  size?: number;
+  label?: string;
+  sublabel?: string;
+}) {
+  const strokeWidth = 14;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const offset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div className="relative flex flex-col items-center">
+      <div className="relative" style={{ width: size, height: size }}>
+        {/* Glow effect */}
+        <div
+          className="absolute inset-0 rounded-full blur-xl opacity-30"
+          style={{
+            background: `conic-gradient(from 0deg, #06b6d4, #a855f7, #f97316, #06b6d4)`
+          }}
+        />
+        <svg width={size} height={size} className="transform -rotate-90 relative z-10">
+          {/* Background circle */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth={strokeWidth}
+          />
+          {/* Progress circle with gradient */}
+          <defs>
+            <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#06b6d4" />
+              <stop offset="50%" stopColor="#a855f7" />
+              <stop offset="100%" stopColor="#f97316" />
+            </linearGradient>
+          </defs>
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="url(#progressGradient)"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            className="transition-all duration-1000 ease-out"
+            style={{
+              filter: 'drop-shadow(0 0 8px rgba(168, 85, 247, 0.5))'
+            }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
+          <span className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-orange-400 bg-clip-text text-transparent">
+            {percentage}%
+          </span>
+          {label && <span className="text-slate-400 text-sm mt-1">{label}</span>}
+        </div>
+      </div>
+      {sublabel && <span className="text-slate-500 text-xs mt-3">{sublabel}</span>}
+    </div>
+  );
+}
+
+// Card with solid dark background (AI Coach style)
+function GradientCard({ children, className = "", glow = false }: { children: React.ReactNode; className?: string; glow?: boolean }) {
+  return (
+    <div className={`relative rounded-2xl border ${glow ? "border-purple-500/30 shadow-lg shadow-purple-500/5" : "border-white/[0.06]"} bg-[#0d1220] overflow-hidden ${className}`}>
+      <div className="relative h-full">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Stat Card Component with Tooltip
+function StatCard({
+  value,
+  label,
+  icon,
+  tooltip,
+  trend,
+  color = "cyan",
+  tooltipAlign = "center"
+}: {
+  value: number | string;
+  label: string;
+  icon: string;
+  tooltip: string;
+  trend?: number;
+  color?: "cyan" | "purple" | "orange" | "green" | "pink";
+  tooltipAlign?: "left" | "center" | "right";
+}) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const colors = {
+    cyan:   { gradient: "from-cyan-500/10 to-cyan-600/5",       border: "border-cyan-500/20",    iconBg: "bg-cyan-500/15" },
+    purple: { gradient: "from-purple-500/10 to-purple-600/5",   border: "border-purple-500/20",  iconBg: "bg-purple-500/15" },
+    orange: { gradient: "from-amber-500/10 to-orange-600/5",    border: "border-amber-500/20",   iconBg: "bg-amber-500/15" },
+    green:  { gradient: "from-emerald-500/10 to-emerald-600/5", border: "border-emerald-500/20", iconBg: "bg-emerald-500/15" },
+    pink:   { gradient: "from-rose-500/10 to-pink-600/5",       border: "border-rose-500/20",    iconBg: "bg-rose-500/15" },
+  };
+
+  const tooltipPositionClasses = {
+    left: "left-0",
+    center: "left-1/2 -translate-x-1/2",
+    right: "right-0"
+  };
+
+  const arrowPositionClasses = {
+    left: "left-4",
+    center: "left-1/2 -translate-x-1/2",
+    right: "right-4"
+  };
+
+  const c = colors[color];
+
+  return (
+    <div
+      className="relative group"
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      {/* Tooltip */}
+      <div
+        className={`absolute -top-2 ${tooltipPositionClasses[tooltipAlign]} -translate-y-full z-50 transition-all duration-200 ${
+          showTooltip ? "opacity-100 visible" : "opacity-0 invisible"
+        }`}
+      >
+        <div className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2.5 shadow-xl w-64 max-w-[90vw]">
+          <p className="text-xs text-slate-200 leading-relaxed whitespace-normal">{tooltip}</p>
+          <div className={`absolute ${arrowPositionClasses[tooltipAlign]} -bottom-1.5 w-3 h-3 bg-slate-900 border-r border-b border-white/10 rotate-45`} />
+        </div>
+      </div>
+
+      <div className={`relative overflow-hidden rounded-2xl border ${c.border} bg-[#0d1220] p-5 hover:scale-[1.01] transition-transform cursor-help`}>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">{label}</p>
+          </div>
+          <div className={`w-9 h-9 rounded-xl ${c.iconBg} flex items-center justify-center shrink-0`}>
+            <span className="text-base">{icon}</span>
+          </div>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <p className="text-white font-bold text-3xl">{value}</p>
+          {trend !== undefined && (
+            <span className={`text-xs font-medium ${trend >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}%
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Progress Bar Component
+function ProgressBar({
+  value,
+  max,
+  label,
+  color = "cyan"
+}: {
+  value: number;
+  max: number;
+  label: string;
+  color?: string;
+}) {
+  const percentage = max > 0 ? Math.round((value / max) * 100) : 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between text-sm">
+        <span className="text-slate-300">{label}</span>
+        <span className="text-slate-400">{value}/{max}</span>
+      </div>
+      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ease-out bg-gradient-to-r from-${color}-500 to-${color}-400`}
+          style={{
+            width: `${percentage}%`,
+            background: color === "cyan"
+              ? 'linear-gradient(to right, #06b6d4, #22d3ee)'
+              : color === "purple"
+              ? 'linear-gradient(to right, #a855f7, #c084fc)'
+              : 'linear-gradient(to right, #f97316, #fb923c)'
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -57,6 +260,7 @@ export default function DashboardPage() {
   });
   const [weeklyActivity, setWeeklyActivity] = useState<DailyActivity[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useBreadcrumb([{ label: "Dashboard" }]);
 
@@ -74,7 +278,7 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
     if (!user) return;
-    // loading start
+    setIsLoading(true);
 
     try {
       const { data: sourcesData } = await supabase
@@ -245,7 +449,7 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
-      // loading end
+      setIsLoading(false);
     }
   };
 
@@ -268,208 +472,278 @@ export default function DashboardPage() {
   const estimatedTime = Math.ceil(stats.dueToday * 0.5);
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-white">
-            {getGreeting()}, {profile?.display_name || "Studente"}
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            {stats.dueToday > 0
-              ? `Hai ${stats.dueToday} carte da ripassare (~${estimatedTime} min)`
-              : "Sei in pari con lo studio!"
-            }
-          </p>
+    <div className="min-h-screen bg-[#080c14] relative">
+
+      <div className="relative z-10 p-6 lg:p-8 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white">
+              {getGreeting()}, {profile?.display_name || "Studente"}
+            </h1>
+            <p className="text-slate-400 mt-1">
+              {stats.dueToday > 0
+                ? `Hai ${stats.dueToday} carte da ripassare (~${estimatedTime} min)`
+                : "Sei in pari con lo studio!"
+              }
+            </p>
+          </div>
+
+          <button
+            data-tutorial="dashboard-add"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-rose-500 rounded-2xl text-white font-medium shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 hover:scale-[1.02] transition-all duration-300"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nuovo Materiale
+          </button>
         </div>
 
-        <button
-          data-tutorial="dashboard-add"
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded-xl text-white text-sm font-medium transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nuovo Materiale
-        </button>
-      </div>
+        {/* Main Stats Row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+          <StatCard
+            value={stats.dueToday}
+            label="Da Ripassare"
+            icon="📚"
+            color="orange"
+            tooltip="Carte in scadenza oggi. L'algoritmo FSRS calcola il momento migliore per ripassare ogni carta, massimizzando la memorizzazione."
+            tooltipAlign="left"
+          />
+          <StatCard
+            value={stats.studiedToday}
+            label="Studiate Oggi"
+            icon="✅"
+            color="green"
+            tooltip="Numero di carte che hai ripassato oggi. Include nuove carte apprese e revisioni di carte già studiate."
+          />
+          <StatCard
+            value={`${stats.retentionRate}%`}
+            label="Ritenzione"
+            icon="🧠"
+            color="purple"
+            tooltip="Percentuale di carte memorizzate stabilmente. Indica quante carte hai padroneggiato rispetto al totale. Obiettivo: sopra l'80%."
+          />
+          <StatCard
+            value={stats.streakDays}
+            label="Giorni Streak"
+            icon="🔥"
+            color="pink"
+            tooltip="Giorni consecutivi in cui hai studiato. La costanza quotidiana è fondamentale per una memoria duratura!"
+            tooltipAlign="right"
+          />
+        </div>
 
-      {/* Stats Row — flat cards, large numbers, icon right */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {[
-          { label: "Da Ripassare", value: stats.dueToday, icon: "📚", color: "text-amber-400" },
-          { label: "Studiate Oggi", value: stats.studiedToday, icon: "✅", color: "text-emerald-400" },
-          { label: "Ritenzione", value: `${stats.retentionRate}%`, icon: "🧠", color: "text-purple-400" },
-          { label: "Giorni Streak", value: stats.streakDays, icon: "🔥", color: "text-rose-400" },
-        ].map(s => (
-          <div key={s.label} className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">{s.label}</span>
-              <span className="text-xl">{s.icon}</span>
-            </div>
-            <p className={`text-3xl font-bold ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
+        {/* Two Column Layout */}
+        <div className="grid lg:grid-cols-3 gap-6 mb-6">
 
-      {/* Two Column Layout */}
-      <div className="grid lg:grid-cols-3 gap-6 mb-6">
+          {/* Left Column - Progress Overview */}
+          <div className="lg:col-span-2 space-y-6">
 
-        {/* Left Column */}
-        <div className="lg:col-span-2 space-y-6">
-
-          {/* Today's Progress */}
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-white font-semibold">Progresso Giornaliero</h3>
-              {stats.dueToday > 0 && (
-                <Link
-                  href="/dashboard/study"
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white text-sm font-medium transition-colors"
-                >
-                  Inizia Studio
-                </Link>
-              )}
-            </div>
-
-            {/* Progress bar instead of circular */}
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-400">Obiettivo giornaliero</span>
-                  <span className="text-white font-medium">{stats.studiedToday}/{dailyGoal}</span>
+            {/* Today's Progress Card */}
+            <GradientCard glow={stats.dueToday > 0}>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <span className="w-1 h-5 bg-gradient-to-b from-cyan-500 to-purple-500 rounded-full" />
+                    Progresso Giornaliero
+                  </h3>
+                  {stats.dueToday > 0 && (
+                    <Link
+                      href="/dashboard/study"
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                    >
+                      <span>▶</span> Inizia Studio
+                    </Link>
+                  )}
                 </div>
-                <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-purple-500 rounded-full transition-all duration-700"
-                    style={{ width: `${dailyProgress}%` }}
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-3 gap-3 pt-2">
-                <div className="text-center p-3 bg-slate-900/50 rounded-xl">
-                  <p className="text-lg font-bold text-cyan-400">{stats.newCards}</p>
-                  <p className="text-slate-500 text-xs mt-0.5">Nuove</p>
-                </div>
-                <div className="text-center p-3 bg-slate-900/50 rounded-xl">
-                  <p className="text-lg font-bold text-purple-400">{stats.learningCards}</p>
-                  <p className="text-slate-500 text-xs mt-0.5">In apprendimento</p>
-                </div>
-                <div className="text-center p-3 bg-slate-900/50 rounded-xl">
-                  <p className="text-lg font-bold text-amber-400">{stats.reviewCards}</p>
-                  <p className="text-slate-500 text-xs mt-0.5">Da ripassare</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Weekly Activity */}
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-white font-semibold">Attivita Settimanale</h3>
-              <span className="text-sm text-slate-400">{totalWeeklyCards} carte studiate</span>
-            </div>
-
-            <div className="flex items-end justify-between gap-2 h-28">
-              {weeklyActivity.map((day, i) => {
-                const isToday = i === weeklyActivity.length - 1;
-                const h = maxActivity > 0 ? (day.count / maxActivity) * 100 : 0;
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                    {day.count > 0 && (
-                      <span className="text-xs text-slate-500">{day.count}</span>
-                    )}
-                    <div
-                      className="w-full max-w-[36px] rounded-md transition-all"
-                      style={{
-                        height: `${Math.max(h, day.count > 0 ? 20 : 6)}%`,
-                        backgroundColor: day.count > 0
-                          ? isToday ? '#a855f7' : '#6366f1'
-                          : 'rgba(255,255,255,0.05)',
-                      }}
+                <div className="grid md:grid-cols-2 gap-8 items-center">
+                  {/* Circular Progress */}
+                  <div className="flex justify-center">
+                    <CircularProgress
+                      percentage={dailyProgress}
+                      label="Obiettivo Giornaliero"
+                      sublabel={`${stats.studiedToday}/${dailyGoal} carte`}
                     />
-                    <span className={`text-xs ${isToday ? 'text-purple-400 font-medium' : 'text-slate-600'}`}>
-                      {day.dayName}
-                    </span>
                   </div>
-                );
-              })}
-            </div>
+
+                  {/* Card Type Breakdown */}
+                  <div className="space-y-4">
+                    <ProgressBar
+                      value={stats.newCards}
+                      max={stats.dueToday || 1}
+                      label="🆕 Nuove"
+                      color="cyan"
+                    />
+                    <ProgressBar
+                      value={stats.learningCards}
+                      max={stats.dueToday || 1}
+                      label="📖 In Apprendimento"
+                      color="purple"
+                    />
+                    <ProgressBar
+                      value={stats.reviewCards}
+                      max={stats.dueToday || 1}
+                      label="🔄 Da Ripassare"
+                      color="orange"
+                    />
+
+                    {stats.dueToday === 0 && (
+                      <div className="text-center py-4">
+                        <span className="text-4xl">🎯</span>
+                        <p className="text-slate-400 mt-2">Nessuna carta in scadenza!</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </GradientCard>
+
+            {/* Weekly Activity */}
+            <GradientCard>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <span className="w-1 h-5 bg-gradient-to-b from-emerald-500 to-cyan-500 rounded-full" />
+                    Attività Settimanale
+                  </h3>
+                  <span className="text-sm text-cyan-400 font-medium">
+                    {totalWeeklyCards} carte studiate
+                  </span>
+                </div>
+
+                <div className="flex items-end justify-between gap-3 h-32">
+                  {weeklyActivity.map((day, i) => {
+                    const isToday = i === weeklyActivity.length - 1;
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                        <div className="relative w-full flex flex-col items-center">
+                          {day.count > 0 && (
+                            <span className="text-xs text-slate-400 mb-1">{day.count}</span>
+                          )}
+                          <div
+                            className={`w-full max-w-[40px] rounded-lg transition-all duration-500 ${isToday ? 'ring-2 ring-cyan-400/50' : ''}`}
+                            style={{
+                              height: `${Math.max((day.count / maxActivity) * 80, day.count > 0 ? 24 : 8)}px`,
+                              background: day.count > 0
+                                ? 'linear-gradient(to top, #06b6d4, #a855f7)'
+                                : 'rgba(255,255,255,0.08)',
+                              boxShadow: day.count > 0 ? '0 0 20px rgba(6,182,212,0.3)' : 'none'
+                            }}
+                          />
+                        </div>
+                        <span className={`text-xs ${isToday ? 'text-cyan-400 font-medium' : 'text-slate-500'}`}>
+                          {day.dayName}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </GradientCard>
           </div>
-        </div>
 
-        {/* Right Column */}
-        <div className="space-y-6">
+          {/* Right Column - What Needs Attention */}
+          <div className="space-y-6">
 
-          {/* Due Cards */}
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-6">
-            <h3 className="text-white font-semibold mb-4">Da Completare</h3>
+            {/* Due Cards by Source */}
+            <GradientCard>
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-gradient-to-b from-amber-500 to-orange-500 rounded-full" />
+                  Da Completare
+                </h3>
 
-            {dueCards.length > 0 ? (
-              <div className="space-y-2">
-                {dueCards.slice(0, 5).map((card) => (
-                  <Link
-                    key={card.chapterId}
-                    href={`/dashboard/study?chapter=${card.chapterId}`}
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-700/40 transition-colors group"
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-slate-700/50 flex items-center justify-center shrink-0">
-                      <span className="text-sm">📖</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-200 font-medium truncate">{card.chapterTitle}</p>
-                      <p className="text-xs text-slate-500 truncate">{card.sourceTitle}</p>
-                    </div>
-                    <span className="text-amber-400 text-sm font-bold shrink-0">{card.dueCount}</span>
-                  </Link>
-                ))}
+                {dueCards.length > 0 ? (
+                  <div className="space-y-3">
+                    {dueCards.slice(0, 5).map((card) => (
+                      <Link
+                        key={card.chapterId}
+                        href={`/dashboard/study?chapter=${card.chapterId}`}
+                        className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-cyan-500/30 transition-all group"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center">
+                          <span className="text-lg">📖</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white font-medium truncate group-hover:text-cyan-400 transition-colors">
+                            {card.chapterTitle}
+                          </p>
+                          <p className="text-xs text-slate-500 truncate">{card.sourceTitle}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-orange-400">{card.dueCount}</p>
+                          <p className="text-xs text-slate-500">carte</p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center">
+                    <span className="text-4xl">✨</span>
+                    <p className="text-slate-400 mt-3">Tutto in ordine!</p>
+                    <p className="text-slate-500 text-sm">Nessuna carta in scadenza</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="py-6 text-center">
-                <p className="text-slate-500 text-sm">Nessuna carta in scadenza</p>
+            </GradientCard>
+
+            {/* Quick Stats Cards */}
+            <GradientCard>
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-gradient-to-b from-purple-500 to-rose-500 rounded-full" />
+                  Statistiche
+                </h3>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
+                    <span className="text-slate-400">Totale Flashcard</span>
+                    <span className="text-white font-semibold">{stats.totalCards}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
+                    <span className="text-slate-400">Libri/Materiali</span>
+                    <span className="text-white font-semibold">{sources.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5">
+                    <span className="text-slate-400">Tempo Stimato</span>
+                    <span className="text-white font-semibold">{estimatedTime} min</span>
+                  </div>
+                </div>
               </div>
+            </GradientCard>
+
+            {/* Your Materials Preview */}
+            {sources.length > 0 && (
+              <GradientCard>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">I Tuoi Materiali</h3>
+                    <Link href="/dashboard/sources" className="text-cyan-400 text-sm hover:text-cyan-300">
+                      Vedi tutti →
+                    </Link>
+                  </div>
+
+                  <div className="space-y-2">
+                    {sources.slice(0, 3).map((source) => (
+                      <Link
+                        key={source.id}
+                        href={`/dashboard/source/${source.id}`}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors group"
+                      >
+                        <span className="text-lg">{getSourceIcon(source.source_type)}</span>
+                        <span className="text-sm text-slate-300 group-hover:text-white transition-colors truncate">
+                          {source.title}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </GradientCard>
             )}
           </div>
-
-          {/* Statistiche */}
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-6">
-            <h3 className="text-white font-semibold mb-4">Statistiche</h3>
-            <div className="space-y-3">
-              {[
-                { label: "Totale Flashcard", value: stats.totalCards },
-                { label: "Libri/Materiali", value: sources.length },
-                { label: "Tempo Stimato", value: `${estimatedTime} min` },
-              ].map(row => (
-                <div key={row.label} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
-                  <span className="text-slate-400 text-sm">{row.label}</span>
-                  <span className="text-white font-semibold text-sm">{row.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Your Materials Preview */}
-          {sources.length > 0 && (
-            <div className="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-6">
-              <h3 className="text-white font-semibold mb-4">I Tuoi Materiali</h3>
-              <div className="space-y-2">
-                {sources.slice(0, 3).map((source) => (
-                  <Link
-                    key={source.id}
-                    href={`/dashboard/source/${source.id}`}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-700/40 transition-colors group"
-                  >
-                    <span className="text-lg">{getSourceIcon(source.source_type)}</span>
-                    <span className="text-sm text-slate-300 group-hover:text-white transition-colors truncate">
-                      {source.title}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
